@@ -127,11 +127,19 @@ class PlayerPort(Protocol):
     async def outputs(self) -> list[OutputInfo]: ...
 ~~~
 
-- [ ] Step 1: Test PlayerPort/domain models.
-- [ ] Step 2: Implement deterministic Mock MPD with disconnect/fail-next injection.
-- [ ] Step 3: Test Mock play/pause/stop/next/previous/seek/status/events.
-- [ ] Step 4: Implement line-oriented MPD protocol parsing, including escaped values and ACK errors.
-- [ ] Step 5: Implement MPDAdapter with connection/command timeouts and typed PlayerUnavailable/PlayerCommandError.
+- [x] Step 1: Test PlayerPort/domain models.
+- [x] Step 2: Implement deterministic Mock MPD with disconnect/fail-next injection.
+- [x] Step 3: Test Mock play/pause/stop/next/previous/seek/status/events.
+- [x] Step 4: Implement line-oriented MPD protocol parsing, including escaped values and ACK errors.
+- [x] Step 5: Implement MPDAdapter with connection/command timeouts and typed PlayerUnavailable/PlayerCommandError.
+
+**Task 1 verification record (2026-09-25, Steps 1-5):**
+- Step 1 RED tests were created and verified before the PlayerPort/domain model implementation; the resulting model and interface tests pass.
+- Step 2 injection tests were created before Mock MPD implementation; disconnect/reconnect and one-shot fail-next behavior pass.
+- Step 3 control/event tests were created before Mock MPD implementation; play/pause/stop/next/previous/seek/status/events plus repeat/random/volume are covered, with seeded randomness deterministic.
+- Step 4 protocol tests were created before parser implementation; escaped values, repeated keys, malformed responses, completion markers, quoting and ACK errors are covered.
+- Step 5 adapter tests were created before adapter implementation; typed ACK mapping and connection/command timeout handling are covered, and command timeout closes the unusable connection.
+- Steps 6-9 remain intentionally unchecked and were not implemented in this task.
 - [ ] Step 6: Test Adapter through a fake TCP server.
 - [ ] Step 7: Run capability probe against actual NAS MPD 0.23.5 and record commands, outputs, status fields, update behavior and errors.
 - [ ] Step 8: Restrict service features to verified capabilities.
