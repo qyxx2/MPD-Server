@@ -61,7 +61,7 @@
 - Create: server/app/main.py
 - Create: server/app/{api,services,repositories,models,player}/__init__.py
 - Create: server/tests/conftest.py
-- Create: web/package.json, web/vite.config.ts, web/tsconfig.json, web/src/main.ts, web/src/App.vue
+- Create: web/index.html, web/package.json, web/vite.config.ts, web/tsconfig.json, web/src/main.ts, web/src/App.vue
 - Create: deploy/docker-compose.dev.yml, deploy/docker-compose.yml, deploy/Dockerfile, deploy/.env.example
 - Create: server/requirements.txt, Makefile, .gitignore
 - Modify: README.md
@@ -85,9 +85,9 @@ def test_health():
 - [ ] Step 2: Run pytest and verify it fails.
 - [ ] Step 3: Add the minimal FastAPI app and health endpoint.
 - [ ] Step 4: Run pytest and verify PASS.
-- [ ] Step 5: Add Vue/Vite shell and verify npm run build.
+- [ ] Step 5: Add the Vue/Vite shell, including the required `web/index.html` entry point, and verify `npm run build`.
 - [ ] Step 6: Add Makefile targets and separate dev/prod Compose.
-- [ ] Step 7: Validate both Compose files with docker compose config.
+- [ ] Step 7: Validate both Compose files with `docker compose config` in a Docker-capable environment (for example, the Synology Docker environment). This validates Compose configuration only; real MPD/USB DAC testing starts at Task 1 Step 7 and Task 12.
 - [ ] Step 8: Commit: chore: establish music server monorepo.
 
 ---

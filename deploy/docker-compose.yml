@@ -3,24 +3,24 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: \${MPD_SERVER_IMAGE:-mpd-server:latest}
+    image: ${MPD_SERVER_IMAGE:-mpd-server:latest}
     restart: unless-stopped
     environment:
       APP_ENV: production
-      MPD_HOST: \${MPD_HOST:-172.17.0.1}
-      MPD_PORT: \${MPD_PORT:-6600}
-      MPD_PASSWORD: \${MPD_PASSWORD:-}
+      MPD_HOST: ${MPD_HOST:-172.17.0.1}
+      MPD_PORT: ${MPD_PORT:-6600}
+      MPD_PASSWORD: ${MPD_PASSWORD:-}
       MUSIC_ROOT: /music
       DATABASE_PATH: /data/music-server.db
       BACKUP_DIR: /backups
       CONFIG_DIR: /config
     volumes:
-      - \${MPD_SERVER_DATA_DIR:-./data}:/data
-      - \${MPD_SERVER_BACKUP_DIR:-./backups}:/backups
-      - \${MPD_SERVER_CONFIG_DIR:-./config}:/config
-      - \${MUSIC_DIR:-/volume1/music}:/music:ro
+      - ${MPD_SERVER_DATA_DIR:-./data}:/data
+      - ${MPD_SERVER_BACKUP_DIR:-./backups}:/backups
+      - ${MPD_SERVER_CONFIG_DIR:-./config}:/config
+      - ${MUSIC_DIR:-/volume1/music}:/music:ro
     ports:
-      - "\${MPD_SERVER_PORT:-8000}:8000"
+      - "${MPD_SERVER_PORT:-8000}:8000"
     healthcheck:
       test:
         ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
