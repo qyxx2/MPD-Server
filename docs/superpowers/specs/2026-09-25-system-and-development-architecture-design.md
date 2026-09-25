@@ -53,7 +53,8 @@ Web/PWA 首期是唯一正式客户端。Android 原生客户端后续复用相�
 - Docker
 - Docker Compose
 - 群晖作为首期生产环境
-- 正式环境使用预构建镜像
+- 正式环境使用与 Dockerfile 对应的正式镜像
+- 首期正式镜像由 NAS 根据 main 构建；未来可切换为 GitHub Container Registry 等镜像仓库拉取预构建镜像
 - 开发环境使用独立 Compose 配置
 - 不要求群晖宿主机安装完整 Python/Node 开发环境
 
