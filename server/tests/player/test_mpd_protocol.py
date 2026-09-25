@@ -12,8 +12,7 @@ def test_parse_response_decodes_escaped_values_and_keeps_repeated_keys():
         "OK",
     ])
     assert response.as_dict()["Artist"] == r"AC\DC"
-    assert response.as_dict()["Comment"] == "line1
-line2"
+    assert response.as_dict()["Comment"] == "line1\nline2"
     assert response.as_dict()["Tag"] == ["one", "two"]
 
 

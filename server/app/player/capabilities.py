@@ -250,8 +250,7 @@ class CapabilityProbe:
         greeting = await asyncio.wait_for(
             reader.readline(), timeout=self.connection_timeout
         )
-        line = greeting.decode("utf-8").rstrip("
-")
+        line = greeting.decode("utf-8").rstrip("\r\n")
         if not line.startswith("OK MPD "):
             await self.close()
             raise MPDProtocolError(f"invalid MPD greeting: {line}")
@@ -264,8 +263,7 @@ class CapabilityProbe:
             raise MPDProtocolError("probe is not connected")
         request = " ".join(
             [command, *[quote_argument(arg) for arg in args]]
-        ) + "
-"
+        ) + "\n"
         self._writer.write(request.encode("utf-8"))
         await self._writer.drain()
         lines: list[str] = []
@@ -277,8 +275,7 @@ class CapabilityProbe:
                 raise EOFError("MPD closed the connection")
             line = raw.decode("utf-8")
             lines.append(line)
-            if line.rstrip("
-") == "OK" or line.startswith("ACK "):
+            if line.rstrip("\r\n") == "OK" or line.startswith("ACK "):
                 return parse_response(lines)
 
     async def close(self) -> None:
@@ -299,8 +296,7 @@ def _scalar_map(data: dict[str, str | list[str]]) -> dict[str, str]:
         if isinstance(value, str):
             result[key] = value
         elif isinstance(value, list):
-            result[key] = "
-".join(value)
+            result[key] = "\n".join(value)
     return result
 
 
