@@ -139,11 +139,15 @@ class PlayerPort(Protocol):
 - Step 3 control/event tests were created before Mock MPD implementation; play/pause/stop/next/previous/seek/status/events plus repeat/random/volume are covered, with seeded randomness deterministic.
 - Step 4 protocol tests were created before parser implementation; escaped values, repeated keys, malformed responses, completion markers, quoting and ACK errors are covered.
 - Step 5 adapter tests were created before adapter implementation; typed ACK mapping and connection/command timeout handling are covered, and command timeout closes the unusable connection.
-- Steps 6-9 remain intentionally unchecked and were not implemented in this task.
 - [ ] Step 6: Test Adapter through a fake TCP server.
 - [ ] Step 7: Run capability probe against actual NAS MPD 0.23.5 and record commands, outputs, status fields, update behavior and errors.
 - [ ] Step 8: Restrict service features to verified capabilities.
 - [ ] Step 9: Commit: feat: add mpd adapter and verified capabilities.
+**Task 1 verification record (2026-09-25, Steps 6-9):**
+- Step 6: Added a real localhost TCP server test covering MPD greeting, command exchange, status/current-song parsing, song URI to MPD song ID lookup, playback controls, seek, volume, repeat/random, update and outputs. The test passes.
+- Step 7: The capability probe and documentation are implemented, but the actual NAS MPD 0.23.5 endpoint was not reachable from the current execution environment. No NAS results are fabricated; the step remains unchecked pending execution from a network location that can reach the Synology LAN MPD port.
+- Step 8: Added MPDCapabilities and VerifiedPlayerPort; operations whose required MPD commands were not verified are rejected before reaching the underlying PlayerPort. Song-URI playback additionally requires playlistinfo and playid; status requires status and currentsong.
+- Step 9: This branch is committed with message feat: add mpd adapter and verified capabilities.
 
 ---
 

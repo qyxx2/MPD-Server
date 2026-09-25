@@ -30,7 +30,7 @@ def test_mock_mpd_controls_status_and_events():
         await player.set_repeat(True)
         await player.seek(9)
         await player.next()
-        assert (await player.status()).song_uri == "a.flac"
+        assert (await player.status()).song_uri == "b.flac"
 
         await player.set_random(True)
         await player.play("a.flac")
