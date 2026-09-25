@@ -72,7 +72,7 @@
 - make test / lint / typecheck / build are stable entry points.
 - Vite proxies /api and WebSocket to FastAPI.
 
-- [ ] Step 1: Write health endpoint test.
+- [x] Step 1: Write health endpoint test.
 ~~~python
 from fastapi.testclient import TestClient
 from server.app.main import app
@@ -82,13 +82,19 @@ def test_health():
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
 ~~~
-- [ ] Step 2: Run pytest and verify it fails.
-- [ ] Step 3: Add the minimal FastAPI app and health endpoint.
-- [ ] Step 4: Run pytest and verify PASS.
-- [ ] Step 5: Add the Vue/Vite shell, including the required `web/index.html` entry point, and verify `npm run build`.
-- [ ] Step 6: Add Makefile targets and separate dev/prod Compose.
-- [ ] Step 7: Validate both Compose files with `docker compose config` in a Docker-capable environment (for example, the Synology Docker environment). This validates Compose configuration only; real MPD/USB DAC testing starts at Task 1 Step 7 and Task 12.
-- [ ] Step 8: Commit: chore: establish music server monorepo.
+- [x] Step 2: Run pytest and verify it fails.
+- [x] Step 3: Add the minimal FastAPI app and health endpoint.
+- [x] Step 4: Run pytest and verify PASS.
+- [x] Step 5: Add the Vue/Vite shell, including the required `web/index.html` entry point, and verify `npm run build`.
+- [x] Step 6: Add Makefile targets and separate dev/prod Compose.
+- [x] Step 7: Validate both Compose files with `docker compose config` in a Docker-capable environment (for example, the Synology Docker environment). This validates Compose configuration only; real MPD/USB DAC testing starts at Task 1 Step 7 and Task 12.
+- [x] Step 8: Commit: chore: establish music server monorepo.
+
+**Task 0 verification record (2026-09-25):**
+- Final Task 0 source was reviewed against all four design specifications and the implementation plan.
+- The production Web static-serving path is implemented by FastAPI and is included in the production image.
+- Local acceptance completed for: server pytest, Node 22 typecheck/build, both Compose configuration checks, and production Compose startup/health plus root Web serving.
+- Step 2 is a historical RED-phase development checkpoint; the final repository retains the resulting test and GREEN implementation rather than a reproducible failing-test state.
 
 ---
 
