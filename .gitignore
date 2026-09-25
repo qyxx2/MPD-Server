@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+
+# Node / Vite
+node_modules/
+dist/
+web/.vite/
+
+# Coverage / tooling
+.coverage
+htmlcov/
+
+# Local deployment state
+deploy/data/
+deploy/backups/
+deploy/config/
