@@ -40,11 +40,3 @@ class Song(BaseModel):
     @property
     def genre(self) -> tuple[str, ...]:
         return self.genres
-
-
-class Playlist(BaseModel):
-    playlist_id: str
-    name: str
-    created_at: datetime
-    updated_at: datetime
-    is_system: bool = False
