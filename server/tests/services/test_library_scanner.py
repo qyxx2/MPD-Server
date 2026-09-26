@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 from shutil import copy2
 
@@ -20,14 +19,13 @@ def test_step5_new_file_is_added_and_changed_file_is_reconciled(
 
     root = tmp_path / "library"
     root.mkdir()
-    source = media_fixture_dir / "metadata.flac"
-    target = root / "metadata.flac"
-    copy2(source, target)
+    target = root / "track.mp3"
+    copy2(media_fixture_dir / "sidecar.mp3", target)
 
     first = _run(scan_full(root))
     assert first.added == [target]
 
-    target.write_bytes(target.read_bytes() + b"")
+    copy2(media_fixture_dir / "no_lyrics.mp3", target)
     second = _run(scan_paths([target]))
     assert second.changed == [target]
 
