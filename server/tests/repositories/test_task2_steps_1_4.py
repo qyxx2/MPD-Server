@@ -203,3 +203,28 @@ def test_duplicate_playlist_song_is_rejected_without_order_change(tmp_path):
 
     after = run(playlists.list_song_ids(playlist.playlist_id))
     assert after == before == ["song-1", "song-2"]
+
+
+def test_playlist_position_insertion_preserves_order(tmp_path):
+    path = tmp_path / "library.db"
+    run(initialize_database(str(path)))
+    library = LibraryRepository(str(path))
+    playlists = PlaylistRepository(str(path))
+
+    for song_id in ("song-1", "song-2", "song-3"):
+        run(
+            library.upsert_song(
+                Song(song_id=song_id, title=song_id, file_uri=f"{song_id}.flac")
+            )
+        )
+
+    playlist = run(playlists.create_playlist("My Playlist"))
+    run(playlists.add_song(playlist.playlist_id, "song-1"))
+    run(playlists.add_song(playlist.playlist_id, "song-2"))
+    run(playlists.add_song(playlist.playlist_id, "song-3", position=1))
+
+    assert run(playlists.list_song_ids(playlist.playlist_id)) == [
+        "song-1",
+        "song-3",
+        "song-2",
+    ]
