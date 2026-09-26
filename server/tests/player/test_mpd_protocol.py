@@ -1,6 +1,11 @@
 import pytest
 
-from server.app.player.mpd_protocol import MPDAckError, MPDProtocolError, parse_response, quote_argument
+from server.app.player.mpd_protocol import (
+    MPDAckError,
+    MPDProtocolError,
+    parse_response,
+    quote_argument,
+)
 
 
 def test_parse_response_decodes_escaped_values_and_keeps_repeated_keys():
