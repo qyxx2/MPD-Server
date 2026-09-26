@@ -87,8 +87,11 @@ def test_verified_port_requires_playlist_commands_for_play_by_uri():
 def test_probe_records_commands_status_outputs_and_update_result():
     async def run():
         seen = []
+        connections = 0
 
         async def handle(reader, writer):
+            nonlocal connections
+            connections += 1
             writer.write(b"OK MPD 0.23.5\n")
             await writer.drain()
             try:
@@ -201,6 +204,7 @@ def test_probe_records_commands_status_outputs_and_update_result():
 
     asyncio.run(run())
 
+
 def test_probe_recovers_after_negative_probe_closes_connection():
     async def run():
         connections = 0
@@ -245,4 +249,3 @@ def test_probe_recovers_after_negative_probe_closes_connection():
             await server.wait_closed()
 
     asyncio.run(run())
-
