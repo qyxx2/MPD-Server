@@ -88,6 +88,81 @@ class PlaylistRepository:
 
         await run_transaction(self.path, operation)
 
+    async def remove_song(self, playlist_id: str, song_id: str) -> None:
+        async def operation(connection):
+            deleted = connection.execute(
+                """
+                DELETE FROM playlist_items
+                WHERE playlist_id = ? AND song_id = ?
+                """,
+                (playlist_id, song_id),
+            ).rowcount
+            if deleted:
+                connection.execute(
+                    """
+                    UPDATE playlist_items
+                    SET position = position - 1
+                    WHERE playlist_id = ? AND position > (
+                        SELECT position
+                        FROM playlist_items
+                        WHERE playlist_id = ? AND song_id = ?
+                    )
+                    """,
+                    (playlist_id, playlist_id, song_id),
+                )
+                connection.execute(
+                    "UPDATE playlists SET updated_at = ? WHERE playlist_id = ?",
+                    (datetime.now(timezone.utc).isoformat(), playlist_id),
+                )
+
+        await run_transaction(self.path, operation)
+
+    async def reorder_playlist(
+        self, playlist_id: str, ordered_song_ids: list[str]
+    ) -> None:
+        async def operation(connection):
+            current_song_ids = [
+                row[0]
+                for row in connection.execute(
+                    """
+                    SELECT song_id
+                    FROM playlist_items
+                    WHERE playlist_id = ?
+                    ORDER BY position
+                    """,
+                    (playlist_id,),
+                )
+            ]
+            if len(ordered_song_ids) != len(set(ordered_song_ids)):
+                raise ValueError("ordered_song_ids contains duplicates")
+            if set(ordered_song_ids) != set(current_song_ids):
+                raise ValueError("ordered_song_ids must match playlist members")
+
+            connection.execute(
+                """
+                UPDATE playlist_items
+                SET position = position + ?
+                WHERE playlist_id = ?
+                """,
+                (len(current_song_ids), playlist_id),
+            )
+            for position, song_id in enumerate(ordered_song_ids):
+                connection.execute(
+                    """
+                    UPDATE playlist_items
+                    SET position = ?
+                    WHERE playlist_id = ? AND song_id = ?
+                    """,
+                    (position, playlist_id, song_id),
+                )
+            if ordered_song_ids != current_song_ids:
+                connection.execute(
+                    "UPDATE playlists SET updated_at = ? WHERE playlist_id = ?",
+                    (datetime.now(timezone.utc).isoformat(), playlist_id),
+                )
+
+        await run_transaction(self.path, operation)
+
     async def set_favorite(self, song_id: str, is_favorite: bool) -> None:
         async def operation(connection):
             if is_favorite:
