@@ -177,17 +177,35 @@ async def set_favorite(song_id: str, is_favorite: bool) -> None: ...
 async def record_history(event: HistoryEvent) -> None: ...
 ~~~
 
-- [ ] Step 1: Test fresh database, schema version, foreign keys, transaction boundaries and integrity.
-- [ ] Step 2: Define songs/albums/artists/genres/tags/playlists/playlist_items/favorites/history/queue/playback-state tables and indexes.
-- [ ] Step 3: Test stable Song ID reuse, path move/rename matching, metadata update and multi-artist relations.
-- [ ] Step 4: Test duplicate Playlist insertion is rejected without order changes.
-- [ ] Step 5: Test Favorites persistence and independent removal.
-- [ ] Step 6: Test History records start/end/reason/session independently of Queue.
-- [ ] Step 7: Implement repositories with serialized critical writes.
-- [ ] Step 8: Verify tests.
-- [ ] Step 9: Commit: feat: add sqlite library playlist and history repositories.
+- [x] Step 1: Test fresh database, schema version, foreign keys, transaction boundaries and integrity.
+- [x] Step 2: Define songs/albums/artists/genres/tags/playlists/playlist_items/favorites/history/queue/playback-state tables and indexes.
+- [x] Step 3: Test stable Song ID reuse, path move/rename matching, metadata update and multi-artist relations.
+- [x] Step 4: Test duplicate Playlist insertion is rejected without order changes.
+- [x] Step 5: Test Favorites persistence and independent removal.
+- [x] Step 6: Test History records start/end/reason/session independently of Queue.
+- [x] Step 7: Implement repositories with serialized critical writes.
+- [x] Step 8: Verify tests.
+- [x] Step 9: Commit: feat: add sqlite library playlist and history repositories.
+
+**Task 2 partial verification record (2026-09-26, Steps 1-4):**
+- Step 1 RED tests were created before the repository implementation and committed on the Task2 feature branch; transaction commit/rollback, schema version, foreign-key enforcement and SQLite integrity checks pass.
+- Step 2 defines the required Library/Playlist/Favorites/History/Queue/Playback-State tables and supporting indexes without implementing later service behavior.
+- Step 3 tests stable Song ID reuse across file moves, metadata updates, and multi-artist relation replacement; the implementation matches by stable `identity_key` rather than treating file path as business identity.
+- Step 4 tests duplicate Playlist insertion rejection without order changes and covers insertion at a non-terminal position under the unique playlist-position constraint.
+- Focused verification passes: `PYTHONPATH=. python3 -m pytest server/tests/repositories/test_task2_steps_1_4.py -q` (6 passed); `python3 -m compileall -q server` (pass).
+- The available execution environment could not clone the GitHub repository because outbound DNS/network access was unavailable, so the complete existing main-branch test suite was not independently executed here.
+
 
 ---
+
+
+**Task 2 follow-up correction record (2026-09-26):**
+- Rechecked the implemented repository interfaces against the Task 2 plan before final acceptance.
+- Added RED-phase regression tests for `PlaylistRepository.remove_song()` and `PlaylistRepository.reorder_playlist()`, including removal without deleting the Song, order preservation after removal, exact-member validation, duplicate rejection, and atomic failure behavior.
+- Implemented `remove_song()` with transactional position compaction and `reorder_playlist()` with exact-member validation and transactional position replacement.
+- Fixed only Task 2-scoped Ruff findings in `database.py`, `library_repository.py`, and the Task 2 repository test import. The pre-existing Task 0 `server/tests/test_health.py` Ruff finding was intentionally left untouched to avoid unrelated changes.
+- The implementation commits were pushed to `feature/task-2-sqlite-repositories`. The final Python test/lint rerun was not executed in this environment because outbound GitHub DNS/network access was unavailable; no unverified PASS claim is recorded here.
+- Task 2 is not considered finally accepted until the branch is tested in the user's Docker-capable environment and the resulting test/lint/diff checks pass.
 
 ## Task 3：媒体元数据、歌词、曲库扫描与监听
 
@@ -510,3 +528,10 @@ make build
 → 12 Real NAS/MPD acceptance/v0.1.0
 
 每个 Task 独立测试、独立提交。遇到失败先使用 superpowers:systematic-debugging；完成主要阶段后使用 code-review/verification-before-completion。
+
+**Task 2 verification record (2026-09-26, Steps 5-9):**
+- Step 5 RED coverage verifies Favorites persistence across repository instances and independent removal without changing the Song or Playlist membership. The Favorites table remains separate from playlist_items, so Queue/Playlist changes cannot implicitly clear Favorites.
+- Step 6 RED coverage verifies History stores song ID, start/end timestamps, reason and session ID independently of Queue; recording a HistoryEvent does not create Queue entries.
+- Step 7 adds per-database serialization for critical async transactions, scoped to each running event loop to avoid cross-event-loop asyncio.Lock reuse. Existing transaction commit/rollback semantics remain unchanged.
+- Step 8 focused verification passes: `PYTHONPATH=. python3 -m pytest server/tests/repositories/test_task2_steps_1_4.py server/tests/repositories/test_task2_steps_5_7.py -q` (9 passed) and `python3 -m compileall -q server`. Ruff was not executable in the available verification environment because the Ruff module was not installed; no Ruff PASS is claimed for this turn.
+- Step 9 final branch state is committed with message `feat: add sqlite library playlist and history repositories`; the branch ref and commit history were re-checked after the write. No merge into `main` was performed.
