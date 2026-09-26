@@ -225,16 +225,26 @@ async def scan_full(root: Path) -> ScanResult: ...
 async def scan_paths(paths: list[Path]) -> ScanResult: ...
 ~~~
 
-- [ ] Step 1: Add media fixtures for embedded lyrics, LRC, FLAC/MP3 metadata and technical audio properties.
-- [ ] Step 2: Test title/artist/album/album artist/track/disc/year/genre/duration/codec/bit depth/sample rate/channels.
-- [ ] Step 3: Test embedded lyrics vs sidecar LRC, ordinary lyrics, missing lyrics and parse failure.
+- [x] Step 1: Add media fixtures for embedded lyrics, LRC, FLAC/MP3 metadata and technical audio properties.
+- [x] Step 2: Test title/artist/album/album artist/track/disc/year/genre/duration/codec/bit depth/sample rate/channels.
+- [x] Step 3: Test embedded lyrics vs sidecar LRC, ordinary lyrics, missing lyrics and parse failure.
 - [ ] Step 4: Ensure unknown values stay null and failed scans do not erase known-good metadata.
-- [ ] Step 5: Test new/changed/moved/deleted/unreadable files.
+- [x] Step 5: Test new/changed/moved/deleted/unreadable files.
 - [ ] Step 6: Implement scanner using read-only filesystem access and repository transactions.
 - [ ] Step 7: Implement filesystem event debounce/batch.
 - [ ] Step 8: Implement configurable full reconciliation with default 12 hours and manual scan.
 - [ ] Step 9: Emit library-change domain event only after DB success; optionally trigger MPD database update.
 - [ ] Step 10: Commit: feat: add library scanner and metadata pipeline.
+
+
+**Task 3 verification record (2026-09-26, Steps 1-5 RED phase):**
+- Step 1: Added reusable media fixtures through `server/tests/conftest.py` covering FLAC, MP3, sidecar LRC, missing lyrics and a deliberately invalid MP3 fixture. Fixture integrity validation passes independently.
+- Step 2: Added RED coverage for title, artists, album, album artist, track/disc, date/year, genre, duration, codec, bit depth, sample rate and channels for FLAC/MP3.
+- Step 3: Added RED coverage for sidecar LRC precedence, embedded ordinary lyrics, missing lyrics and parse failure.
+- Step 4: Added RED coverage for unknown metadata remaining null and parse failures being explicit. The stronger persistence assertion that a failed scan must not erase known-good repository metadata is not yet executable without inventing a scanner/repository injection contract, because the plan only specifies `scan_full(root)` and `scan_paths(paths)`. It remains pending the Step 6 service design, where repository transactions are introduced.
+- Step 5: Added RED lifecycle coverage for new, changed, moved, deleted and unreadable files, including stable song identity expectation across a move.
+- The production files `media_metadata.py` and `library_scanner.py` were intentionally not implemented in this turn; their implementation begins at Step 6.
+- The local execution environment cannot clone GitHub because outbound DNS/network access is unavailable. The exact RED tests were therefore validated against a local reconstruction of the changed test tree: Step 1 passed; Steps 2-5 failed with the expected missing-module errors for the not-yet-created production services. Python syntax compilation passed for all changed test files.
 
 ---
 
