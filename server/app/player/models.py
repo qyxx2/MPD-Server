@@ -31,6 +31,27 @@ class OutputInfo(BaseModel):
     attributes: dict[str, str] = Field(default_factory=dict)
 
 
+class PlayerQueueEntry(BaseModel):
+    mpd_song_id: int = Field(ge=0)
+    position: int = Field(ge=0)
+    song_uri: str
+
+
+class MPDStats(BaseModel):
+    songs: int | None = Field(default=None, ge=0)
+    albums: int | None = Field(default=None, ge=0)
+    artists: int | None = Field(default=None, ge=0)
+    db_playtime: int | None = Field(default=None, ge=0)
+    db_update: int | None = Field(default=None, ge=0)
+    playtime: int | None = Field(default=None, ge=0)
+    uptime: int | None = Field(default=None, ge=0)
+
+
+class DatabaseUpdateStatus(BaseModel):
+    updating: bool | None = None
+    job_id: int | None = Field(default=None, ge=0)
+
+
 class PlayerEvent(BaseModel):
     kind: str
     status: PlayerStatus

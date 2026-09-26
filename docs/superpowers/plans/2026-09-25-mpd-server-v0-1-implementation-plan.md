@@ -288,7 +288,7 @@ async def stats() -> MPDStats: ...
 async def database_update_status() -> DatabaseUpdateStatus: ...
 ~~~
 
-- [ ] Step 1: RED tests for the new domain models and PlayerPort contract.
+- [x] Step 1: RED tests for the new domain models and PlayerPort contract.
 - [ ] Step 2: Extend capability-probe tests for MPD Queue commands, output enable/disable commands, stats fields and update-status behavior.
 - [ ] Step 3: Run a controlled real MPD 0.23.5 probe. Queue mutation tests must restore the original MPD queue/state. Output tests must prefer the disabled HTTPD output; never toggle the active USB DAC merely for probing. Unverified behavior remains unavailable.
 - [ ] Step 4: Implement MockMPD Queue, output control, stats and update-status behavior.
