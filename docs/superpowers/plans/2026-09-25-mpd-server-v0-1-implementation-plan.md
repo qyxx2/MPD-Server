@@ -198,6 +198,15 @@ async def record_history(event: HistoryEvent) -> None: ...
 
 ---
 
+
+**Task 2 follow-up correction record (2026-09-26):**
+- Rechecked the implemented repository interfaces against the Task 2 plan before final acceptance.
+- Added RED-phase regression tests for `PlaylistRepository.remove_song()` and `PlaylistRepository.reorder_playlist()`, including removal without deleting the Song, order preservation after removal, exact-member validation, duplicate rejection, and atomic failure behavior.
+- Implemented `remove_song()` with transactional position compaction and `reorder_playlist()` with exact-member validation and transactional position replacement.
+- Fixed only Task 2-scoped Ruff findings in `database.py`, `library_repository.py`, and the Task 2 repository test import. The pre-existing Task 0 `server/tests/test_health.py` Ruff finding was intentionally left untouched to avoid unrelated changes.
+- The implementation commits were pushed to `feature/task-2-sqlite-repositories`. The final Python test/lint rerun was not executed in this environment because outbound GitHub DNS/network access was unavailable; no unverified PASS claim is recorded here.
+- Task 2 is not considered finally accepted until the branch is tested in the user's Docker-capable environment and the resulting test/lint/diff checks pass.
+
 ## Task 3：媒体元数据、歌词、曲库扫描与监听
 
 **Files**
