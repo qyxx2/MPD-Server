@@ -424,7 +424,6 @@ def _parse_outputs(response: MPDResponse) -> list[OutputInfo]:
 def _json_result(result: MPDCapabilities) -> dict[str, Any]:
     data = asdict(result)
     data["commands"] = sorted(result.commands)
-    data["not_commands"] = sorted(result.not_commands)
     data["status_fields"] = sorted(result.status_fields)
     data["outputs"] = [output.model_dump() for output in result.outputs]
     data["errors"] = [asdict(error) for error in result.errors]

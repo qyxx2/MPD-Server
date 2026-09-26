@@ -140,12 +140,12 @@ class PlayerPort(Protocol):
 - Step 4 protocol tests were created before parser implementation; escaped values, repeated keys, malformed responses, completion markers, quoting and ACK errors are covered.
 - Step 5 adapter tests were created before adapter implementation; typed ACK mapping and connection/command timeout handling are covered, and command timeout closes the unusable connection.
 - [x] Step 6: Test Adapter through a fake TCP server.
-- [ ] Step 7: Run capability probe against actual NAS MPD 0.23.5 and record commands, outputs, status fields, update behavior and errors.
+- [x] Step 7: Run capability probe against actual NAS MPD 0.23.5 and record commands, outputs, status fields, update behavior and errors.
 - [x] Step 8: Restrict service features to verified capabilities.
 - [x] Step 9: Commit: feat: add mpd adapter and verified capabilities.
 **Task 1 verification record (2026-09-25, Steps 6-9):**
 - Step 6: Added a real localhost TCP server test covering MPD greeting, command exchange, status/current-song parsing, song URI to MPD song ID lookup, playback controls, seek, volume, repeat/random, update and outputs. The test passes.
-- Step 7: The capability probe and documentation are implemented, but the actual NAS MPD 0.23.5 endpoint was not reachable from the current execution environment. No NAS results are fabricated; the step remains unchecked pending execution from a network location that can reach the Synology LAN MPD port.
+- Step 7: Completed against the real Synology DS920 MPD 0.23.5 endpoint on 2026-09-26. Recorded the full `commands` list (84 commands), 17 `status_fields`, two real outputs (USB DAC/ALSA enabled and HTTPD disabled), seven `stats` fields, `update_response: {"updating_db":"2"}`, and two error outcomes. The unknown-command probe produced a real connection close; the ACK probe returned error code 50 / "No such song". The probe result was saved on NAS as `mpd-0.23.5-probe-2026-09-26-091948.json`.
 - Step 8: Added MPDCapabilities and VerifiedPlayerPort; operations whose required MPD commands were not verified are rejected before reaching the underlying PlayerPort. Song-URI playback additionally requires playlistinfo and playid; status requires status and currentsong.
 - Step 9: This branch is committed with message feat: add mpd adapter and verified capabilities.
 

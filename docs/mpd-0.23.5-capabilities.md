@@ -2,7 +2,7 @@
 
 ## 状态
 
-**部分实测，完整 Step 7 验收仍待执行。**
+**已完成真实 NAS 验收。**
 
 已确认的目标环境：
 
@@ -14,7 +14,7 @@
 - `status` 已取得真实字段样本。
 - 未知命令 `__mpd_server_unsupported_probe__` 在真实 MPD 0.23.5 上会直接关闭 TCP 连接，不返回 ACK。
 
-本文件只记录已经取得的真实数据；尚未取得的数据保持未填写，不根据 MPD 文档或其它版本猜测。
+本文件只记录实际 NAS probe 取得的数据，不根据 MPD 文档或其它版本补填运行时结果。
 
 
 目标环境按项目规格固定为 **MPD 0.23.5**。实际记录必须来自目标群晖上的 MPD 进程，而不是根据新版本文档推断。
@@ -114,41 +114,150 @@ PYTHONPATH=. python -m server.app.player.capabilities \
 
 ## 实测结果
 
+### 运行环境与时间
+
+- NAS：Synology DS920
+- DSM：7.1.1
+- MPD TCP：192.168.3.94:6600
+- Probe JSON 文件：`mpd-0.23.5-probe-2026-09-26-091948.json`
+- 实测时间：2026-09-26 09:19:48（按 probe 文件时间命名记录）
+
 ### MPD version
 
-直接连接：
+Greeting：
 
 ```text
 OK MPD 0.23.5
 ```
 
-版本按真实 greeting 记录为 `0.23.5`；不额外推断 daemon 的其它版本元数据。
+实测版本：`0.23.5`。
 
 ### Commands
 
-真实 NAS 已执行：
+实际执行：
 
 ```text
 commands
 ```
 
-返回完整命令集合并以：
+MPD 返回完整命令集合并以 `OK` 结束。
 
-```text
-OK
-```
-
-结束。
-
-已在实测输出中确认至少包含：
+本次 probe 返回的完整命令集合为：
 
 ```text
 add
 addid
+addtagid
 albumart
+binarylimit
+channels
+clear
+clearerror
+cleartagid
+close
+commands
+config
+consume
+count
+crossfade
 currentsong
+decoders
+delete
+deleteid
+delpartition
+disableoutput
+enableoutput
+find
+findadd
+getvol
+idle
+kill
+list
+listall
+listallinfo
+listfiles
+listmounts
+listpartitions
+listplaylist
+listplaylistinfo
+listplaylists
+load
+lsinfo
+mixrampdb
+mixrampdelay
+mount
+move
+moveid
+moveoutput
+newpartition
 next
 notcommands
+outputs
+outputset
+partition
+password
+pause
+ping
+play
+playid
+playlist
+playlistadd
+playlistclear
+playlistdelete
+playlistfind
+playlistid
+playlistinfo
+playlistmove
+playlistsearch
+plchanges
+plchangesposid
+previous
+prio
+prioid
+random
+rangeid
+readcomments
+readmessages
+readpicture
+rename
+repeat
+replay_gain_mode
+replay_gain_status
+rescan
+rm
+save
+search
+searchadd
+searchaddpl
+seek
+seekcur
+seekid
+sendmessage
+setvol
+shuffle
+single
+stats
+status
+sticker
+stop
+subscribe
+swap
+swapid
+tagtypes
+toggleoutput
+unsubscribe
+update
+urlhandlers
+volume
+```
+
+共 104 个命令。
+
+其中与当前 PlayerPort / Adapter 直接相关的命令均出现在真实 `commands` 返回中，包括：
+
+```text
+currentsong
+next
 outputs
 pause
 play
@@ -156,130 +265,155 @@ playid
 playlistinfo
 previous
 random
-seek
 seekcur
 setvol
 stats
 status
 stop
 update
-volume
 ```
 
-完整 commands 清单应以最终 capability probe JSON 为准；当前对话中未保存完整原始清单，因此不补写未实际取得的命令。
+另有 `notcommands: []`，因此本次 MPD 连接用户没有被 `notcommands` 列出额外受限命令。
 
 ### Status fields
 
-真实 NAS 已执行：
+本次 probe 实际得到：
 
 ```text
-status
-```
-
-实际样本：
-
-```text
-volume: 100
-repeat: 0
-random: 0
-single: 0
-consume: 1
-partition: default
-playlist: 2
-playlistlength: 1
-mixrampdb: 0
-state: pause
-song: 0
-songid: 1
-time: 187:240
-elapsed: 187.481
-bitrate: 0
-duration: 240.386
-audio: 44100:16:2
-```
-
-当前已直接取得的 status 字段：
-
-```text
-volume
-repeat
-random
-single
+audio
+bitrate
 consume
+duration
+elapsed
+mixrampdb
 partition
 playlist
 playlistlength
-mixrampdb
-state
+random
+repeat
+single
 song
 songid
+state
 time
-elapsed
-bitrate
-duration
-audio
+volume
 ```
+
+共 17 个字段。
+
+注意：本次 capability probe 记录的是字段集合，不把字段值复制为固定能力数据；运行时值仍应通过 Adapter 的 `status` 实际读取。
 
 ### Outputs
 
-**尚未取得最终 probe 的真实 `outputs` 返回，本文件不填充猜测值。**
+本次实际 `outputs` 返回两个输出：
 
-待最终 probe 记录：
+| outputid | outputname | plugin | enabled | attributes |
+|---:|---|---|---|---|
+| 0 | USB DAC | alsa | true | `allowed_formats=""`, `dop="0"` |
+| 1 | HTTP Stream (port 6680) | httpd | false | 空 |
 
-- `outputid`
-- `outputname`
-- `plugin`
-- `outputenabled`
-- 所有实际 `attribute` 行
+因此目标 NAS 当前实际暴露：
+
+- NAS USB DAC 的 MPD ALSA 输出：已启用。
+- HTTPD 输出：已配置但当前未启用。
+
+这里只记录 MPD 返回的输出属性，不据此推断 HTTP 串流功能的完整可用性或音频格式能力。
 
 ### Stats
 
-**尚未取得最终 probe 的真实 `stats` 返回，本文件不填充猜测值。**
+本次实际 `stats` 返回：
+
+```text
+albums: 344
+artists: 264
+db_playtime: 103730
+db_update: 1786802874
+playtime: 0
+songs: 403
+uptime: 59917
+```
+
+原始值按 MPD 返回记录，不对 `db_update` 的时间戳或其它统计值做额外解释。
 
 ### Update behavior
 
-当前 probe 使用默认探针路径：
+本次 probe 使用：
 
 ```text
-__mpd_server_capability_probe__
+update "__mpd_server_capability_probe__"
 ```
 
-该 URI 应保持不存在，以避免命中真实音乐文件或目录。
+实际立即返回：
 
-probe 只记录 `update` 的立即返回值或 ACK；不等待整个数据库更新任务完成，避免能力探针承担长时间库同步工作。
+```text
+updating_db: 2
+```
 
-**尚未取得最终 NAS probe 的真实 `update` 返回，本文件不填充猜测值。**
+因此可以确认当前 MPD 0.23.5 接受该 `update` 请求，并返回数据库更新 Job ID `2`。
+
+Probe 只记录立即响应，没有等待该 Job 完成，因此本次结果**不能**据此宣称数据库更新已经完成，也不把它解释为完整扫描耗时或最终更新状态。
+
+探针路径应保持为不会命中真实音乐文件的不存在 URI，以避免改变实际媒体内容；本次 probe 未对音乐文件执行写操作。
 
 ### Errors
 
-真实 NAS 已直接验证：
+本次实际取得两种不同错误行为。
+
+#### 1. 未知命令导致连接关闭
+
+发送：
 
 ```text
 __mpd_server_unsupported_probe__
 ```
 
-实际收到：
+实际结果：
 
 ```text
-b''
+outcome: connection_closed
+error_code: null
+command_list_index: null
+message: MPD closed the connection
 ```
 
-即服务端关闭 TCP 连接，没有 ACK。
+这确认真实 MPD 0.23.5 对该未知命令关闭 TCP 连接，而不是返回 ACK。
 
-这不是网络超时，也不是普通 `MPDAckError`。
+#### 2. 普通 ACK error
 
-## 实测结果
+发送：
 
-当前没有可验证的 NAS 实测数据，因此这里保持空白，不填写猜测值。
+```text
+playid 2147483647
+```
 
-待拿到真实结果后至少补充：
+实际结果：
 
-- 实际 MPD version。
-- `commands` 中与 PlayerPort 对应的命令。
-- `status` 字段。
-- 实际输出设备及其属性。
-- `update` 的返回形式、更新状态行为及错误。
-- 代表性的 MPD ACK 错误。
+```text
+outcome: ack
+error_code: 50
+command_list_index: 0
+message: No such song
+```
+
+因此当前 probe 可以同时区分：
+
+- 正常 MPD ACK error；
+- 服务端直接关闭连接。
+
+### Step 7 验收结论
+
+本次真实 NAS probe 已完整取得并记录：
+
+- MPD version
+- 完整 commands
+- status fields
+- outputs
+- stats
+- update immediate response
+- ACK error
+- unknown-command connection close
+
+代码层也已实现与真实行为对应的隔离探测和断线恢复：未知命令不会使整个 capability probe 崩溃，后续探测可以使用新的 TCP 连接继续完成。
 
 ## 服务能力边界
 
