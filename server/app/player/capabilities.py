@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from server.app.player.models import OutputInfo, PlayerStatus
 from server.app.player.mpd_protocol import (
