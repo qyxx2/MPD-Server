@@ -16,6 +16,10 @@ from server.app.player.mpd_protocol import (
 )
 from server.app.player.ports import PlayerCommandError, PlayerPort
 
+NEGATIVE_COMMAND_PROBE = "__mpd_server_unsupported_probe__"
+ACK_ERROR_PROBE_COMMAND = "playid"
+ACK_ERROR_PROBE_ARG = "2147483647"
+
 ConnectionFactory = Callable[
     [str, int], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]
 ]
@@ -40,6 +44,7 @@ OPERATION_COMMANDS: dict[str, frozenset[str]] = {
 @dataclass(frozen=True)
 class ProbeError:
     command: str
+    outcome: str
     error_code: int | None
     command_list_index: int | None
     message: str
@@ -49,6 +54,7 @@ class ProbeError:
 class MPDCapabilities:
     version: str | None
     commands: frozenset[str]
+    not_commands: frozenset[str]
     status_fields: frozenset[str]
     stats: dict[str, str]
     outputs: tuple[OutputInfo, ...]
@@ -63,6 +69,7 @@ class MPDCapabilities:
         return cls(
             version=None,
             commands=frozenset(commands),
+            not_commands=frozenset(),
             status_fields=frozenset(),
             stats={},
             outputs=(),
@@ -178,13 +185,22 @@ class CapabilityProbe:
                 if key == "command"
             )
 
-            status = await self._safe_execute("status", commands, "status")
-            outputs_response = await self._safe_execute(
-                "outputs", commands, "outputs"
-            )
-            stats_response = await self._safe_execute("stats", commands, "stats")
-
             errors: list[ProbeError] = []
+            not_commands_response, error = await self._probe_command("notcommands")
+            if error is not None:
+                errors.append(error)
+            not_commands = _command_names(not_commands_response)
+
+            status = await self._safe_execute(
+                "status", commands, "status", errors
+            )
+            outputs_response = await self._safe_execute(
+                "outputs", commands, "outputs", errors
+            )
+            stats_response = await self._safe_execute(
+                "stats", commands, "stats", errors
+            )
+
             update_supported = "update" in commands
             update_response: dict[str, str] = {}
             if update_supported:
@@ -196,8 +212,14 @@ class CapabilityProbe:
                 if error is not None:
                     errors.append(error)
 
-            _, error = await self._probe_command(
-                "__mpd_server_unsupported_probe__"
+            _, error = await self._probe_fresh_command(
+                NEGATIVE_COMMAND_PROBE
+            )
+            if error is not None:
+                errors.append(error)
+
+            _, error = await self._probe_fresh_command(
+                ACK_ERROR_PROBE_COMMAND, ACK_ERROR_PROBE_ARG
             )
             if error is not None:
                 errors.append(error)
@@ -205,6 +227,7 @@ class CapabilityProbe:
             return MPDCapabilities(
                 version=self.__version,
                 commands=commands,
+                not_commands=not_commands,
                 status_fields=frozenset(key for key, _ in status.pairs),
                 stats=_scalar_map(stats_response.as_dict()),
                 outputs=tuple(_parse_outputs(outputs_response)),
@@ -220,11 +243,13 @@ class CapabilityProbe:
         command: str,
         commands: frozenset[str],
         required_command: str,
+        errors: list[ProbeError],
     ) -> MPDResponse:
         if required_command not in commands:
             return MPDResponse(())
         response, error = await self._probe_command(command)
         if error is not None:
+            errors.append(error)
             return MPDResponse(())
         return response or MPDResponse(())
 
@@ -236,10 +261,64 @@ class CapabilityProbe:
         except MPDAckError as exc:
             return None, ProbeError(
                 command=exc.command,
+                outcome="ack",
                 error_code=exc.error_code,
                 command_list_index=exc.command_list_index,
                 message=exc.message,
             )
+        except EOFError as exc:
+            await self.close()
+            return None, ProbeError(
+                command=command,
+                outcome="connection_closed",
+                error_code=None,
+                command_list_index=None,
+                message=str(exc),
+            )
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            await self.close()
+            return None, ProbeError(
+                command=command,
+                outcome="timeout",
+                error_code=None,
+                command_list_index=None,
+                message=str(exc),
+            )
+        except (ConnectionError, OSError, UnicodeError, MPDProtocolError) as exc:
+            await self.close()
+            return None, ProbeError(
+                command=command,
+                outcome="communication_error",
+                error_code=None,
+                command_list_index=None,
+                message=str(exc),
+            )
+
+    async def _probe_fresh_command(
+        self, command: str, *args: str
+    ) -> tuple[MPDResponse | None, ProbeError | None]:
+        await self.close()
+        try:
+            await self._connect()
+            return await self._probe_command(command, *args)
+        except (asyncio.TimeoutError, TimeoutError) as exc:
+            return None, ProbeError(
+                command=command,
+                outcome="timeout",
+                error_code=None,
+                command_list_index=None,
+                message=str(exc),
+            )
+        except (EOFError, ConnectionError, OSError, UnicodeError, MPDProtocolError, MPDAckError) as exc:
+            return None, ProbeError(
+                command=command,
+                outcome="connection_error",
+                error_code=getattr(exc, "error_code", None),
+                command_list_index=getattr(exc, "command_list_index", None),
+                message=str(exc),
+            )
+        finally:
+            await self.close()
 
     async def _connect(self) -> None:
         reader, writer = await asyncio.wait_for(
@@ -290,6 +369,16 @@ class CapabilityProbe:
                 pass
 
 
+def _command_names(response: MPDResponse | None) -> frozenset[str]:
+    if response is None:
+        return frozenset()
+    return frozenset(
+        value
+        for key, value in response.pairs
+        if key in {"command", "notcommand"}
+    )
+
+
 def _scalar_map(data: dict[str, str | list[str]]) -> dict[str, str]:
     result: dict[str, str] = {}
     for key, value in data.items():
@@ -335,6 +424,7 @@ def _parse_outputs(response: MPDResponse) -> list[OutputInfo]:
 def _json_result(result: MPDCapabilities) -> dict[str, Any]:
     data = asdict(result)
     data["commands"] = sorted(result.commands)
+    data["not_commands"] = sorted(result.not_commands)
     data["status_fields"] = sorted(result.status_fields)
     data["outputs"] = [output.model_dump() for output in result.outputs]
     data["errors"] = [asdict(error) for error in result.errors]
