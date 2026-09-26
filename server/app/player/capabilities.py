@@ -322,7 +322,7 @@ class CapabilityProbe:
                 errors.append(error)
 
             return MPDCapabilities(
-                version=self._version,
+                version=self.__version,
                 commands=commands,
                 not_commands=not_commands,
                 status_fields=frozenset(key for key, _ in status_response.pairs),
