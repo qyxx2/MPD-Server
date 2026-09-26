@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 _ACK_RE = re.compile(
     r"^ACK \[(?P<error>\d+)@(?P<index>\d+)\] "
@@ -64,7 +64,7 @@ def parse_response(lines: Iterable[str]) -> MPDResponse:
         key = key.strip()
         if not key:
             raise MPDProtocolError(f"malformed response line: {line}")
-        pairs.append((key, decode_value(value[1:] if value.startswith(" ") else value)))
+        pairs.append((key, decode_value(value.removeprefix(" "))))
 
     if not saw_completion:
         raise MPDProtocolError("missing completion code")
