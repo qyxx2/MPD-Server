@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS song_tags (
 );
 CREATE TABLE IF NOT EXISTS playlists (
     playlist_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     is_system INTEGER NOT NULL DEFAULT 0 CHECK(is_system IN (0, 1))
