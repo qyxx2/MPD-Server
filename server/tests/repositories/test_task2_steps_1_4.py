@@ -228,3 +228,68 @@ def test_playlist_position_insertion_preserves_order(tmp_path):
         "song-3",
         "song-2",
     ]
+
+
+def test_playlist_remove_song_preserves_remaining_order_and_song(tmp_path):
+    path = tmp_path / "library.db"
+    run(initialize_database(str(path)))
+    library = LibraryRepository(str(path))
+    playlists = PlaylistRepository(str(path))
+
+    for song_id in ("song-1", "song-2", "song-3"):
+        run(
+            library.upsert_song(
+                Song(song_id=song_id, title=song_id, file_uri=f"{song_id}.flac")
+            )
+        )
+
+    playlist = run(playlists.create_playlist("My Playlist"))
+    for song_id in ("song-1", "song-2", "song-3"):
+        run(playlists.add_song(playlist.playlist_id, song_id))
+
+    run(playlists.remove_song(playlist.playlist_id, "song-2"))
+
+    assert run(playlists.list_song_ids(playlist.playlist_id)) == ["song-1", "song-3"]
+    assert run(library.get_song("song-2")) is not None
+
+
+def test_playlist_reorder_requires_exact_members_and_is_atomic(tmp_path):
+    path = tmp_path / "library.db"
+    run(initialize_database(str(path)))
+    library = LibraryRepository(str(path))
+    playlists = PlaylistRepository(str(path))
+
+    for song_id in ("song-1", "song-2", "song-3"):
+        run(
+            library.upsert_song(
+                Song(song_id=song_id, title=song_id, file_uri=f"{song_id}.flac")
+            )
+        )
+
+    playlist = run(playlists.create_playlist("My Playlist"))
+    for song_id in ("song-1", "song-2", "song-3"):
+        run(playlists.add_song(playlist.playlist_id, song_id))
+
+    run(
+        playlists.reorder_playlist(
+            playlist.playlist_id, ["song-3", "song-1", "song-2"]
+        )
+    )
+    assert run(playlists.list_song_ids(playlist.playlist_id)) == [
+        "song-3",
+        "song-1",
+        "song-2",
+    ]
+
+    with pytest.raises(ValueError):
+        run(
+            playlists.reorder_playlist(
+                playlist.playlist_id, ["song-3", "song-3", "song-1"]
+            )
+        )
+
+    assert run(playlists.list_song_ids(playlist.playlist_id)) == [
+        "song-3",
+        "song-1",
+        "song-2",
+    ]
