@@ -3,8 +3,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from .database import run_transaction
 from server.app.models.library import Song
+
+from .database import run_transaction
 
 
 SONGS_SELECT = """
