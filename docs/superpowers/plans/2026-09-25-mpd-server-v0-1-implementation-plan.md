@@ -177,15 +177,24 @@ async def set_favorite(song_id: str, is_favorite: bool) -> None: ...
 async def record_history(event: HistoryEvent) -> None: ...
 ~~~
 
-- [ ] Step 1: Test fresh database, schema version, foreign keys, transaction boundaries and integrity.
-- [ ] Step 2: Define songs/albums/artists/genres/tags/playlists/playlist_items/favorites/history/queue/playback-state tables and indexes.
-- [ ] Step 3: Test stable Song ID reuse, path move/rename matching, metadata update and multi-artist relations.
-- [ ] Step 4: Test duplicate Playlist insertion is rejected without order changes.
+- [x] Step 1: Test fresh database, schema version, foreign keys, transaction boundaries and integrity.
+- [x] Step 2: Define songs/albums/artists/genres/tags/playlists/playlist_items/favorites/history/queue/playback-state tables and indexes.
+- [x] Step 3: Test stable Song ID reuse, path move/rename matching, metadata update and multi-artist relations.
+- [x] Step 4: Test duplicate Playlist insertion is rejected without order changes.
 - [ ] Step 5: Test Favorites persistence and independent removal.
 - [ ] Step 6: Test History records start/end/reason/session independently of Queue.
 - [ ] Step 7: Implement repositories with serialized critical writes.
 - [ ] Step 8: Verify tests.
 - [ ] Step 9: Commit: feat: add sqlite library playlist and history repositories.
+
+**Task 2 partial verification record (2026-09-26, Steps 1-4):**
+- Step 1 RED tests were created before the repository implementation and committed on the Task2 feature branch; transaction commit/rollback, schema version, foreign-key enforcement and SQLite integrity checks pass.
+- Step 2 defines the required Library/Playlist/Favorites/History/Queue/Playback-State tables and supporting indexes without implementing later service behavior.
+- Step 3 tests stable Song ID reuse across file moves, metadata updates, and multi-artist relation replacement; the implementation matches by stable `identity_key` rather than treating file path as business identity.
+- Step 4 tests duplicate Playlist insertion rejection without order changes and covers insertion at a non-terminal position under the unique playlist-position constraint.
+- Focused verification passes: `PYTHONPATH=. python3 -m pytest server/tests/repositories/test_task2_steps_1_4.py -q` (6 passed); `python3 -m compileall -q server` (pass).
+- The available execution environment could not clone the GitHub repository because outbound DNS/network access was unavailable, so the complete existing main-branch test suite was not independently executed here.
+
 
 ---
 
