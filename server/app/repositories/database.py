@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TypeVar
 
-from .migrations import SCHEMA_VERSION, apply_migrations
+from .migrations import apply_migrations
 
 T = TypeVar("T")
 

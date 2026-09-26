@@ -3,9 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from server.app.models.library import Song
-
 from .database import run_transaction
+from server.app.models.library import Song
 
 
 SONGS_SELECT = """
@@ -49,8 +48,11 @@ class LibraryRepository:
                 existing_id = row[0] if row else None
 
             song_id = existing_id or song.song_id or str(uuid.uuid4())
-            if song.song_id is not None and existing_id is not None:
-                if existing_id != song.song_id:
+            if (
+                song.song_id is not None
+                and existing_id is not None
+                and existing_id != song.song_id
+            ):
                     raise ValueError(
                         "song_id resolves to a different existing song"
                     )

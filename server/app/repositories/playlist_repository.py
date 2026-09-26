@@ -90,25 +90,30 @@ class PlaylistRepository:
 
     async def remove_song(self, playlist_id: str, song_id: str) -> None:
         async def operation(connection):
-            deleted = connection.execute(
+            row = connection.execute(
                 """
-                DELETE FROM playlist_items
+                SELECT position
+                FROM playlist_items
                 WHERE playlist_id = ? AND song_id = ?
                 """,
                 (playlist_id, song_id),
-            ).rowcount
-            if deleted:
+            ).fetchone()
+            if row is not None:
+                removed_position = row[0]
+                connection.execute(
+                    """
+                    DELETE FROM playlist_items
+                    WHERE playlist_id = ? AND song_id = ?
+                    """,
+                    (playlist_id, song_id),
+                )
                 connection.execute(
                     """
                     UPDATE playlist_items
                     SET position = position - 1
-                    WHERE playlist_id = ? AND position > (
-                        SELECT position
-                        FROM playlist_items
-                        WHERE playlist_id = ? AND song_id = ?
-                    )
+                    WHERE playlist_id = ? AND position > ?
                     """,
-                    (playlist_id, playlist_id, song_id),
+                    (playlist_id, removed_position),
                 )
                 connection.execute(
                     "UPDATE playlists SET updated_at = ? WHERE playlist_id = ?",

@@ -7,12 +7,12 @@ import pytest
 
 from server.app.models.library import Song
 from server.app.repositories.database import (
-    SCHEMA_VERSION,
     check_integrity,
     initialize_database,
     run_transaction,
 )
 from server.app.repositories.library_repository import LibraryRepository
+from server.app.repositories.migrations import SCHEMA_VERSION
 from server.app.repositories.playlist_repository import (
     DuplicatePlaylistSongError,
     PlaylistRepository,
