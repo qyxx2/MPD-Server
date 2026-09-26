@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from server.app.models.library import Playlist
+from server.app.models.playlist import Playlist
 
 from .database import run_transaction
 
@@ -57,13 +57,22 @@ class PlaylistRepository:
                 (playlist_id,),
             ).fetchone()[0]
             target = count if position is None else max(0, min(position, count))
+            offset = count + 1
             connection.execute(
                 """
                 UPDATE playlist_items
-                SET position = position + 1
+                SET position = position + ?
                 WHERE playlist_id = ? AND position >= ?
                 """,
-                (playlist_id, target),
+                (offset, playlist_id, target),
+            )
+            connection.execute(
+                """
+                UPDATE playlist_items
+                SET position = position - ?
+                WHERE playlist_id = ? AND position >= ?
+                """,
+                (offset - 1, playlist_id, target + offset),
             )
             connection.execute(
                 """
