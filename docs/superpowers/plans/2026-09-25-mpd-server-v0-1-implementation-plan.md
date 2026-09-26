@@ -181,11 +181,11 @@ async def record_history(event: HistoryEvent) -> None: ...
 - [x] Step 2: Define songs/albums/artists/genres/tags/playlists/playlist_items/favorites/history/queue/playback-state tables and indexes.
 - [x] Step 3: Test stable Song ID reuse, path move/rename matching, metadata update and multi-artist relations.
 - [x] Step 4: Test duplicate Playlist insertion is rejected without order changes.
-- [ ] Step 5: Test Favorites persistence and independent removal.
-- [ ] Step 6: Test History records start/end/reason/session independently of Queue.
-- [ ] Step 7: Implement repositories with serialized critical writes.
-- [ ] Step 8: Verify tests.
-- [ ] Step 9: Commit: feat: add sqlite library playlist and history repositories.
+- [x] Step 5: Test Favorites persistence and independent removal.
+- [x] Step 6: Test History records start/end/reason/session independently of Queue.
+- [x] Step 7: Implement repositories with serialized critical writes.
+- [x] Step 8: Verify tests.
+- [x] Step 9: Commit: feat: add sqlite library playlist and history repositories.
 
 **Task 2 partial verification record (2026-09-26, Steps 1-4):**
 - Step 1 RED tests were created before the repository implementation and committed on the Task2 feature branch; transaction commit/rollback, schema version, foreign-key enforcement and SQLite integrity checks pass.
@@ -519,3 +519,10 @@ make build
 → 12 Real NAS/MPD acceptance/v0.1.0
 
 每个 Task 独立测试、独立提交。遇到失败先使用 superpowers:systematic-debugging；完成主要阶段后使用 code-review/verification-before-completion。
+
+**Task 2 verification record (2026-09-26, Steps 5-9):**
+- Step 5 RED coverage verifies Favorites persistence across repository instances and independent removal without changing the Song or Playlist membership. The Favorites table remains separate from playlist_items, so Queue/Playlist changes cannot implicitly clear Favorites.
+- Step 6 RED coverage verifies History stores song ID, start/end timestamps, reason and session ID independently of Queue; recording a HistoryEvent does not create Queue entries.
+- Step 7 adds per-database serialization for critical async transactions, scoped to each running event loop to avoid cross-event-loop asyncio.Lock reuse. Existing transaction commit/rollback semantics remain unchanged.
+- Step 8 focused verification passes: `PYTHONPATH=. python3 -m pytest server/tests/repositories/test_task2_steps_1_4.py server/tests/repositories/test_task2_steps_5_7.py -q` (9 passed) and `python3 -m compileall -q server`. Ruff was not executable in the available verification environment because the Ruff module was not installed; no Ruff PASS is claimed for this turn.
+- Step 9 final branch state is committed with message `feat: add sqlite library playlist and history repositories`; the branch ref and commit history were re-checked after the write. No merge into `main` was performed.

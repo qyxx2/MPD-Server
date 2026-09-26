@@ -88,6 +88,39 @@ class PlaylistRepository:
 
         await run_transaction(self.path, operation)
 
+    async def set_favorite(self, song_id: str, is_favorite: bool) -> None:
+        async def operation(connection):
+            if is_favorite:
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO favorites(song_id, created_at)
+                    VALUES(?, ?)
+                    """,
+                    (song_id, datetime.now(timezone.utc).isoformat()),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM favorites WHERE song_id = ?",
+                    (song_id,),
+                )
+
+        await run_transaction(self.path, operation)
+
+    async def list_favorite_song_ids(self) -> list[str]:
+        async def operation(connection):
+            return [
+                row[0]
+                for row in connection.execute(
+                    """
+                    SELECT song_id
+                    FROM favorites
+                    ORDER BY created_at DESC, song_id DESC
+                    """
+                )
+            ]
+
+        return await run_transaction(self.path, operation)
+
     async def list_song_ids(self, playlist_id: str) -> list[str]:
         async def operation(connection):
             return [
