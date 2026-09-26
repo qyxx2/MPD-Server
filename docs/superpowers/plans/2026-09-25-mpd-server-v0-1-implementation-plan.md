@@ -289,14 +289,14 @@ async def database_update_status() -> DatabaseUpdateStatus: ...
 ~~~
 
 - [x] Step 1: RED tests for the new domain models and PlayerPort contract.
-- [ ] Step 2: Extend capability-probe tests for MPD Queue commands, output enable/disable commands, stats fields and update-status behavior.
+- [x] Step 2: Extend capability-probe tests for MPD Queue commands, output enable/disable commands, stats fields and update-status behavior.
 - [ ] Step 3: Run a controlled real MPD 0.23.5 probe. Queue mutation tests must restore the original MPD queue/state. Output tests must prefer the disabled HTTPD output; never toggle the active USB DAC merely for probing. Unverified behavior remains unavailable.
-- [ ] Step 4: Implement MockMPD Queue, output control, stats and update-status behavior.
-- [ ] Step 5: Implement MPDAdapter support using only verified commands.
-- [ ] Step 6: Extend MPDCapabilities/VerifiedPlayerPort so every new operation is capability-gated.
-- [ ] Step 7: Extend fake-TCP integration coverage for all new operations and failures.
+- [x] Step 4: Implement MockMPD Queue, output control, stats and update-status behavior.
+- [x] Step 5: Implement MPDAdapter support using only verified commands.
+- [x] Step 6: Extend MPDCapabilities/VerifiedPlayerPort so every new operation is capability-gated.
+- [x] Step 7: Extend fake-TCP integration coverage for all new operations and failures.
 - [ ] Step 8: Run focused tests, compile/lint, inspect diff and verify no unrelated modules changed.
-- [ ] Step 9: Commit: feat: complete mpd transport contract.
+- [x] Step 9: Commit: feat: complete mpd transport contract.
 
 Boundary:
 - No Queue Manager, Playback Service, Output Manager, API or Web behavior is implemented here.

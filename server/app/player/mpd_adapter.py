@@ -4,7 +4,14 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from server.app.player.models import OutputInfo, PlayerState, PlayerStatus
+from server.app.player.models import (
+    DatabaseUpdateStatus,
+    MPDStats,
+    OutputInfo,
+    PlayerQueueEntry,
+    PlayerState,
+    PlayerStatus,
+)
 from server.app.player.mpd_protocol import (
     MPDAckError,
     MPDProtocolError,
@@ -105,9 +112,63 @@ class MPDAdapter(PlayerPort):
         await self._command("update")
 
     async def outputs(self) -> list[OutputInfo]:
+        response = await self._command("outputs")
+        return _outputs_from_response(response)
+
+    async def queue_entries(self) -> list[PlayerQueueEntry]:
+        response = await self._command("playlistinfo")
+        return _queue_entries_from_response(response)
+
+    async def queue_clear(self) -> None:
+        await self._command("clear")
+
+    async def queue_add(self, song_uri: str) -> int:
+        response = await self._command("addid", song_uri)
+        song_id = _parse_int(_scalar(response.as_dict().get("Id")))
+        if song_id is None or song_id < 0:
+            raise PlayerCommandError("addid", "MPD did not return a valid song id")
+        return song_id
+
+    async def queue_delete(self, mpd_song_id: int) -> None:
+        await self._command("deleteid", str(mpd_song_id))
+
+    async def queue_move(self, mpd_song_id: int, before_mpd_song_id: int | None) -> None:
         async with self._lock:
-            response = await self._command_unlocked("outputs")
-            return _outputs_from_response(response)
+            response = await self._command_unlocked("playlistinfo")
+            queue = _queue_entries_from_response(response)
+            source_index = _queue_index(queue, mpd_song_id)
+            if before_mpd_song_id is None:
+                destination = len(queue) - 1
+            else:
+                target_index = _queue_index(queue, before_mpd_song_id)
+                if target_index == source_index:
+                    return
+                destination = target_index - 1 if source_index < target_index else target_index
+            await self._command_unlocked("moveid", str(mpd_song_id), str(max(destination, 0)))
+
+    async def queue_play(self, mpd_song_id: int) -> None:
+        await self._command("playid", str(mpd_song_id))
+
+    async def set_output_enabled(self, output_id: int, enabled: bool) -> None:
+        await self._command("enableoutput" if enabled else "disableoutput", str(output_id))
+
+    async def stats(self) -> MPDStats:
+        response = await self._command("stats")
+        data = response.as_dict()
+        return MPDStats(
+            songs=_nonnegative_int(_scalar(data.get("songs"))),
+            albums=_nonnegative_int(_scalar(data.get("albums"))),
+            artists=_nonnegative_int(_scalar(data.get("artists"))),
+            db_playtime=_nonnegative_int(_scalar(data.get("db_playtime"))),
+            db_update=_nonnegative_int(_scalar(data.get("db_update"))),
+            playtime=_nonnegative_int(_scalar(data.get("playtime"))),
+            uptime=_nonnegative_int(_scalar(data.get("uptime"))),
+        )
+
+    async def database_update_status(self) -> DatabaseUpdateStatus:
+        response = await self._command("status")
+        job_id = _nonnegative_int(_scalar(response.as_dict().get("updating_db")))
+        return DatabaseUpdateStatus(updating=job_id is not None, job_id=job_id)
 
     async def _command(self, command: str, *args: str) -> MPDResponse:
         async with self._lock:
@@ -273,6 +334,30 @@ def _outputs_from_response(response: MPDResponse) -> list[OutputInfo]:
         raise MPDProtocolError(f"invalid outputs response: {exc}") from exc
 
 
+def _queue_entries_from_response(response: MPDResponse) -> list[PlayerQueueEntry]:
+    entries: list[PlayerQueueEntry] = []
+    current: dict[str, Any] = {}
+    for key, value in response.pairs:
+        if key == "file":
+            if current:
+                entries.append(PlayerQueueEntry(**current))
+            current = {"song_uri": value}
+        elif key == "Pos":
+            current["position"] = int(value)
+        elif key == "Id":
+            current["mpd_song_id"] = int(value)
+    if current:
+        entries.append(PlayerQueueEntry(**current))
+    return entries
+
+
+def _queue_index(entries: list[PlayerQueueEntry], song_id: int) -> int:
+    for index, entry in enumerate(entries):
+        if entry.mpd_song_id == song_id:
+            return index
+    raise PlayerCommandError("queue_move", f"MPD song id {song_id} not found")
+
+
 def _find_song_id(response: MPDResponse, song_uri: str) -> int | None:
     current_uri: str | None = None
     current_id: int | None = None
@@ -295,6 +380,11 @@ def _scalar(value: object) -> str | None:
     if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
         return value[0]
     return None
+
+
+def _nonnegative_int(value: str | None) -> int | None:
+    parsed = _parse_int(value)
+    return parsed if parsed is not None and parsed >= 0 else None
 
 
 def _parse_int(value: str | None) -> int | None:

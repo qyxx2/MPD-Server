@@ -32,24 +32,24 @@ class OutputInfo(BaseModel):
 
 
 class PlayerQueueEntry(BaseModel):
-    mpd_song_id: int = Field(ge=0)
-    position: int = Field(ge=0)
+    mpd_song_id: int
+    position: int
     song_uri: str
 
 
 class MPDStats(BaseModel):
-    songs: int | None = Field(default=None, ge=0)
-    albums: int | None = Field(default=None, ge=0)
-    artists: int | None = Field(default=None, ge=0)
-    db_playtime: int | None = Field(default=None, ge=0)
-    db_update: int | None = Field(default=None, ge=0)
-    playtime: int | None = Field(default=None, ge=0)
-    uptime: int | None = Field(default=None, ge=0)
+    songs: int | None = None
+    albums: int | None = None
+    artists: int | None = None
+    db_playtime: int | None = None
+    db_update: int | None = None
+    playtime: int | None = None
+    uptime: int | None = None
 
 
 class DatabaseUpdateStatus(BaseModel):
     updating: bool | None = None
-    job_id: int | None = Field(default=None, ge=0)
+    job_id: int | None = None
 
 
 class PlayerEvent(BaseModel):
