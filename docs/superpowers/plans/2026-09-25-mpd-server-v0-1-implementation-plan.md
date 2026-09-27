@@ -533,7 +533,7 @@ Current Step status:
 - [x] Step 8: Implement filesystem event debounce/batch with an injected callback to scan_paths(). Default debounce is 500 ms.
 - [x] Step 9: Implement scheduler with an injected interval; default is 12 hours. It must not import Task 10 configuration.
 - [x] Step 10: Implement post-commit LibraryChangedEvent publication and optional MPD database update through injected protocols.
-- [ ] Step 11: Run complete Task 3 tests, relevant repository tests, global Python tests, compile/lint and diff review.
+- [x] Step 11: Run complete Task 3 tests, relevant repository tests, global Python tests, compile/lint and diff review.
 - [x] Step 12: Commit: feat: add library scanner and metadata pipeline.
 
 Task 3 Steps7-12 verification record (2026-09-27):
@@ -541,7 +541,7 @@ Task 3 Steps7-12 verification record (2026-09-27):
 - Step 8: Added RED coverage for the 500 ms default and batched/debounced callback behavior; GREEN verification passed with 2 tests.
 - Step 9: Added RED coverage for the 12-hour default and injected scheduling interval; GREEN verification passed with 2 tests.
 - Step 10: Added the DomainEvent/EventPublisher/MPDDatabaseUpdater contracts and post-commit sequencing tests. GREEN verification passed with 4 tests, including MPD update failure reporting without scan rollback.
-- Step 11: Focused Task 3 Steps7-10 verification passed with 19 tests before the final symlink/coverage addition and 20 tests after it; Python compile verification passed. Full checkout/global test suite, Ruff and Docker validation could not be executed in the AI environment because the GitHub repository could not be cloned due outbound DNS/network restrictions, Docker is unavailable and the Ruff module is not installed. No full-suite/Ruff/Docker PASS is claimed.
+- Step 11: Final local acceptance verification completed in the Docker `python:3.13-slim` validation container using a writable repository copy. Task 3 service tests passed with 26 tests; relevant repository regressions passed with 19 tests; the player regression suite passed; the health test passed; the full `server/tests` suite passed; `python -m compileall -q server` exited successfully with no output; Ruff passed after scoped Task 3 lint correction commit `580f502501719292843417af3ac62461139f2338`; diff and changed-file review found no changes outside the Task 3 implementation/test/plan scope.
 - Step 12: Committed as `feat: add library scanner and metadata pipeline`; remote branch ref was rechecked after the commit.
 
 Step 1-6 verification record (2026-09-27):
