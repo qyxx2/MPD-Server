@@ -84,6 +84,7 @@ def test_step3_prefers_sidecar_lrc_and_preserves_embedded_ordinary_lyrics(
     assert embedded.lyrics_status == "available"
 
     missing = parse_media_file(media_fixture_dir / "no_lyrics.mp3")
+    assert missing.title is None
     assert missing.lyrics is None
     assert missing.lyrics_format is None
     assert missing.lyrics_source is None

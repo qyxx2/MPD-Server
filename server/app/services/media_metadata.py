@@ -24,7 +24,7 @@ class MediaMetadataError(Exception):
 
 
 class ParsedSongMetadata(BaseModel):
-    title: str
+    title: str | None
     artists: tuple[str, ...] = ()
     album: str | None = None
     album_artists: tuple[str, ...] = ()
@@ -151,11 +151,10 @@ def _read_sidecar(
     path: Path,
 ) -> tuple[str | None, str | None, str | None, str | None]:
     sidecar = path.with_suffix(".lrc")
-    if not sidecar.exists():
-        return None, None, None, None
-
     try:
         text = sidecar.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None, None, None, None
     except (OSError, UnicodeError) as exc:
         return None, None, None, str(exc)
 
@@ -210,7 +209,7 @@ def parse_media_file(path: Path) -> ParsedSongMetadata:
             date_values = _id3_values(audio, "TDRC")
             bit_depth = None
 
-        title = title_values[0].strip() if title_values else ""
+        title = title_values[0].strip() if title_values else None
         date = date_values[0].strip() if date_values else None
 
         (
