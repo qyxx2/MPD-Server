@@ -295,7 +295,7 @@ async def database_update_status() -> DatabaseUpdateStatus: ...
 - [x] Step 5: Implement MPDAdapter support using only verified commands.
 - [x] Step 6: Extend MPDCapabilities/VerifiedPlayerPort so every new operation is capability-gated.
 - [x] Step 7: Extend fake-TCP integration coverage for all new operations and failures.
-- [ ] Step 8: Run focused tests, compile/lint, inspect diff and verify no unrelated modules changed.
+- [x] Step 8: Run focused tests, compile/lint, inspect diff and verify no unrelated modules changed.
 - [x] Step 9: Commit: feat: complete mpd transport contract.
 
 **Task 1R verification record (2026-09-27, Step 3):**
