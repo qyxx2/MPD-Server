@@ -8,7 +8,6 @@ from server.app.models.library import ArtworkRef, ScanBatch, ScanResult, Song
 
 from .database import run_transaction
 
-
 SONGS_SELECT = """
 SELECT song_id, title, file_uri, identity_key, album_id, track_number,
        disc_number, year, date, duration, lyrics, lyrics_format, bit_depth,

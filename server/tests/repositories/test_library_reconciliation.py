@@ -8,11 +8,11 @@ import pytest
 
 from server.app.models.history import HistoryEvent
 from server.app.models.library import ArtworkRef, ScanBatch, Song
-from server.app.repositories.database import initialize_database, run_transaction
+from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.library_repository import LibraryRepository
-from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.migrations import SCHEMA_VERSION
+from server.app.repositories.playlist_repository import PlaylistRepository
 
 
 def run(coro):
