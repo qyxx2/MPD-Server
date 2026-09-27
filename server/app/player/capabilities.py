@@ -359,7 +359,6 @@ class CapabilityProbe:
         snapshot_queue: list[PlayerQueueEntry] = []
         snapshot_status: PlayerStatus | None = None
         snapshot_outputs: list[OutputInfo] = []
-        queue_cleared = False
         queue_mutated = False
         mutated_output_ids: set[int] = set()
 
@@ -400,7 +399,6 @@ class CapabilityProbe:
 
             if "clear" in commands and (not snapshot_queue or "addid" in commands):
                 await self._execute("clear")
-                queue_cleared = True
                 queue_mutated = True
                 verified.add("queue_clear")
 
