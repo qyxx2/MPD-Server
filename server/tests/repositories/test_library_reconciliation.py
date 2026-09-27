@@ -19,15 +19,15 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def test_fresh_database_is_schema_v2_with_reconciliation_and_artwork_tables(tmp_path):
+def test_fresh_database_is_schema_v3_with_reconciliation_and_artwork_tables(tmp_path):
     path = tmp_path / "library.db"
 
     run(initialize_database(str(path)))
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
-        assert SCHEMA_VERSION == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert SCHEMA_VERSION == 3
 
         song_columns = {
             row[1]
@@ -39,6 +39,8 @@ def test_fresh_database_is_schema_v2_with_reconciliation_and_artwork_tables(tmp_
             "content_hash",
             "availability_status",
             "last_seen_at",
+            "lyrics_source",
+            "lyrics_status",
         }.issubset(song_columns)
 
         tables = {
@@ -71,7 +73,7 @@ def test_fresh_database_is_schema_v2_with_reconciliation_and_artwork_tables(tmp_
         connection.close()
 
 
-def test_v1_to_v2_migration_preserves_song_playlist_favorite_history_data(tmp_path):
+def test_v1_to_v3_migration_preserves_song_playlist_favorite_history_data(tmp_path):
     path = tmp_path / "library.db"
 
     connection = sqlite3.connect(path)
@@ -174,9 +176,10 @@ def test_v1_to_v2_migration_preserves_song_playlist_favorite_history_data(tmp_pa
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         assert connection.execute(
-            "SELECT title, file_uri, identity_key, metadata_status, availability_status "
+            "SELECT title, file_uri, identity_key, metadata_status, "
+            "availability_status, lyrics_source, lyrics_status "
             "FROM songs WHERE song_id = 'song-1'"
         ).fetchone() == (
             "Legacy",
@@ -184,6 +187,8 @@ def test_v1_to_v2_migration_preserves_song_playlist_favorite_history_data(tmp_pa
             "identity-1",
             "OK",
             "AVAILABLE",
+            None,
+            "missing",
         )
         assert connection.execute(
             "SELECT playlist_id, song_id, position FROM playlist_items"

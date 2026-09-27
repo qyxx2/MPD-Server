@@ -10,7 +10,8 @@ from .database import run_transaction
 
 SONGS_SELECT = """
 SELECT song_id, title, file_uri, identity_key, album_id, track_number,
-       disc_number, year, date, duration, lyrics, lyrics_format, bit_depth,
+       disc_number, year, date, duration, lyrics, lyrics_format, lyrics_source,
+       lyrics_status, bit_depth,
        sample_rate_hz, channel_count, codec, metadata_status, last_scanned_at,
        file_size, file_mtime_ns, content_hash, availability_status, last_seen_at
 FROM songs
@@ -133,17 +134,19 @@ class LibraryRepository:
             duration=row[9],
             lyrics=row[10],
             lyrics_format=row[11],
-            bit_depth=row[12],
-            sample_rate_hz=row[13],
-            channel_count=row[14],
-            codec=row[15],
-            metadata_status=row[16],
-            last_scanned_at=_parse_dt(row[17]),
-            file_size=row[18],
-            file_mtime_ns=row[19],
-            content_hash=row[20],
-            availability_status=row[21],
-            last_seen_at=_parse_dt(row[22]),
+            lyrics_source=row[12],
+            lyrics_status=row[13],
+            bit_depth=row[14],
+            sample_rate_hz=row[15],
+            channel_count=row[16],
+            codec=row[17],
+            metadata_status=row[18],
+            last_scanned_at=_parse_dt(row[19]),
+            file_size=row[20],
+            file_mtime_ns=row[21],
+            content_hash=row[22],
+            availability_status=row[23],
+            last_seen_at=_parse_dt(row[24]),
             artwork=artwork,
         )
 
@@ -195,11 +198,12 @@ class LibraryRepository:
             INSERT INTO songs(
                 song_id, title, file_uri, identity_key, album_id,
                 track_number, disc_number, year, date, duration, lyrics,
-                lyrics_format, bit_depth, sample_rate_hz, channel_count,
+                lyrics_format, lyrics_source, lyrics_status, bit_depth,
+                sample_rate_hz, channel_count,
                 codec, metadata_status, last_scanned_at, file_size,
                 file_mtime_ns, content_hash, availability_status, last_seen_at
             ) VALUES(
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ON CONFLICT(song_id) DO UPDATE SET
                 title = excluded.title,
@@ -213,6 +217,8 @@ class LibraryRepository:
                 duration = excluded.duration,
                 lyrics = excluded.lyrics,
                 lyrics_format = excluded.lyrics_format,
+                lyrics_source = excluded.lyrics_source,
+                lyrics_status = excluded.lyrics_status,
                 bit_depth = excluded.bit_depth,
                 sample_rate_hz = excluded.sample_rate_hz,
                 channel_count = excluded.channel_count,
@@ -238,6 +244,8 @@ class LibraryRepository:
                 song.duration,
                 song.lyrics,
                 song.lyrics_format,
+                song.lyrics_source,
+                song.lyrics_status,
                 song.bit_depth,
                 song.sample_rate_hz,
                 song.channel_count,

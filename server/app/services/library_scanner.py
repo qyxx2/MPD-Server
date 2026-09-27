@@ -193,6 +193,8 @@ class LibraryScanner:
                         duration=metadata.duration,
                         lyrics=metadata.lyrics,
                         lyrics_format=metadata.lyrics_format,
+                        lyrics_source=metadata.lyrics_source,
+                        lyrics_status=metadata.lyrics_status,
                         bit_depth=metadata.bit_depth,
                         sample_rate_hz=metadata.sample_rate_hz,
                         channel_count=metadata.channel_count,
