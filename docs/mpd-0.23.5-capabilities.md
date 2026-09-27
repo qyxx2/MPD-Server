@@ -415,6 +415,66 @@ message: No such song
 
 代码层也已实现与真实行为对应的隔离探测和断线恢复：未知命令不会使整个 capability probe 崩溃，后续探测可以使用新的 TCP 连接继续完成。
 
+### Task1R 运行时 Transport 验证（2026-09-27）
+
+本次在真实 NAS 环境重新执行：
+
+```text
+docker run --rm --network host mpd-server:latest \
+  python -m server.app.player.capabilities \
+  --host 192.168.3.94 \
+  --port 6600 \
+  --probe-transport
+```
+
+实测结果：
+
+- MPD version：`0.23.5`
+- `verified_operations`：
+
+```text
+database_update_status
+queue_add
+queue_clear
+queue_delete
+queue_entries
+queue_move
+queue_play
+set_output_enabled
+stats
+```
+
+以上 9 项全部进入真实 probe 的 `verified_operations`，因此 Task1R Step3 要求的 Queue、Output、Stats、Database Update Status runtime behavior 均已在目标 MPD 0.23.5 上得到验证。
+
+#### Error 结果判定
+
+本次 JSON 中仍有两个 `errors`，但两者均属于本探针设计明确允许并要求记录的负向行为：
+
+1. `__mpd_server_unsupported_probe__`
+
+```text
+outcome: connection_closed
+error_code: null
+message: MPD closed the connection
+```
+
+这是独立连接上的未知命令探测。真实 MPD 0.23.5 实测会关闭 TCP 连接；探针将其记录后断开该失效连接并继续后续验证。这正是当前 capability record 所定义的预期行为，不代表 Queue/Output/Stats capability 验证失败。
+
+2. `playid 2147483647`
+
+```text
+outcome: ack
+error_code: 50
+command_list_index: 0
+message: No such song
+```
+
+这是独立连接上的 ACK error 负向探测。目标 MPD 返回标准 ACK，错误码和消息被原样记录。这同样是探针预期的错误响应覆盖，不代表 `queue_play` capability 验证失败；`queue_play` 已进入 `verified_operations`。
+
+本次 probe 没有报告 `transport_restore` 错误；探针的 Queue/output 修改路径仍按实现中的 cleanup 逻辑执行恢复。
+
+因此，本次真实验证结果与 Task1R Step3 的设计边界一致，Step3 可标记完成。
+
 ## 服务能力边界
 
 后续服务层不应直接把“MPD 协议文档里存在”当成“当前环境已验证”。Task1 提供 `VerifiedPlayerPort`，由 capability probe 得到的 `MPDCapabilities` 作为服务层访问 PlayerPort 的能力边界：
