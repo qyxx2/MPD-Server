@@ -4,7 +4,15 @@ import inspect
 import random
 from collections.abc import Awaitable, Callable, Sequence
 
-from server.app.player.models import OutputInfo, PlayerEvent, PlayerState, PlayerStatus
+from server.app.player.models import (
+    DatabaseUpdateStatus,
+    MPDStats,
+    OutputInfo,
+    PlayerEvent,
+    PlayerQueueEntry,
+    PlayerState,
+    PlayerStatus,
+)
 from server.app.player.ports import PlayerCommandError, PlayerPort, PlayerUnavailable
 
 EventListener = Callable[[PlayerEvent], object | Awaitable[object]]
@@ -20,6 +28,7 @@ class MockMPD(PlayerPort):
         durations: dict[str, float] | None = None,
         outputs: Sequence[OutputInfo] | None = None,
         random_seed: int = 0,
+        stats: MPDStats | None = None,
     ) -> None:
         self._songs = list(songs)
         self._durations = {song: 300.0 for song in self._songs}
@@ -38,6 +47,11 @@ class MockMPD(PlayerPort):
         self._random_enabled = False
         self._fail_next: dict[str, str] = {}
         self._listeners: list[EventListener] = []
+        self._queue: list[tuple[str, int]] = []
+        self._next_queue_id = 1
+        self._stats = stats or MPDStats()
+        self._updating_db = False
+        self._update_job_id: int | None = None
 
     def disconnect(self) -> None:
         self._connected = False
@@ -152,11 +166,86 @@ class MockMPD(PlayerPort):
 
     async def update_database(self) -> None:
         self._check("update_database")
+        self._updating_db = True
+        self._update_job_id = (self._update_job_id or 0) + 1
+        self._stats = self._stats.model_copy(update={"db_update": self._update_job_id})
         await self._emit("update_database")
 
     async def outputs(self) -> list[OutputInfo]:
         self._check("outputs")
         return [output.model_copy(deep=True) for output in self._outputs]
+
+    async def queue_entries(self) -> list[PlayerQueueEntry]:
+        self._check("queue_entries")
+        return [
+            PlayerQueueEntry(mpd_song_id=mpd_id, position=position, song_uri=uri)
+            for position, (uri, mpd_id) in enumerate(self._queue)
+        ]
+
+    async def queue_clear(self) -> None:
+        self._check("queue_clear")
+        self._queue.clear()
+
+    async def queue_add(self, song_uri: str) -> int:
+        self._check("queue_add")
+        mpd_song_id = self._next_queue_id
+        self._next_queue_id += 1
+        self._queue.append((song_uri, mpd_song_id))
+        return mpd_song_id
+
+    async def queue_delete(self, mpd_song_id: int) -> None:
+        self._check("queue_delete")
+        index = self._queue_index(mpd_song_id, "queue_delete")
+        del self._queue[index]
+
+    async def queue_move(self, mpd_song_id: int, before_mpd_song_id: int | None) -> None:
+        self._check("queue_move")
+        source_index = self._queue_index(mpd_song_id, "queue_move")
+        item = self._queue.pop(source_index)
+        if before_mpd_song_id is None:
+            self._queue.append(item)
+            return
+        if before_mpd_song_id == mpd_song_id:
+            self._queue.insert(source_index, item)
+            return
+        target_index = self._queue_index(before_mpd_song_id, "queue_move")
+        self._queue.insert(target_index, item)
+
+    async def queue_play(self, mpd_song_id: int) -> None:
+        self._check("queue_play")
+        index = self._queue_index(mpd_song_id, "queue_play")
+        uri = self._queue[index][0]
+        try:
+            self._current_index = self._songs.index(uri)
+        except ValueError as exc:
+            raise PlayerCommandError("queue_play", f"unknown song URI: {uri}") from exc
+        self._elapsed = 0.0
+        self._state = PlayerState.PLAYING
+        await self._emit("queue_play")
+
+    async def set_output_enabled(self, output_id: int, enabled: bool) -> None:
+        self._check("set_output_enabled")
+        for index, output in enumerate(self._outputs):
+            if output.id == output_id:
+                self._outputs[index] = output.model_copy(update={"enabled": enabled})
+                return
+        raise PlayerCommandError(
+            "set_output_enabled", f"unknown output id: {output_id}"
+        )
+
+    async def stats(self) -> MPDStats:
+        self._check("stats")
+        return self._stats.model_copy(deep=True)
+
+    async def database_update_status(self) -> DatabaseUpdateStatus:
+        self._check("database_update_status")
+        return DatabaseUpdateStatus(updating=self._updating_db, job_id=self._update_job_id)
+
+    def _queue_index(self, mpd_song_id: int, command: str) -> int:
+        for index, (_, current_id) in enumerate(self._queue):
+            if current_id == mpd_song_id:
+                return index
+        raise PlayerCommandError(command, f"unknown MPD song id: {mpd_song_id}")
 
     def _check(self, command: str) -> None:
         if not self._connected:

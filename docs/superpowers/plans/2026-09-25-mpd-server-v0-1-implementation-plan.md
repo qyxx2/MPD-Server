@@ -288,15 +288,24 @@ async def stats() -> MPDStats: ...
 async def database_update_status() -> DatabaseUpdateStatus: ...
 ~~~
 
-- [ ] Step 1: RED tests for the new domain models and PlayerPort contract.
-- [ ] Step 2: Extend capability-probe tests for MPD Queue commands, output enable/disable commands, stats fields and update-status behavior.
-- [ ] Step 3: Run a controlled real MPD 0.23.5 probe. Queue mutation tests must restore the original MPD queue/state. Output tests must prefer the disabled HTTPD output; never toggle the active USB DAC merely for probing. Unverified behavior remains unavailable.
-- [ ] Step 4: Implement MockMPD Queue, output control, stats and update-status behavior.
-- [ ] Step 5: Implement MPDAdapter support using only verified commands.
-- [ ] Step 6: Extend MPDCapabilities/VerifiedPlayerPort so every new operation is capability-gated.
-- [ ] Step 7: Extend fake-TCP integration coverage for all new operations and failures.
-- [ ] Step 8: Run focused tests, compile/lint, inspect diff and verify no unrelated modules changed.
-- [ ] Step 9: Commit: feat: complete mpd transport contract.
+- [x] Step 1: RED tests for the new domain models and PlayerPort contract.
+- [x] Step 2: Extend capability-probe tests for MPD Queue commands, output enable/disable commands, stats fields and update-status behavior.
+- [x] Step 3: Run a controlled real MPD 0.23.5 probe. Queue mutation tests must restore the original MPD queue/state. Output tests must prefer the disabled HTTPD output; never toggle the active USB DAC merely for probing. Unverified behavior remains unavailable.
+- [x] Step 4: Implement MockMPD Queue, output control, stats and update-status behavior.
+- [x] Step 5: Implement MPDAdapter support using only verified commands.
+- [x] Step 6: Extend MPDCapabilities/VerifiedPlayerPort so every new operation is capability-gated.
+- [x] Step 7: Extend fake-TCP integration coverage for all new operations and failures.
+- [x] Step 8: Run focused tests, compile/lint, inspect diff and verify no unrelated modules changed.
+- [x] Step 9: Commit: feat: complete mpd transport contract.
+
+**Task 1R verification record (2026-09-27, Step 3):**
+- Real NAS probe rerun against Synology DS920 MPD TCP `192.168.3.94:6600`; greeting/version confirmed as MPD `0.23.5`.
+- All nine Task1R runtime operations are verified: `database_update_status`, `queue_add`, `queue_clear`, `queue_delete`, `queue_entries`, `queue_move`, `queue_play`, `set_output_enabled`, `stats`.
+- `queue_move` passed with the probe's controlled Queue mutation path; the probe implementation restores the original Queue/state in its cleanup path, and the returned error list contains no `transport_restore` failure.
+- `database_update_status` passed: the probe observed `updating_db` through the real MPD 0.23.5 update/status path.
+- The two reported errors are permitted by the probe design and are recorded evidence rather than Step3 failures: the intentionally unknown command `__mpd_server_unsupported_probe__` produced the expected `connection_closed` outcome, and the intentionally invalid `playid 2147483647` probe produced the expected MPD ACK error code `50` / `No such song`.
+- Probe result was captured as JSON on the NAS; `not_commands` is empty. No code change was required for this verification.
+- Step 3 is accepted as complete.
 
 Boundary:
 - No Queue Manager, Playback Service, Output Manager, API or Web behavior is implemented here.
