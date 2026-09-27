@@ -55,7 +55,18 @@ def test_fresh_database_is_schema_v2_with_reconciliation_and_artwork_tables(tmp_
         }
         assert "idx_songs_content_hash" in indexes
         assert "idx_songs_availability_status" in indexes
-        assert "sqlite_autoindex_songs_2" not in indexes
+
+        content = connection.execute(
+            "SELECT name, [unique] FROM pragma_index_list('songs')"
+        ).fetchall()
+        identity_unique = False
+        for index_name, is_unique in content:
+            columns = connection.execute(
+                f"PRAGMA index_info([{index_name}])"
+            ).fetchall()
+            if [row[2] for row in columns] == ["identity_key"]:
+                identity_unique = bool(is_unique)
+        assert identity_unique is False
     finally:
         connection.close()
 
@@ -424,6 +435,7 @@ def test_apply_scan_batch_rolls_back_all_changes_on_error(tmp_path):
                 file_uri="music/added.flac",
             ),
             Song(
+                song_id="song-2",
                 title="Conflicting",
                 file_uri="music/existing.flac",
             ),
