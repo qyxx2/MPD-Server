@@ -444,7 +444,10 @@ def test_apply_scan_batch_rolls_back_all_changes_on_error(tmp_path):
         reconciled_root_uri_prefix="music/",
     )
 
-    with pytest.raises(Exception):
+    with pytest.raises(
+        ValueError,
+        match="file_uri belongs to a different song_id",
+    ):
         run(repository.apply_scan_batch(batch))
 
     assert run(repository.get_song("song-1")).title == "Existing"
