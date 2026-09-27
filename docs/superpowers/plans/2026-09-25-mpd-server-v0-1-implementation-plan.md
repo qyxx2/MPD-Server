@@ -502,25 +502,47 @@ Full-scan semantics:
 - Unsupported files are ignored and do not affect reconciliation.
 - Changed audio is reparsed; sidecar LRC changes are independently detected.
 - Move matching follows Task 2R rules.
-- Failed parsing never overwrites known-good metadata.
+- Failed parsing never overwrites known-good metadata with null.
 - One successful reconciliation uses one atomic Repository transaction.
 
 Domain event contract:
-- Task 3 only defines the later event boundary; implementation remains outside Steps 1-6.
-- Create LibraryChangedEvent and EventPublisher in the Task 3 Step 10 boundary only.
-- No WebSocket implementation is part of Steps 1-6.
+Create LibraryChangedEvent and a minimal EventPublisher Protocol in services/events.py. Task 6 will subscribe later; Task 3 does not implement WebSocket.
+
+~~~python
+class EventPublisher(Protocol):
+    async def publish(self, event: DomainEvent) -> None: ...
+~~~
+
+Publish strictly after successful DB commit.
 
 Optional MPD update:
 - Inject an MPDDatabaseUpdater Protocol rather than importing MPDAdapter.
-- Implementation belongs to Step 10, not Steps 1-6.
+- If enabled and verified, trigger MPD database update after DB success.
+- MPD update failure never rolls back a successful SQLite scan.
+- Report update failure explicitly in ScanResult/event state.
 
 Current Step status:
-- [x] Step 1: Media fixtures established and validated against the required FLAC/MP3/LRC/parse-failure coverage.
-- [x] Step 2: Metadata RED coverage established and then passed after Step 6 parser implementation.
-- [x] Step 3: Lyrics RED coverage established and then passed after Step 6 parser implementation.
-- [x] Step 4: Persistence-safety RED coverage established against the existing Task 2R Repository contract; production scanner implementation is deliberately outside Steps 1-6.
-- [x] Step 5: Lifecycle RED coverage established using current Task 2R semantics: missing files remain Song rows with MISSING status; no physical deletion contract is used.
-- [x] Step 6: Implement ParsedSongMetadata and parse_media_file() with read-only access and tested FLAC/MP3 parsing.
+- [x] Step 1: Media fixtures established.
+- [x] Step 2: Metadata RED coverage established.
+- [x] Step 3: Lyrics RED coverage established.
+- [x] Step 4: Complete persistence-safety coverage after Task 2R contract exists.
+- [x] Step 5: File lifecycle RED coverage established.
+
+- [x] Step 6: Implement ParsedSongMetadata and parse_media_file() using read-only access and tested FLAC/MP3 parsing.
+- [x] Step 7: Implement LibraryScanner with injected Repository, content hashing, move matching, atomic reconciliation and typed failure handling.
+- [x] Step 8: Implement filesystem event debounce/batch with an injected callback to scan_paths(). Default debounce is 500 ms.
+- [x] Step 9: Implement scheduler with an injected interval; default is 12 hours. It must not import Task 10 configuration.
+- [x] Step 10: Implement post-commit LibraryChangedEvent publication and optional MPD database update through injected protocols.
+- [ ] Step 11: Run complete Task 3 tests, relevant repository tests, global Python tests, compile/lint and diff review.
+- [x] Step 12: Commit: feat: add library scanner and metadata pipeline.
+
+Task 3 Steps7-12 verification record (2026-09-27):
+- Step 7: Added TDD coverage for content hashing, unique identity move matching, live-copy non-matching, ambiguous identity, missing-content-hash reuse, parse-failure atomicity, unknown-title handling, symlink isolation and traversal-error reconciliation. Focused reconstructed-harness verification passed with 11 tests.
+- Step 8: Added RED coverage for the 500 ms default and batched/debounced callback behavior; GREEN verification passed with 2 tests.
+- Step 9: Added RED coverage for the 12-hour default and injected scheduling interval; GREEN verification passed with 2 tests.
+- Step 10: Added the DomainEvent/EventPublisher/MPDDatabaseUpdater contracts and post-commit sequencing tests. GREEN verification passed with 4 tests, including MPD update failure reporting without scan rollback.
+- Step 11: Focused Task 3 Steps7-10 verification passed with 19 tests before the final symlink/coverage addition and 20 tests after it; Python compile verification passed. Full checkout/global test suite, Ruff and Docker validation could not be executed in the AI environment because the GitHub repository could not be cloned due outbound DNS/network restrictions, Docker is unavailable and the Ruff module is not installed. No full-suite/Ruff/Docker PASS is claimed.
+- Step 12: Committed as `feat: add library scanner and metadata pipeline`; remote branch ref was rechecked after the commit.
 
 Step 1-6 verification record (2026-09-27):
 - Step 1: Re-established the media fixtures in server/tests/conftest.py from test-owned bytes; no real music-library path is used.
@@ -535,11 +557,13 @@ Step 1-6 verification record (2026-09-27):
 - No scanner, filesystem watcher, scheduler or later Task production behavior is implemented in this Step 1-6 scope.
 
 Acceptance:
-- Music directory remains strictly read-only in Step 1-6 implementation.
+- Music directory remains strictly read-only.
 - Unknown values stay unknown.
-- Failed parsing cannot erase known-good metadata at the parser layer; the service-level persistence contract remains RED until Step 7.
-- No physical Song deletion is part of the current lifecycle contract.
-- No WebSocket implementation and no Task 10 configuration dependency are introduced.
+- Failed parsing cannot erase known-good metadata.
+- Song ID is preserved only for an unambiguous move match.
+- Missing/unreadable Songs remain as rows for Playlist/Favorites/History continuity.
+- Events occur only after DB success.
+- No WebSocket implementation and no Task 10 configuration dependency.
 
 
 ## Task 4：Queue、Playback Context、History、AutoPlay、Playback Service
