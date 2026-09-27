@@ -195,3 +195,87 @@ def test_transport_probe_never_toggles_an_active_httpd_output():
             await server.wait_closed()
 
     asyncio.run(run())
+
+def test_transport_probe_restores_queue_when_mutation_fails_mid_probe():
+    async def run():
+        queue = [("song-a.flac", 10), ("song-b.flac", 11)]
+        next_id = 20
+        fail_delete_once = True
+
+        async def handle(reader, writer):
+            nonlocal next_id, fail_delete_once
+            writer.write(b"OK MPD 0.23.5\n")
+            await writer.drain()
+            try:
+                while True:
+                    raw = await reader.readline()
+                    if not raw:
+                        return
+                    command = raw.decode().rstrip("\r\n")
+                    parts = command.split(" ", 1)
+                    verb = parts[0]
+                    if verb == "commands":
+                        for value in (
+                            "addid", "clear", "deleteid", "disableoutput",
+                            "enableoutput", "moveid", "outputs", "playid",
+                            "playlistinfo", "stats", "status", "update",
+                            "repeat", "random", "pause", "stop", "seekcur",
+                            "currentsong",
+                        ):
+                            writer.write(f"command: {value}\n".encode())
+                        writer.write(b"OK\n")
+                    elif verb == "notcommands":
+                        writer.write(b"OK\n")
+                    elif verb == "playlistinfo":
+                        for pos, (uri, mpd_id) in enumerate(queue):
+                            writer.write(
+                                f"file: {uri}\nPos: {pos}\nId: {mpd_id}\n".encode()
+                            )
+                        writer.write(b"OK\n")
+                    elif verb == "addid":
+                        next_id += 1
+                        queue.append((parts[1].strip().strip('"'), next_id))
+                        writer.write(f"Id: {next_id}\nOK\n".encode())
+                    elif verb == "deleteid":
+                        if fail_delete_once:
+                            fail_delete_once = False
+                            writer.write(b"ACK [50@0] {deleteid} injected failure\n")
+                        else:
+                            queue[:] = [item for item in queue if item[1] != int(parts[1])]
+                            writer.write(b"OK\n")
+                    elif verb == "clear":
+                        queue.clear()
+                        writer.write(b"OK\n")
+                    elif verb == "outputs":
+                        writer.write(
+                            b"outputid: 1\noutputname: HTTP Stream\nplugin: httpd\n"
+                            b"outputenabled: 0\nOK\n"
+                        )
+                    elif verb == "stats":
+                        writer.write(b"songs: 2\nalbums: 1\nartists: 1\nOK\n")
+                    elif verb == "update":
+                        writer.write(b"updating_db: 1\nOK\n")
+                    elif verb == "status":
+                        writer.write(b"state: stop\nsong: -1\nrepeat: 0\nrandom: 0\nOK\n")
+                    else:
+                        writer.write(b"OK\n")
+                    await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+        server = await asyncio.start_server(handle, "127.0.0.1", 0)
+        probe = CapabilityProbe(
+            "127.0.0.1",
+            port=server.sockets[0].getsockname()[1],
+            update_probe_path="__missing_mpd_server_probe__",
+            probe_transport=True,
+        )
+        try:
+            await probe.run()
+            assert queue == [("song-a.flac", 10), ("song-b.flac", 11)]
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(run())
