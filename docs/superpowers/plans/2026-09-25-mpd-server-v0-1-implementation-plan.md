@@ -529,6 +529,13 @@ Current Step status:
 - [x] Step 5: File lifecycle RED coverage established.
 
 - [x] Step 6: Implement ParsedSongMetadata and parse_media_file() using read-only access and tested FLAC/MP3 parsing.
+- [ ] Step 7: Implement LibraryScanner with injected Repository, content hashing, move matching, atomic reconciliation and typed failure handling.
+- [ ] Step 8: Implement filesystem event debounce/batch with an injected callback to scan_paths(). Default debounce is 500 ms.
+- [ ] Step 9: Implement scheduler with an injected interval; default is 12 hours. It must not import Task 10 configuration.
+- [ ] Step 10: Implement post-commit LibraryChangedEvent publication and optional MPD database update through injected protocols.
+- [ ] Step 11: Run complete Task 3 tests, relevant repository tests, global Python tests, compile/lint and diff review.
+- [ ] Step 12: Commit: feat: add library scanner and metadata pipeline.
+
 - [x] Step 7: Implement LibraryScanner with injected Repository, content hashing, move matching, atomic reconciliation and typed failure handling.
 - [x] Step 8: Implement filesystem event debounce/batch with an injected callback to scan_paths(). Default debounce is 500 ms.
 - [x] Step 9: Implement scheduler with an injected interval; default is 12 hours. It must not import Task 10 configuration.
