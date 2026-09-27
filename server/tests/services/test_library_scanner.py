@@ -7,7 +7,7 @@ from shutil import copy2
 
 import pytest
 
-from server.app.models.library import Song
+from server.app.models.library import ScanResult, Song
 from server.app.repositories.database import initialize_database
 from server.app.repositories.library_repository import LibraryRepository
 
