@@ -47,7 +47,10 @@ def test_step4_failed_parse_does_not_overwrite_known_good_metadata(
     def fail(_path: Path):
         raise media_metadata.MediaMetadataError("broken media")
 
-    monkeypatch.setattr(media_metadata, "parse_media_file", fail)
+    monkeypatch.setattr(
+        "server.app.services.library_scanner.parse_media_file",
+        fail,
+    )
 
     with pytest.raises(media_metadata.MediaMetadataError):
         _run(_scanner(db_path).scan_paths([target]))
