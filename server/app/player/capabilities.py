@@ -305,6 +305,20 @@ class CapabilityProbe:
                     update_response = _scalar_map(response.as_dict())
                 if error is not None:
                     errors.append(error)
+                if (
+                    self.probe_transport
+                    and response is not None
+                    and "updating_db" in update_response
+                ):
+                    post_update_status = await self._safe_execute(
+                        "status", commands, "status", errors
+                    )
+                    update_status_fields = frozenset(
+                        key for key, _ in post_update_status.pairs
+                        if key == "updating_db"
+                    )
+                    if update_status_fields:
+                        verified_operations.add("database_update_status")
             if self.probe_transport:
                 verified_operations.update(
                     await self._probe_transport_runtime(commands, errors)
