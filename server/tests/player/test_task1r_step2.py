@@ -196,6 +196,7 @@ def test_transport_probe_never_toggles_an_active_httpd_output():
 
     asyncio.run(run())
 
+
 def test_transport_probe_restores_queue_when_mutation_fails_mid_probe():
     async def run():
         queue = [("song-a.flac", 10), ("song-b.flac", 11)]
