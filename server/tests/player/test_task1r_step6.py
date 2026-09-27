@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 
 from server.app.player.capabilities import MPDCapabilities, VerifiedPlayerPort

@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from server.app.player.models import MPDStats, OutputInfo
 from server.app.player.mock_mpd import MockMPD
+from server.app.player.models import MPDStats, OutputInfo
 from server.app.player.ports import PlayerCommandError
 
 
