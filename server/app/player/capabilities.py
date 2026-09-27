@@ -360,6 +360,7 @@ class CapabilityProbe:
         snapshot_status: PlayerStatus | None = None
         snapshot_outputs: list[OutputInfo] = []
         queue_cleared = False
+        queue_mutated = False
         mutated_output_ids: set[int] = set()
 
         try:
@@ -382,12 +383,14 @@ class CapabilityProbe:
             if probe_uri is not None and {"addid", "deleteid"}.issubset(commands):
                 added = await self._execute("addid", probe_uri)
                 added_id = _required_int(_scalar(added.as_dict().get("Id")), "addid.Id")
+                queue_mutated = True
                 await self._execute("deleteid", str(added_id))
                 verified.update({"queue_add", "queue_delete"})
 
             if len(snapshot_queue) >= 2 and "moveid" in commands:
                 last = snapshot_queue[-1].mpd_song_id
                 await self._execute("moveid", str(last), "0")
+                queue_mutated = True
                 await self._execute("moveid", str(last), str(len(snapshot_queue) - 1))
                 verified.add("queue_move")
 
@@ -398,6 +401,7 @@ class CapabilityProbe:
             if "clear" in commands and (not snapshot_queue or "addid" in commands):
                 await self._execute("clear")
                 queue_cleared = True
+                queue_mutated = True
                 verified.add("queue_clear")
 
             if "outputs" in commands and {"enableoutput", "disableoutput"}.issubset(commands):
@@ -429,7 +433,7 @@ class CapabilityProbe:
             errors.append(_probe_error_from_exception(exc, "transport_probe"))
         finally:
             try:
-                if queue_cleared:
+                if queue_mutated:
                     await self._execute("clear")
                     for entry in snapshot_queue:
                         await self._execute("addid", entry.song_uri)
