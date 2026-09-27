@@ -92,6 +92,12 @@ def test_step5_changed_file_is_reconciled(
     second = _run(scanner.scan_paths([target]))
 
     assert second.updated_song_ids == first.added_song_ids
+    song = _run(
+        LibraryRepository(str(db_path)).get_song(first.added_song_ids[0])
+    )
+    assert song is not None
+    assert song.title == "MP3 Song"
+    assert song.lyrics is None
 
 
 def test_step5_move_preserves_song_identity(

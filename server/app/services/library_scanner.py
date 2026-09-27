@@ -151,10 +151,27 @@ class LibraryScanner:
                 metadata = parse_media_file(path)
                 stat = path.stat()
                 content_hash = _hash_file(path)
-                identity_key = _identity_key(metadata)
-                matched_song_id = await self._match_song_id(
-                    path, identity_key, content_hash
+                existing = await self.repository.find_song_by_file_uri(
+                    str(path)
                 )
+                if metadata.title is None or not metadata.title.strip():
+                    if existing is None or not existing.title.strip():
+                        raise MediaMetadataError(
+                            "required song title is missing"
+                        )
+                    identity_key = existing.identity_key
+                    song_title = existing.title
+                    matched_song_id = existing.song_id
+                else:
+                    identity_key = _identity_key(metadata)
+                    song_title = metadata.title
+                    matched_song_id = (
+                        existing.song_id
+                        if existing is not None
+                        else await self._match_song_id(
+                            path, identity_key, content_hash
+                        )
+                    )
                 song_id = matched_song_id or str(uuid.uuid4())
                 if song_id in reserved_ids:
                     song_id = str(uuid.uuid4())
@@ -162,7 +179,7 @@ class LibraryScanner:
                 songs.append(
                     Song(
                         song_id=song_id,
-                        title=metadata.title or "",
+                        title=song_title,
                         file_uri=str(path),
                         identity_key=identity_key,
                         artists=metadata.artists,
