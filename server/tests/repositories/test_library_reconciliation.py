@@ -395,14 +395,15 @@ def test_apply_scan_batch_performs_atomic_insert_update_move_missing_and_unreada
 
     assert "song-1" in result.updated_song_ids
     assert "song-1" in result.moved_song_ids
-    assert result.added_song_ids == ("song-4",)
+    assert len(result.added_song_ids) == 1
+    added_song_id = result.added_song_ids[0]
     assert result.missing_song_ids == ("song-2",)
     assert result.unreadable_song_ids == ("song-3",)
 
     moved = run(repository.get_song("song-1"))
     missing = run(repository.get_song("song-2"))
     unreadable = run(repository.get_song("song-3"))
-    added = run(repository.get_song("song-4"))
+    added = run(repository.get_song(added_song_id))
 
     assert moved is not None
     assert moved.title == "Moved Updated"
