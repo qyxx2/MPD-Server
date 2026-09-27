@@ -1,4 +1,5 @@
 import asyncio
+
 import pytest
 
 from server.app.player.mpd_adapter import MPDAdapter

@@ -2,7 +2,13 @@ import asyncio
 import pytest
 
 from server.app.player.capabilities import MPDCapabilities, VerifiedPlayerPort
-from server.app.player.models import DatabaseUpdateStatus, MPDStats, OutputInfo, PlayerState, PlayerStatus
+from server.app.player.models import (
+    DatabaseUpdateStatus,
+    MPDStats,
+    OutputInfo,
+    PlayerState,
+    PlayerStatus,
+)
 from server.app.player.ports import PlayerCommandError
 
 

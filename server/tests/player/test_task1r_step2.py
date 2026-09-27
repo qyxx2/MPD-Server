@@ -123,7 +123,7 @@ def test_transport_probe_never_toggles_usb_when_httpd_is_absent():
         try:
             result = await probe.run()
             assert "set_output_enabled" not in result.verified_operations
-            assert not any(c.startswith("enableoutput ") or c.startswith("disableoutput ") for c in seen)
+            assert not any(c.startswith(("enableoutput ", "disableoutput ")) for c in seen)
         finally:
             server.close(); await server.wait_closed()
 
@@ -187,7 +187,7 @@ def test_transport_probe_never_toggles_an_active_httpd_output():
             result = await probe.run()
             assert "set_output_enabled" not in result.verified_operations
             assert not any(
-                command.startswith("enableoutput ") or command.startswith("disableoutput ")
+                command.startswith(("enableoutput ", "disableoutput "))
                 for command in seen
             )
         finally:
