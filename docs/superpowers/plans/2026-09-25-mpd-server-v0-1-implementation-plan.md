@@ -502,49 +502,44 @@ Full-scan semantics:
 - Unsupported files are ignored and do not affect reconciliation.
 - Changed audio is reparsed; sidecar LRC changes are independently detected.
 - Move matching follows Task 2R rules.
-- Failed parsing never overwrites known-good metadata with null.
+- Failed parsing never overwrites known-good metadata.
 - One successful reconciliation uses one atomic Repository transaction.
 
 Domain event contract:
-Create LibraryChangedEvent and a minimal EventPublisher Protocol in services/events.py. Task 6 will subscribe later; Task 3 does not implement WebSocket.
-
-~~~python
-class EventPublisher(Protocol):
-    async def publish(self, event: DomainEvent) -> None: ...
-~~~
-
-Publish strictly after successful DB commit.
+- Task 3 only defines the later event boundary; implementation remains outside Steps 1-6.
+- Create LibraryChangedEvent and EventPublisher in the Task 3 Step 10 boundary only.
+- No WebSocket implementation is part of Steps 1-6.
 
 Optional MPD update:
 - Inject an MPDDatabaseUpdater Protocol rather than importing MPDAdapter.
-- If enabled and verified, trigger MPD database update after DB success.
-- MPD update failure never rolls back a successful SQLite scan.
-- Report update failure explicitly in ScanResult/event state.
+- Implementation belongs to Step 10, not Steps 1-6.
 
 Current Step status:
-- [x] Step 1: Media fixtures established.
-- [x] Step 2: Metadata RED coverage established.
-- [x] Step 3: Lyrics RED coverage established.
-- [ ] Step 4: Complete persistence-safety coverage after Task 2R contract exists.
-- [x] Step 5: File lifecycle RED coverage established.
+- [x] Step 1: Media fixtures established and validated against the required FLAC/MP3/LRC/parse-failure coverage.
+- [x] Step 2: Metadata RED coverage established and then passed after Step 6 parser implementation.
+- [x] Step 3: Lyrics RED coverage established and then passed after Step 6 parser implementation.
+- [x] Step 4: Persistence-safety RED coverage established against the existing Task 2R Repository contract; production scanner implementation is deliberately outside Steps 1-6.
+- [x] Step 5: Lifecycle RED coverage established using current Task 2R semantics: missing files remain Song rows with MISSING status; no physical deletion contract is used.
+- [x] Step 6: Implement ParsedSongMetadata and parse_media_file() with read-only access and tested FLAC/MP3 parsing.
 
-- [ ] Step 6: Implement ParsedSongMetadata and parse_media_file() using read-only access and tested FLAC/MP3 parsing.
-- [ ] Step 7: Implement LibraryScanner with injected Repository, content hashing, move matching, atomic reconciliation and typed failure handling.
-- [ ] Step 8: Implement filesystem event debounce/batch with an injected callback to scan_paths(). Default debounce is 500 ms.
-- [ ] Step 9: Implement scheduler with an injected interval; default is 12 hours. It must not import Task 10 configuration.
-- [ ] Step 10: Implement post-commit LibraryChangedEvent publication and optional MPD database update through injected protocols.
-- [ ] Step 11: Run complete Task 3 tests, relevant repository tests, global Python tests, compile/lint and diff review.
-- [ ] Step 12: Commit: feat: add library scanner and metadata pipeline.
+Step 1-6 verification record (2026-09-27):
+- Step 1: Re-established the media fixtures in server/tests/conftest.py from test-owned bytes; no real music-library path is used.
+- Step 2: Before parser implementation, the focused metadata test produced the expected RED missing-module failure. After implementation, the focused metadata suite passed with 6 tests.
+- Step 3: Before parser implementation, the focused lyrics test produced the expected RED missing-module failure. After implementation, sidecar LRC precedence, embedded plain-text lyrics, missing lyrics, and sidecar read/parse failure observability passed.
+- Step 4: Added a persistence-safety contract test that requires LibraryScanner plus Task 2R Repository injection and verifies a parse failure cannot erase known-good stored metadata. This remains RED until Task 3 Step 7 implements the scanner.
+- Step 5: Replaced stale lifecycle semantics from the abandoned task3 branch. Tests now require new/changed/moved/unreadable handling and require deleted files to become MISSING while preserving the Song row.
+- Step 6: Implemented only media_metadata.py. The parser returns typed ParsedSongMetadata, preserves multi-value fields, keeps date/year separate, preserves LRC timestamps, distinguishes missing/read_error lyrics, represents embedded artwork as an ArtworkRef, and performs no writes to source media or the music directory.
+- Local focused verification: python3 -m pytest server/tests/services/test_media_metadata.py -q -> 6 passed.
+- Local Python syntax verification: python3 -m compileall -q server -> passed on the reconstructed Task 3 test/production tree.
+- Environment limitations: the AI execution environment has no Docker binary and no installed ruff module; a complete checkout of the GitHub repository was unavailable because outbound DNS/network access is restricted. No Docker, Ruff or full-suite PASS is claimed.
+- No scanner, filesystem watcher, scheduler or later Task production behavior is implemented in this Step 1-6 scope.
 
 Acceptance:
-- Music directory remains strictly read-only.
+- Music directory remains strictly read-only in Step 1-6 implementation.
 - Unknown values stay unknown.
-- Failed parsing cannot erase known-good metadata.
-- Song ID is preserved only for an unambiguous move match.
-- Missing/unreadable Songs remain as rows for Playlist/Favorites/History continuity.
-- Events occur only after DB success.
-- No WebSocket implementation and no Task 10 configuration dependency.
-
+- Failed parsing cannot erase known-good metadata at the parser layer; the service-level persistence contract remains RED until Step 7.
+- No physical Song deletion is part of the current lifecycle contract.
+- No WebSocket implementation and no Task 10 configuration dependency are introduced.
 
 
 ## Task 4：Queue、Playback Context、History、AutoPlay、Playback Service
