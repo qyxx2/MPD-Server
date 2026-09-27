@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from shutil import copy2
 
