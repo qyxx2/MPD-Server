@@ -386,12 +386,22 @@ Move matching order:
 4. Ambiguous candidates are never auto-matched.
 5. Otherwise create a new Song.
 
-- [ ] Step 1: RED tests for schema migration, availability status, file signature fields, artwork reference persistence, candidate lookup and atomic scan-batch semantics.
-- [ ] Step 2: Implement schema v2 migration.
-- [ ] Step 3: Implement Repository methods and atomic scan-batch persistence.
-- [ ] Step 4: Verify old Playlist/Favorites/History references survive a Song becoming MISSING or UNREADABLE.
-- [ ] Step 5: Run repository-focused tests, compile/lint and inspect diff.
-- [ ] Step 6: Commit: feat: add library reconciliation persistence.
+- [x] Step 1: RED tests for schema migration, availability status, file signature fields, artwork reference persistence, candidate lookup and atomic scan-batch semantics.
+- [x] Step 2: Implement schema v2 migration.
+- [x] Step 3: Implement Repository methods and atomic scan-batch persistence.
+- [x] Step 4: Verify old Playlist/Favorites/History references survive a Song becoming MISSING or UNREADABLE.
+- [x] Step 5: Run repository-focused tests, compile/lint and inspect diff.
+- [x] Step 6: Commit: feat: add library reconciliation persistence.
+
+Task 2R verification record (2026-09-27):
+- Step 1 first verification produced 1 failure. After the scoped fix commit `273db753168b24d5f67739b4733bcf4fc1f7b00f`, the complete Task2R Step1 test file passed with 8 passed.
+- Step 2.1 and Step 2.2 each passed with 1 test.
+- Step 3 all sub-tests passed.
+- Step 4 passed, confirming existing Playlist/Favorites/History references survive MISSING/UNREADABLE state transitions.
+- Step 5.1 and Step 5.2 passed. Step 5.3 initially required two scoped Ruff fixes, committed as `27e1df5c941aa8fa2d27a23fa4e08fa6ea2cc8c7` and `b9ba51d88f0d73a8c41941c035f9bea7ccdccfb3`; final Step 5.3 verification passed. Step 5.4 passed.
+- Task2R implementation commit `5279701c34437b039de29bd733602b43c11f9d0a` and the subsequent scoped test/lint corrections are present on the branch. Remote branch verification confirmed the current HEAD is `b9ba51d88f0d73a8c41941c035f9bea7ccdccfb3`.
+- The final Task2R verification was performed in the Docker validation environment with the repository copied into the writable `/worktree`; no real music library was used as a mutable fixture.
+- No Task3 or later production behavior was implemented in Task2R.
 
 Boundary:
 - No filesystem watcher, scheduler, metadata parser, API, WebSocket or MPD update trigger is implemented here.

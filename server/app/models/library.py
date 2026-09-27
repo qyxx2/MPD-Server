@@ -1,8 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+AvailabilityStatus = Literal["AVAILABLE", "MISSING", "UNREADABLE"]
+
+
+class ArtworkRef(BaseModel):
+    artwork_id: str
+    source: Literal["EMBEDDED"]
+    picture_index: int = Field(ge=0)
+    mime_type: str | None = None
+    width: int | None = Field(default=None, ge=1)
+    height: int | None = Field(default=None, ge=1)
+    content_sha256: str | None = None
 
 
 class Song(BaseModel):
@@ -28,6 +41,12 @@ class Song(BaseModel):
     codec: str | None = None
     metadata_status: str | None = None
     last_scanned_at: datetime | None = None
+    file_size: int | None = Field(default=None, ge=0)
+    file_mtime_ns: int | None = Field(default=None, ge=0)
+    content_hash: str | None = None
+    availability_status: AvailabilityStatus = "AVAILABLE"
+    last_seen_at: datetime | None = None
+    artwork: ArtworkRef | None = None
 
     @property
     def artist_names(self) -> tuple[str, ...]:
@@ -40,3 +59,17 @@ class Song(BaseModel):
     @property
     def genre(self) -> tuple[str, ...]:
         return self.genres
+
+
+class ScanBatch(BaseModel):
+    songs: tuple[Song, ...] = ()
+    unreadable_file_uris: tuple[str, ...] = ()
+    reconciled_root_uri_prefix: str | None = None
+
+
+class ScanResult(BaseModel):
+    added_song_ids: tuple[str, ...] = ()
+    updated_song_ids: tuple[str, ...] = ()
+    moved_song_ids: tuple[str, ...] = ()
+    missing_song_ids: tuple[str, ...] = ()
+    unreadable_song_ids: tuple[str, ...] = ()
