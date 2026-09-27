@@ -511,3 +511,83 @@ def test_missing_or_unreadable_song_rows_keep_playlist_favorite_history_referenc
     assert run(playlists.list_song_ids(playlist.playlist_id)) == ["song-1", "song-2"]
     assert run(playlists.list_favorite_song_ids()) == ["song-2", "song-1"]
     assert len(run(history.list_history())) == 1
+
+
+
+@pytest.mark.parametrize(
+    ("lyrics", "lyrics_format", "lyrics_source", "lyrics_status"),
+    [
+        (
+            "[00:00.00] line",
+            "lrc",
+            "sidecar",
+            "available",
+        ),
+        (
+            "embedded line",
+            "text",
+            "embedded",
+            "available",
+        ),
+        (
+            "embedded fallback",
+            "text",
+            "embedded",
+            "read_error",
+        ),
+        (
+            None,
+            None,
+            None,
+            "missing",
+        ),
+    ],
+)
+def test_batch1_lyrics_observability_fields_round_trip(
+    tmp_path,
+    lyrics,
+    lyrics_format,
+    lyrics_source,
+    lyrics_status,
+):
+    path = tmp_path / "library.db"
+    run(initialize_database(str(path)))
+    repository = LibraryRepository(str(path))
+
+    song = Song(
+        song_id="song-lyrics",
+        title="Lyrics Track",
+        file_uri="music/lyrics.flac",
+        lyrics=lyrics,
+        lyrics_format=lyrics_format,
+        lyrics_source=lyrics_source,
+        lyrics_status=lyrics_status,
+    )
+
+    saved = run(repository.upsert_song(song))
+    restored = run(repository.get_song("song-lyrics"))
+
+    assert saved.lyrics_source == lyrics_source
+    assert saved.lyrics_status == lyrics_status
+    assert restored is not None
+    assert restored.lyrics == lyrics
+    assert restored.lyrics_format == lyrics_format
+    assert restored.lyrics_source == lyrics_source
+    assert restored.lyrics_status == lyrics_status
+
+
+def test_batch1_schema_contains_lyrics_observability_columns(tmp_path):
+    path = tmp_path / "library.db"
+
+    run(initialize_database(str(path)))
+
+    connection = sqlite3.connect(path)
+    try:
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(songs)")
+        }
+        assert {"lyrics_source", "lyrics_status"}.issubset(columns)
+        assert connection.execute("PRAGMA user_version").fetchone()[0] >= 3
+    finally:
+        connection.close()

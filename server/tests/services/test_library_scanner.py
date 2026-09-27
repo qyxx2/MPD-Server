@@ -605,3 +605,114 @@ def test_step10_repository_failure_never_publishes_or_updates_mpd(
 
     assert published == []
     assert updated == []
+
+def test_batch1_scanner_preserves_lyrics_observability_to_song_and_repository(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from server.app.services.library_scanner import LibraryScanner
+    from server.app.services.media_metadata import ParsedSongMetadata
+
+    cases = (
+        (
+            "sidecar",
+            ParsedSongMetadata(
+                title="Sidecar",
+                lyrics="[00:00.00] line",
+                lyrics_format="lrc",
+                lyrics_source="sidecar",
+                lyrics_status="available",
+            ),
+        ),
+        (
+            "read-error",
+            ParsedSongMetadata(
+                title="Fallback",
+                lyrics="embedded fallback",
+                lyrics_format="text",
+                lyrics_source="embedded",
+                lyrics_status="read_error",
+            ),
+        ),
+        (
+            "missing",
+            ParsedSongMetadata(
+                title="Missing Lyrics",
+                lyrics=None,
+                lyrics_format=None,
+                lyrics_source=None,
+                lyrics_status="missing",
+            ),
+        ),
+    )
+
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    repository = LibraryRepository(str(db_path))
+    target = tmp_path / "track.mp3"
+    target.write_bytes(b"scanner test media")
+    scanner = LibraryScanner(repository)
+
+    for name, parsed in cases:
+        target = tmp_path / f"{name}.mp3"
+        target.write_bytes(b"scanner test media")
+
+        monkeypatch.setattr(
+            "server.app.services.library_scanner.parse_media_file",
+            lambda _path, parsed=parsed: parsed,
+        )
+
+        result = _run(scanner.scan_paths([target]))
+        song_id = result.added_song_ids[0]
+        scanned = _run(repository.get_song(song_id))
+
+        assert scanned is not None
+        assert scanned.lyrics == parsed.lyrics
+        assert scanned.lyrics_format == parsed.lyrics_format
+        assert scanned.lyrics_source == parsed.lyrics_source
+        assert scanned.lyrics_status == parsed.lyrics_status
+
+
+def test_batch1_known_good_lyrics_status_survives_parse_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from server.app.services import media_metadata
+
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    repository = LibraryRepository(str(db_path))
+    target = tmp_path / "track.mp3"
+    target.write_bytes(b"placeholder")
+
+    existing = _run(
+        repository.upsert_song(
+            Song(
+                title="Known Good",
+                file_uri=str(target),
+                lyrics="known-good lyrics",
+                lyrics_format="text",
+                lyrics_source="embedded",
+                lyrics_status="available",
+                metadata_status="OK",
+            )
+        )
+    )
+
+    def fail(_path: Path):
+        raise media_metadata.MediaMetadataError("broken media")
+
+    monkeypatch.setattr(
+        "server.app.services.library_scanner.parse_media_file",
+        fail,
+    )
+
+    with pytest.raises(media_metadata.MediaMetadataError):
+        _run(LibraryScanner(repository).scan_paths([target]))
+
+    restored = _run(repository.get_song(existing.song_id))
+    assert restored is not None
+    assert restored.lyrics == "known-good lyrics"
+    assert restored.lyrics_format == "text"
+    assert restored.lyrics_source == "embedded"
+    assert restored.lyrics_status == "available"
