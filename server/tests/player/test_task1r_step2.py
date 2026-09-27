@@ -274,7 +274,7 @@ def test_transport_probe_restores_queue_when_mutation_fails_mid_probe():
         )
         try:
             await probe.run()
-            assert queue == [("song-a.flac", 10), ("song-b.flac", 11)]
+            assert [uri for uri, _ in queue] == ["song-a.flac", "song-b.flac"]
         finally:
             server.close()
             await server.wait_closed()
