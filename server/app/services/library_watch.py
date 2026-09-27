@@ -6,7 +6,6 @@ from pathlib import Path
 
 from server.app.models.library import ScanResult
 
-
 ScanPathsCallback = Callable[[list[Path]], Awaitable[ScanResult]]
 
 

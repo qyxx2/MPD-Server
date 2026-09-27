@@ -26,7 +26,7 @@ def test_step4_failed_parse_does_not_overwrite_known_good_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import server.app.services.media_metadata as media_metadata
+    from server.app.services import media_metadata
 
     db_path = tmp_path / "library.db"
     _run(initialize_database(str(db_path)))

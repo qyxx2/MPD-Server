@@ -54,7 +54,7 @@ def _identity_key(metadata: ParsedSongMetadata) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(
-        f"identity-v1:{payload}".encode("utf-8")
+        f"identity-v1:{payload}".encode()
     ).hexdigest()
 
 
@@ -216,7 +216,7 @@ class LibraryScanner:
         if self.mpd_updater is not None:
             try:
                 await self.mpd_updater.update_database()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 mpd_update_error = str(exc)
         if self.event_publisher is not None:
             await self.event_publisher.publish(

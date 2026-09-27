@@ -5,7 +5,6 @@ from collections.abc import Awaitable, Callable
 
 from server.app.models.library import ScanResult
 
-
 ScanFullCallback = Callable[[], Awaitable[ScanResult]]
 
 

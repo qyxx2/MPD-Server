@@ -13,7 +13,6 @@ from pydantic import BaseModel
 
 from server.app.models.library import ArtworkRef
 
-
 LyricsFormat = Literal["lrc", "text"] | None
 LyricsSource = Literal["sidecar", "embedded"] | None
 LyricsStatus = Literal["available", "missing", "read_error"]
@@ -133,7 +132,7 @@ def _extract_artwork(
     data = bytes(picture.data)
     digest = hashlib.sha256(data).hexdigest()
     artwork_id = hashlib.sha256(
-        f"{path.resolve()}:{0}:{digest}".encode("utf-8")
+        f"{path.resolve()}:{0}:{digest}".encode()
     ).hexdigest()
 
     return ArtworkRef(

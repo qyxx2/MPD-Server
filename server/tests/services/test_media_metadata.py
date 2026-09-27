@@ -128,6 +128,7 @@ def test_step6_embedded_artwork_is_returned_as_reference_without_writing_artwork
     media_fixture_dir: Path,
 ) -> None:
     from mutagen.flac import FLAC, Picture
+
     from server.app.services.media_metadata import parse_media_file
 
     target = media_fixture_dir / "artwork.flac"
