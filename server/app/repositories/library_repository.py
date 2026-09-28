@@ -397,6 +397,16 @@ class LibraryRepository:
 
         return await run_transaction(self.path, operation)
 
+    async def list_available_songs(self) -> list[Song]:
+        async def operation(connection):
+            rows = connection.execute(
+                f"{SONGS_SELECT} WHERE availability_status = 'AVAILABLE' "
+                "ORDER BY file_uri"
+            ).fetchall()
+            return [self._song_from_row(connection, row) for row in rows]
+
+        return await run_transaction(self.path, operation)
+
     async def find_song_candidates_by_identity(
         self, identity_key: str
     ) -> list[Song]:
