@@ -32,6 +32,27 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _associated_audio_paths(path: Path) -> tuple[Path, ...]:
+    try:
+        entries = path.parent.iterdir()
+    except OSError:
+        return ()
+
+    matches: list[Path] = []
+    for entry in entries:
+        try:
+            if (
+                entry.is_file(follow_symlinks=False)
+                and entry.suffix.casefold() in _SUPPORTED_SUFFIXES
+                and entry.stem == path.stem
+            ):
+                matches.append(entry)
+        except OSError:
+            continue
+
+    return tuple(sorted(matches, key=str))
+
+
 def _identity_key(metadata: ParsedSongMetadata) -> str:
     if metadata.title is None or not metadata.title.strip():
         raise MediaMetadataError("required song title is missing")
@@ -248,7 +269,9 @@ class LibraryScanner:
         expanded: list[Path] = []
         for raw_path in paths:
             path = raw_path.resolve()
-            if path.is_dir() and not path.is_symlink():
+            if path.suffix.casefold() == ".lrc":
+                expanded.extend(_associated_audio_paths(path))
+            elif path.is_dir() and not path.is_symlink():
                 files, _ = _walk(path)
                 expanded.extend(files)
             elif path.is_file() and not path.is_symlink():
