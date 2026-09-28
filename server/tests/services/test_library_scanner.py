@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import sqlite3
 from pathlib import Path
 from shutil import copy2
 
@@ -916,3 +917,322 @@ def test_batch2_deleted_lrc_recomputes_to_missing_when_no_embedded_lyrics(
     assert song.lyrics_format is None
     assert song.lyrics_source is None
     assert song.lyrics_status == "missing"
+
+
+
+def _set_flac_pictures(path: Path, *image_payloads: bytes) -> None:
+    from mutagen.flac import FLAC, Picture
+
+    audio = FLAC(path)
+    audio.clear_pictures()
+    for image_data in image_payloads:
+        picture = Picture()
+        picture.type = 3
+        picture.mime = "image/png"
+        picture.width = 1
+        picture.height = 1
+        picture.depth = 8
+        picture.data = image_data
+        audio.add_picture(picture)
+    audio.save()
+
+
+def _prepare_artwork_track(
+    source: Path,
+    target: Path,
+    *,
+    title: str,
+    track_number: int,
+    image_payloads: tuple[bytes, ...],
+) -> None:
+    from mutagen.flac import FLAC
+
+    copy2(source, target)
+    audio = FLAC(target)
+    audio["title"] = [title]
+    audio["tracknumber"] = [str(track_number)]
+    audio["discnumber"] = ["1"]
+    audio["album"] = ["Artwork Album"]
+    audio.save()
+    _set_flac_pictures(target, *image_payloads)
+
+
+def _artwork_row(db_path: Path):
+    connection = sqlite3.connect(db_path)
+    try:
+        return connection.execute(
+            """
+            SELECT artwork_id, song_id, picture_index, mime_type,
+                   content_sha256
+            FROM album_art_refs
+            ORDER BY album_id
+            """
+        ).fetchall()
+    finally:
+        connection.close()
+
+
+def test_batch5_embedded_artwork_reaches_song_and_album_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    result = _run(scanner.scan_full(root))
+    song = _run(
+        LibraryRepository(str(db_path)).get_song(result.added_song_ids[0])
+    )
+
+    assert song is not None
+    assert song.artwork is not None
+    assert song.artwork.source == "EMBEDDED"
+    assert song.artwork.picture_index == 0
+    assert song.artwork.content_sha256 == hashlib.sha256(
+        b"artwork-a"
+    ).hexdigest()
+    assert _artwork_row(db_path) == [
+        (
+            song.artwork.artwork_id,
+            result.added_song_ids[0],
+            0,
+            "image/png",
+            hashlib.sha256(b"artwork-a").hexdigest(),
+        )
+    ]
+
+
+def test_batch5_removed_preferred_artwork_is_no_longer_a_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+    _set_flac_pictures(target)
+
+    _run(scanner.scan_paths([target]))
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+
+    assert _artwork_row(db_path) == []
+    assert song is not None
+    assert song.artwork is None
+
+
+def test_batch5_removed_preferred_artwork_uses_other_album_artwork(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    song_a = root / "a.flac"
+    song_b = root / "b.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_a,
+        title="Artwork Song A",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_b,
+        title="Artwork Song B",
+        track_number=2,
+        image_payloads=(b"artwork-b",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_paths([song_a]))
+    song_a_id = first.added_song_ids[0]
+    second = _run(scanner.scan_paths([song_b]))
+    song_b_id = second.added_song_ids[0]
+
+    initial_ref = _artwork_row(db_path)
+    assert initial_ref == [
+        (
+            _run(LibraryRepository(str(db_path)).get_song(song_a_id)).artwork.artwork_id,
+            song_a_id,
+            0,
+            "image/png",
+            hashlib.sha256(b"artwork-a").hexdigest(),
+        )
+    ]
+
+    _set_flac_pictures(song_a)
+    _run(scanner.scan_paths([song_a]))
+
+    rows = _artwork_row(db_path)
+    assert rows == [
+        (
+            _run(LibraryRepository(str(db_path)).get_song(song_b_id)).artwork.artwork_id,
+            song_b_id,
+            0,
+            "image/png",
+            hashlib.sha256(b"artwork-b").hexdigest(),
+        )
+    ]
+
+
+def test_batch5_no_valid_album_artwork_leaves_no_stale_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+    _set_flac_pictures(target)
+
+    _run(scanner.scan_paths([target]))
+    assert _artwork_row(db_path) == []
+
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+    assert song is not None
+    assert song.artwork is None
+
+
+def test_batch5_scanning_other_song_does_not_change_valid_preferred_artwork(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    song_a = root / "a.flac"
+    song_b = root / "b.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_a,
+        title="Artwork Song A",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_b,
+        title="Artwork Song B",
+        track_number=2,
+        image_payloads=(),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_a_id = first.added_song_ids[0]
+    preferred_before = _artwork_row(db_path)
+
+    _run(scanner.scan_paths([song_b]))
+    preferred_after = _artwork_row(db_path)
+
+    assert preferred_after == preferred_before
+    assert preferred_after[0][1] == song_a_id
+
+
+def test_batch5_artwork_content_change_replaces_old_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    old_song = _run(
+        LibraryRepository(str(db_path)).get_song(first.added_song_ids[0])
+    )
+    assert old_song is not None
+    assert old_song.artwork is not None
+    old_artwork_id = old_song.artwork.artwork_id
+
+    _set_flac_pictures(target, b"artwork-b")
+    _run(scanner.scan_paths([target]))
+
+    new_song = _run(
+        LibraryRepository(str(db_path)).get_song(first.added_song_ids[0])
+    )
+    assert new_song is not None
+    assert new_song.artwork is not None
+    assert new_song.artwork.artwork_id != old_artwork_id
+    assert new_song.artwork.content_sha256 == hashlib.sha256(
+        b"artwork-b"
+    ).hexdigest()
+    assert _artwork_row(db_path)[0][0] == new_song.artwork.artwork_id
+
+
+def test_batch5_multiple_pictures_keep_frozen_picture_index_zero(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"first-picture", b"second-picture"),
+    )
+
+    result = _run(_scanner(db_path).scan_full(root))
+    song = _run(
+        LibraryRepository(str(db_path)).get_song(result.added_song_ids[0])
+    )
+
+    assert song is not None
+    assert song.artwork is not None
+    assert song.artwork.picture_index == 0
+    assert song.artwork.content_sha256 == hashlib.sha256(
+        b"first-picture"
+    ).hexdigest()
