@@ -170,9 +170,12 @@ class QueueRepository:
                 ).fetchall()
                 if str(item[0]) != queue_item_id
             ]
-            if current_id is not None and current_id != queue_item_id:
-                if current_id not in played_ids:
-                    played_ids.insert(0, current_id)
+            if (
+                current_id is not None
+                and current_id != queue_item_id
+                and current_id not in played_ids
+            ):
+                played_ids.insert(0, current_id)
 
             up_next_ids = [
                 str(item[0])
