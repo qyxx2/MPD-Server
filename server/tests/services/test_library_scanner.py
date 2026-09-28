@@ -606,6 +606,7 @@ def test_step10_repository_failure_never_publishes_or_updates_mpd(
     assert published == []
     assert updated == []
 
+
 def test_batch1_scanner_preserves_lyrics_observability_to_song_and_repository(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -708,7 +709,7 @@ def test_batch1_known_good_lyrics_status_survives_parse_failure(
     )
 
     with pytest.raises(media_metadata.MediaMetadataError):
-        _run(LibraryScanner(repository).scan_paths([target]))
+        _run(_scanner(db_path).scan_paths([target]))
 
     restored = _run(repository.get_song(existing.song_id))
     assert restored is not None
