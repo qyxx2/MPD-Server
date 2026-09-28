@@ -880,3 +880,32 @@ def test_batch2_full_scan_ignores_lrc_as_independent_song(
     result = _run(_scanner(db_path).scan_full(root))
 
     assert len(result.added_song_ids) == 1
+
+
+def test_batch2_deleted_lrc_recomputes_to_missing_when_no_embedded_lyrics(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.mp3"
+    lrc = root / "track.lrc"
+    copy2(media_fixture_dir / "no_lyrics.mp3", target)
+    lrc.write_text("[00:00.00] temporary lyrics\\n", encoding="utf-8")
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+    lrc.unlink()
+
+    result = _run(scanner.scan_paths([lrc]))
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+
+    assert result.updated_song_ids == (song_id,)
+    assert song is not None
+    assert song.lyrics is None
+    assert song.lyrics_format is None
+    assert song.lyrics_source is None
+    assert song.lyrics_status == "missing"
