@@ -606,7 +606,6 @@ def test_step10_repository_failure_never_publishes_or_updates_mpd(
     assert published == []
     assert updated == []
 
-
 def test_batch1_scanner_preserves_lyrics_observability_to_song_and_repository(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
