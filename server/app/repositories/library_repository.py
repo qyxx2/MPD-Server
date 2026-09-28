@@ -10,7 +10,8 @@ from .database import run_transaction
 
 SONGS_SELECT = """
 SELECT song_id, title, file_uri, identity_key, album_id, track_number,
-       disc_number, year, date, duration, lyrics, lyrics_format, bit_depth,
+       disc_number, year, date, duration, lyrics, lyrics_format, lyrics_source,
+       lyrics_status, bit_depth,
        sample_rate_hz, channel_count, codec, metadata_status, last_scanned_at,
        file_size, file_mtime_ns, content_hash, availability_status, last_seen_at
 FROM songs
@@ -133,17 +134,19 @@ class LibraryRepository:
             duration=row[9],
             lyrics=row[10],
             lyrics_format=row[11],
-            bit_depth=row[12],
-            sample_rate_hz=row[13],
-            channel_count=row[14],
-            codec=row[15],
-            metadata_status=row[16],
-            last_scanned_at=_parse_dt(row[17]),
-            file_size=row[18],
-            file_mtime_ns=row[19],
-            content_hash=row[20],
-            availability_status=row[21],
-            last_seen_at=_parse_dt(row[22]),
+            lyrics_source=row[12],
+            lyrics_status=row[13],
+            bit_depth=row[14],
+            sample_rate_hz=row[15],
+            channel_count=row[16],
+            codec=row[17],
+            metadata_status=row[18],
+            last_scanned_at=_parse_dt(row[19]),
+            file_size=row[20],
+            file_mtime_ns=row[21],
+            content_hash=row[22],
+            availability_status=row[23],
+            last_seen_at=_parse_dt(row[24]),
             artwork=artwork,
         )
 
@@ -153,6 +156,8 @@ class LibraryRepository:
         song: Song,
         song_id: str,
         scanned_at: str,
+        *,
+        persist_artwork: bool = True,
     ) -> None:
         album_id = None
         if song.album:
@@ -195,11 +200,12 @@ class LibraryRepository:
             INSERT INTO songs(
                 song_id, title, file_uri, identity_key, album_id,
                 track_number, disc_number, year, date, duration, lyrics,
-                lyrics_format, bit_depth, sample_rate_hz, channel_count,
+                lyrics_format, lyrics_source, lyrics_status, bit_depth,
+                sample_rate_hz, channel_count,
                 codec, metadata_status, last_scanned_at, file_size,
                 file_mtime_ns, content_hash, availability_status, last_seen_at
             ) VALUES(
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             ON CONFLICT(song_id) DO UPDATE SET
                 title = excluded.title,
@@ -213,6 +219,8 @@ class LibraryRepository:
                 duration = excluded.duration,
                 lyrics = excluded.lyrics,
                 lyrics_format = excluded.lyrics_format,
+                lyrics_source = excluded.lyrics_source,
+                lyrics_status = excluded.lyrics_status,
                 bit_depth = excluded.bit_depth,
                 sample_rate_hz = excluded.sample_rate_hz,
                 channel_count = excluded.channel_count,
@@ -238,6 +246,8 @@ class LibraryRepository:
                 song.duration,
                 song.lyrics,
                 song.lyrics_format,
+                song.lyrics_source,
+                song.lyrics_status,
                 song.bit_depth,
                 song.sample_rate_hz,
                 song.channel_count,
@@ -281,7 +291,11 @@ class LibraryRepository:
                     (song_id, entity_id),
                 )
 
-        if song.artwork is not None and album_id is not None:
+        if (
+            persist_artwork
+            and song.artwork is not None
+            and album_id is not None
+        ):
             connection.execute(
                 """
                 INSERT INTO album_art_refs(
@@ -389,6 +403,16 @@ class LibraryRepository:
 
         return await run_transaction(self.path, operation)
 
+    async def list_available_songs(self) -> list[Song]:
+        async def operation(connection):
+            rows = connection.execute(
+                f"{SONGS_SELECT} WHERE availability_status = 'AVAILABLE' "
+                "ORDER BY file_uri"
+            ).fetchall()
+            return [self._song_from_row(connection, row) for row in rows]
+
+        return await run_transaction(self.path, operation)
+
     async def find_song_candidates_by_identity(
         self, identity_key: str
     ) -> list[Song]:
@@ -413,6 +437,193 @@ class LibraryRepository:
 
         return await run_transaction(self.path, operation)
 
+    def _write_artwork_ref(
+        self,
+        connection,
+        album_id: str,
+        song_id: str,
+        artwork: ArtworkRef,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO album_art_refs(
+                artwork_id, album_id, song_id, source, picture_index,
+                mime_type, width, height, content_sha256
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(album_id) DO UPDATE SET
+                artwork_id = excluded.artwork_id,
+                song_id = excluded.song_id,
+                source = excluded.source,
+                picture_index = excluded.picture_index,
+                mime_type = excluded.mime_type,
+                width = excluded.width,
+                height = excluded.height,
+                content_sha256 = excluded.content_sha256
+            """,
+            (
+                artwork.artwork_id,
+                album_id,
+                song_id,
+                artwork.source,
+                artwork.picture_index,
+                artwork.mime_type,
+                artwork.width,
+                artwork.height,
+                artwork.content_sha256,
+            ),
+        )
+
+    @staticmethod
+    def _artwork_candidate_key(song: Song) -> tuple[object, ...]:
+        return (
+            song.disc_number is None,
+            song.disc_number if song.disc_number is not None else 0,
+            song.track_number is None,
+            song.track_number if song.track_number is not None else 0,
+            song.file_uri,
+            song.song_id or "",
+        )
+
+    async def get_album_artwork_source_song_id(
+        self,
+        song_id: str,
+    ) -> str | None:
+        async def operation(connection):
+            row = connection.execute(
+                """
+                SELECT aar.song_id
+                FROM album_art_refs AS aar
+                JOIN songs AS s ON s.album_id = aar.album_id
+                WHERE s.song_id = ?
+                """,
+                (song_id,),
+            ).fetchone()
+            return row[0] if row else None
+
+        return await run_transaction(self.path, operation)
+
+    async def list_song_file_uris_in_album(
+        self,
+        song_id: str,
+    ) -> list[tuple[str, str]]:
+        async def operation(connection):
+            rows = connection.execute(
+                """
+                SELECT s.song_id, s.file_uri
+                FROM songs AS s
+                JOIN songs AS target ON target.album_id = s.album_id
+                WHERE target.song_id = ?
+                ORDER BY
+                    s.disc_number IS NULL,
+                    s.disc_number,
+                    s.track_number IS NULL,
+                    s.track_number,
+                    s.file_uri,
+                    s.song_id
+                """,
+                (song_id,),
+            ).fetchall()
+            return [(row[0], row[1]) for row in rows]
+
+        return await run_transaction(self.path, operation)
+
+    def _reconcile_album_artwork(
+        self,
+        connection,
+        affected_album_ids: set[str],
+        batch_songs: dict[str, Song],
+        batch_album_ids: dict[str, str | None],
+    ) -> None:
+        for album_id in sorted(affected_album_ids):
+            ref = connection.execute(
+                """
+                SELECT artwork_id, song_id, source, picture_index, mime_type,
+                       width, height, content_sha256
+                FROM album_art_refs
+                WHERE album_id = ?
+                """,
+                (album_id,),
+            ).fetchone()
+            candidates = [
+                song
+                for song_id, song in batch_songs.items()
+                if batch_album_ids.get(song_id) == album_id
+                and song.artwork is not None
+                and song.availability_status == "AVAILABLE"
+            ]
+            candidates.sort(key=self._artwork_candidate_key)
+
+            if ref is None:
+                if candidates:
+                    replacement = candidates[0]
+                    self._write_artwork_ref(
+                        connection,
+                        album_id,
+                        replacement.song_id or "",
+                        replacement.artwork,
+                    )
+                continue
+
+            ref_artwork = ArtworkRef(
+                artwork_id=ref[0],
+                source=ref[2],
+                picture_index=ref[3],
+                mime_type=ref[4],
+                width=ref[5],
+                height=ref[6],
+                content_sha256=ref[7],
+            )
+            source_row = connection.execute(
+                """
+                SELECT album_id, availability_status
+                FROM songs
+                WHERE song_id = ?
+                """,
+                (ref[1],),
+            ).fetchone()
+            source_in_batch = batch_songs.get(ref[1])
+            source_artwork = (
+                source_in_batch.artwork
+                if source_in_batch is not None
+                and batch_album_ids.get(ref[1]) == album_id
+                and source_in_batch.availability_status == "AVAILABLE"
+                else None
+            )
+            stale = (
+                source_row is None
+                or source_row[0] != album_id
+                or source_row[1] != "AVAILABLE"
+                or (
+                    source_in_batch is not None
+                    and (
+                        batch_album_ids.get(ref[1]) != album_id
+                        or source_in_batch.artwork is None
+                    )
+                )
+            )
+
+            if stale:
+                if candidates:
+                    replacement = candidates[0]
+                    self._write_artwork_ref(
+                        connection,
+                        album_id,
+                        replacement.song_id or "",
+                        replacement.artwork,
+                    )
+                else:
+                    connection.execute(
+                        "DELETE FROM album_art_refs WHERE album_id = ?",
+                        (album_id,),
+                    )
+            elif source_artwork is not None and source_artwork != ref_artwork:
+                self._write_artwork_ref(
+                    connection,
+                    album_id,
+                    ref[1],
+                    source_artwork,
+                )
+
     async def apply_scan_batch(self, batch: ScanBatch) -> ScanResult:
         async def operation(connection):
             now = _now()
@@ -422,6 +633,9 @@ class LibraryRepository:
             missing: list[str] = []
             unreadable: list[str] = []
             reserved_ids: set[str] = set()
+            affected_album_ids: set[str] = set()
+            batch_songs: dict[str, Song] = {}
+            batch_album_ids: dict[str, str | None] = {}
 
             for song in batch.songs:
                 exact = connection.execute(
@@ -466,7 +680,7 @@ class LibraryRepository:
                             for row in candidates
                             if row[0] not in reserved_ids
                         ]
-                        if len(candidates) == 1:
+                        if len(candidates) == 1 and candidates[0][2] == "MISSING":
                             song_id, old_uri = candidates[0][0], candidates[0][1]
 
                     if song_id is None and song.content_hash is not None:
@@ -508,6 +722,13 @@ class LibraryRepository:
                 if song_id in reserved_ids:
                     raise ValueError("duplicate song match in scan batch")
                 reserved_ids.add(song_id)
+                previous_album_row = connection.execute(
+                    "SELECT album_id FROM songs WHERE song_id = ?",
+                    (song_id,),
+                ).fetchone()
+                if previous_album_row and previous_album_row[0]:
+                    affected_album_ids.add(previous_album_row[0])
+
                 observed = song.model_copy(
                     update={
                         "song_id": song_id,
@@ -522,7 +743,24 @@ class LibraryRepository:
                         ),
                     }
                 )
-                self._upsert_song(connection, observed, song_id, now)
+                self._upsert_song(
+                    connection,
+                    observed,
+                    song_id,
+                    now,
+                    persist_artwork=False,
+                )
+                current_album_row = connection.execute(
+                    "SELECT album_id FROM songs WHERE song_id = ?",
+                    (song_id,),
+                ).fetchone()
+                current_album_id = (
+                    current_album_row[0] if current_album_row else None
+                )
+                if current_album_id:
+                    affected_album_ids.add(current_album_id)
+                batch_songs[song_id] = observed
+                batch_album_ids[song_id] = current_album_id
 
             if batch.reconciled_root_uri_prefix is not None:
                 observed_uris = {song.file_uri for song in batch.songs}
@@ -570,6 +808,17 @@ class LibraryRepository:
                         (now, row[0]),
                     )
                     unreadable.append(row[0])
+
+            ref_album_rows = connection.execute(
+                "SELECT album_id FROM album_art_refs ORDER BY album_id"
+            ).fetchall()
+            affected_album_ids.update(row[0] for row in ref_album_rows)
+            self._reconcile_album_artwork(
+                connection,
+                affected_album_ids,
+                batch_songs,
+                batch_album_ids,
+            )
 
             return ScanResult(
                 added_song_ids=tuple(added),

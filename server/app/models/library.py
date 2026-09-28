@@ -6,6 +6,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 AvailabilityStatus = Literal["AVAILABLE", "MISSING", "UNREADABLE"]
+LyricsFormat = Literal["lrc", "text"] | None
+LyricsSource = Literal["sidecar", "embedded"] | None
+LyricsStatus = Literal["available", "missing", "read_error"]
 
 
 class ArtworkRef(BaseModel):
@@ -34,7 +37,9 @@ class Song(BaseModel):
     tag_names: tuple[str, ...] = ()
     duration: float | None = Field(default=None, ge=0)
     lyrics: str | None = None
-    lyrics_format: str | None = None
+    lyrics_format: LyricsFormat = None
+    lyrics_source: LyricsSource = None
+    lyrics_status: LyricsStatus = "missing"
     bit_depth: int | None = Field(default=None, ge=1)
     sample_rate_hz: int | None = Field(default=None, ge=1)
     channel_count: int | None = Field(default=None, ge=1)

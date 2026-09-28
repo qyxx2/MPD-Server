@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import sqlite3
 from pathlib import Path
 from shutil import copy2
 
@@ -452,6 +453,12 @@ class _ScannerFakeRepository:
             if song.content_hash == content_hash
         ]
 
+    async def get_album_artwork_source_song_id(self, song_id: str):
+        return None
+
+    async def list_song_file_uris_in_album(self, song_id: str):
+        return []
+
     async def list_songs_in_root(self, root_uri_prefix: str):
         return [
             song
@@ -605,3 +612,633 @@ def test_step10_repository_failure_never_publishes_or_updates_mpd(
 
     assert published == []
     assert updated == []
+
+def test_batch1_scanner_preserves_lyrics_observability_to_song_and_repository(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from server.app.services.library_scanner import LibraryScanner
+    from server.app.services.media_metadata import ParsedSongMetadata
+
+    cases = (
+        (
+            "sidecar",
+            ParsedSongMetadata(
+                title="Sidecar",
+                lyrics="[00:00.00] line",
+                lyrics_format="lrc",
+                lyrics_source="sidecar",
+                lyrics_status="available",
+            ),
+        ),
+        (
+            "read-error",
+            ParsedSongMetadata(
+                title="Fallback",
+                lyrics="embedded fallback",
+                lyrics_format="text",
+                lyrics_source="embedded",
+                lyrics_status="read_error",
+            ),
+        ),
+        (
+            "missing",
+            ParsedSongMetadata(
+                title="Missing Lyrics",
+                lyrics=None,
+                lyrics_format=None,
+                lyrics_source=None,
+                lyrics_status="missing",
+            ),
+        ),
+    )
+
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    repository = LibraryRepository(str(db_path))
+    target = tmp_path / "track.mp3"
+    target.write_bytes(b"scanner test media")
+    scanner = LibraryScanner(repository)
+
+    for name, parsed in cases:
+        target = tmp_path / f"{name}.mp3"
+        target.write_bytes(b"scanner test media")
+
+        monkeypatch.setattr(
+            "server.app.services.library_scanner.parse_media_file",
+            lambda _path, parsed=parsed: parsed,
+        )
+
+        result = _run(scanner.scan_paths([target]))
+        song_id = result.added_song_ids[0]
+        scanned = _run(repository.get_song(song_id))
+
+        assert scanned is not None
+        assert scanned.lyrics == parsed.lyrics
+        assert scanned.lyrics_format == parsed.lyrics_format
+        assert scanned.lyrics_source == parsed.lyrics_source
+        assert scanned.lyrics_status == parsed.lyrics_status
+
+
+def test_batch1_known_good_lyrics_status_survives_parse_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from server.app.services import media_metadata
+
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    repository = LibraryRepository(str(db_path))
+    target = tmp_path / "track.mp3"
+    target.write_bytes(b"placeholder")
+
+    existing = _run(
+        repository.upsert_song(
+            Song(
+                title="Known Good",
+                file_uri=str(target),
+                lyrics="known-good lyrics",
+                lyrics_format="text",
+                lyrics_source="embedded",
+                lyrics_status="available",
+                metadata_status="OK",
+            )
+        )
+    )
+
+    def fail(_path: Path):
+        raise media_metadata.MediaMetadataError("broken media")
+
+    monkeypatch.setattr(
+        "server.app.services.library_scanner.parse_media_file",
+        fail,
+    )
+
+    with pytest.raises(media_metadata.MediaMetadataError):
+        _run(_scanner(db_path).scan_paths([target]))
+
+    restored = _run(repository.get_song(existing.song_id))
+    assert restored is not None
+    assert restored.lyrics == "known-good lyrics"
+    assert restored.lyrics_format == "text"
+    assert restored.lyrics_source == "embedded"
+    assert restored.lyrics_status == "available"
+
+
+def test_batch2_lrc_create_and_change_rescans_associated_audio(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.mp3"
+    copy2(media_fixture_dir / "sidecar.mp3", target)
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+
+    lrc = root / "track.lrc"
+    lrc.write_text("[00:00.00] first\\n", encoding="utf-8")
+    created = _run(scanner.scan_paths([lrc]))
+
+    lrc.write_text("[00:00.00] second\\n", encoding="utf-8")
+    changed = _run(scanner.scan_paths([lrc]))
+
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+
+    assert created.updated_song_ids == (song_id,)
+    assert changed.updated_song_ids == (song_id,)
+    assert song is not None
+    assert song.lyrics == "[00:00.00] second\\n"
+    assert song.lyrics_source == "sidecar"
+    assert song.lyrics_status == "available"
+
+
+def test_batch2_deleted_lrc_rescans_associated_audio(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.mp3"
+    lrc = root / "track.lrc"
+    copy2(media_fixture_dir / "sidecar.mp3", target)
+    copy2(media_fixture_dir / "sidecar.lrc", lrc)
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+    lrc.unlink()
+
+    result = _run(scanner.scan_paths([lrc]))
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+
+    assert result.updated_song_ids == (song_id,)
+    assert song is not None
+    assert song.lyrics_source == "embedded"
+    assert song.lyrics_format == "text"
+    assert song.lyrics_status == "available"
+
+
+def test_batch2_lrc_events_are_deduplicated_with_audio_targets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from server.app.services.library_scanner import LibraryScanner
+    from server.app.services.media_metadata import ParsedSongMetadata
+
+    target = tmp_path / "track.mp3"
+    lrc = tmp_path / "track.lrc"
+    target.write_bytes(b"audio")
+    lrc.write_text("[00:00.00] lyrics\\n", encoding="utf-8")
+    repository = _ScannerFakeRepository()
+    calls: list[Path] = []
+
+    def parse(path: Path):
+        calls.append(path)
+        return ParsedSongMetadata(
+            title="Track",
+            lyrics="[00:00.00] lyrics\\n",
+            lyrics_format="lrc",
+            lyrics_source="sidecar",
+            lyrics_status="available",
+        )
+
+    monkeypatch.setattr(
+        "server.app.services.library_scanner.parse_media_file",
+        parse,
+    )
+
+    _run(LibraryScanner(repository).scan_paths([lrc, lrc]))
+    assert calls == [target]
+
+    calls.clear()
+    _run(LibraryScanner(repository).scan_paths([lrc, target]))
+    assert calls == [target]
+
+
+def test_batch2_lrc_with_flac_and_mp3_same_stem_rescans_both(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    flac = root / "track.flac"
+    mp3 = root / "track.mp3"
+    lrc = root / "track.lrc"
+    copy2(media_fixture_dir / "metadata.flac", flac)
+    copy2(media_fixture_dir / "sidecar.mp3", mp3)
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    lrc.write_text("[00:00.00] shared lyrics\\n", encoding="utf-8")
+    result = _run(scanner.scan_paths([lrc]))
+
+    assert set(result.updated_song_ids) == set(first.added_song_ids)
+    songs = [
+        _run(LibraryRepository(str(db_path)).get_song(song_id))
+        for song_id in first.added_song_ids
+    ]
+    assert all(song is not None for song in songs)
+    assert all(song.lyrics == "[00:00.00] shared lyrics\\n" for song in songs)
+    assert all(song.lyrics_source == "sidecar" for song in songs)
+
+
+def test_batch2_lrc_without_associated_audio_creates_no_scan_target(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    lrc = root / "track.lrc"
+    lrc.write_text("[00:00.00] orphan\\n", encoding="utf-8")
+
+    result = _run(_scanner(db_path).scan_paths([lrc]))
+
+    assert result.added_song_ids == ()
+    assert result.updated_song_ids == ()
+    assert result.moved_song_ids == ()
+    assert result.missing_song_ids == ()
+    assert result.unreadable_song_ids == ()
+
+
+def test_batch2_full_scan_ignores_lrc_as_independent_song(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    copy2(media_fixture_dir / "sidecar.mp3", root / "track.mp3")
+    (root / "track.lrc").write_text(
+        "[00:00.00] full scan sidecar\\n",
+        encoding="utf-8",
+    )
+
+    result = _run(_scanner(db_path).scan_full(root))
+
+    assert len(result.added_song_ids) == 1
+
+
+def test_batch2_deleted_lrc_recomputes_to_missing_when_no_embedded_lyrics(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    from mutagen.mp3 import MP3
+
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.mp3"
+    lrc = root / "track.lrc"
+    copy2(media_fixture_dir / "sidecar.mp3", target)
+    audio = MP3(target)
+    assert audio.tags is not None
+    audio.tags.delall("USLT")
+    audio.save()
+
+    lrc.write_text("[00:00.00] temporary lyrics\\n", encoding="utf-8")
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+    lrc.unlink()
+
+    result = _run(scanner.scan_paths([lrc]))
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+
+    assert result.updated_song_ids == (song_id,)
+    assert song is not None
+    assert song.lyrics is None
+    assert song.lyrics_format is None
+    assert song.lyrics_source is None
+    assert song.lyrics_status == "missing"
+
+
+
+def _set_flac_pictures(path: Path, *image_payloads: bytes) -> None:
+    from mutagen.flac import FLAC, Picture
+
+    audio = FLAC(path)
+    audio.clear_pictures()
+    for image_data in image_payloads:
+        picture = Picture()
+        picture.type = 3
+        picture.mime = "image/png"
+        picture.width = 1
+        picture.height = 1
+        picture.depth = 8
+        picture.data = image_data
+        audio.add_picture(picture)
+    audio.save()
+
+
+def _prepare_artwork_track(
+    source: Path,
+    target: Path,
+    *,
+    title: str,
+    track_number: int,
+    image_payloads: tuple[bytes, ...],
+) -> None:
+    from mutagen.flac import FLAC
+
+    copy2(source, target)
+    audio = FLAC(target)
+    audio["title"] = [title]
+    audio["tracknumber"] = [str(track_number)]
+    audio["discnumber"] = ["1"]
+    audio["album"] = ["Artwork Album"]
+    audio.save()
+    _set_flac_pictures(target, *image_payloads)
+
+
+def _artwork_row(db_path: Path):
+    connection = sqlite3.connect(db_path)
+    try:
+        return connection.execute(
+            """
+            SELECT artwork_id, song_id, picture_index, mime_type,
+                   content_sha256
+            FROM album_art_refs
+            ORDER BY album_id
+            """
+        ).fetchall()
+    finally:
+        connection.close()
+
+
+def test_batch5_embedded_artwork_reaches_song_and_album_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    result = _run(scanner.scan_full(root))
+    song = _run(
+        LibraryRepository(str(db_path)).get_song(result.added_song_ids[0])
+    )
+
+    assert song is not None
+    assert song.artwork is not None
+    assert song.artwork.source == "EMBEDDED"
+    assert song.artwork.picture_index == 0
+    assert song.artwork.content_sha256 == hashlib.sha256(
+        b"artwork-a"
+    ).hexdigest()
+    assert _artwork_row(db_path) == [
+        (
+            song.artwork.artwork_id,
+            result.added_song_ids[0],
+            0,
+            "image/png",
+            hashlib.sha256(b"artwork-a").hexdigest(),
+        )
+    ]
+
+
+def test_batch5_removed_preferred_artwork_is_no_longer_a_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+    _set_flac_pictures(target)
+
+    _run(scanner.scan_paths([target]))
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+
+    assert _artwork_row(db_path) == []
+    assert song is not None
+    assert song.artwork is None
+
+
+def test_batch5_removed_preferred_artwork_uses_other_album_artwork(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    song_a = root / "a.flac"
+    song_b = root / "b.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_a,
+        title="Artwork Song A",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_b,
+        title="Artwork Song B",
+        track_number=2,
+        image_payloads=(b"artwork-b",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_paths([song_a]))
+    song_a_id = first.added_song_ids[0]
+    second = _run(scanner.scan_paths([song_b]))
+    song_b_id = second.added_song_ids[0]
+
+    initial_ref = _artwork_row(db_path)
+    assert initial_ref == [
+        (
+            _run(LibraryRepository(str(db_path)).get_song(song_a_id)).artwork.artwork_id,
+            song_a_id,
+            0,
+            "image/png",
+            hashlib.sha256(b"artwork-a").hexdigest(),
+        )
+    ]
+
+    _set_flac_pictures(song_a)
+    _run(scanner.scan_paths([song_a]))
+
+    rows = _artwork_row(db_path)
+    assert rows == [
+        (
+            _run(LibraryRepository(str(db_path)).get_song(song_b_id)).artwork.artwork_id,
+            song_b_id,
+            0,
+            "image/png",
+            hashlib.sha256(b"artwork-b").hexdigest(),
+        )
+    ]
+
+
+def test_batch5_no_valid_album_artwork_leaves_no_stale_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_id = first.added_song_ids[0]
+    _set_flac_pictures(target)
+
+    _run(scanner.scan_paths([target]))
+    assert _artwork_row(db_path) == []
+
+    song = _run(LibraryRepository(str(db_path)).get_song(song_id))
+    assert song is not None
+    assert song.artwork is None
+
+
+def test_batch5_scanning_other_song_does_not_change_valid_preferred_artwork(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    song_a = root / "a.flac"
+    song_b = root / "b.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_a,
+        title="Artwork Song A",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        song_b,
+        title="Artwork Song B",
+        track_number=2,
+        image_payloads=(),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    song_a_id = first.added_song_ids[0]
+    preferred_before = _artwork_row(db_path)
+
+    _run(scanner.scan_paths([song_b]))
+    preferred_after = _artwork_row(db_path)
+
+    assert preferred_after == preferred_before
+    assert preferred_after[0][1] == song_a_id
+
+
+def test_batch5_artwork_content_change_replaces_old_reference(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"artwork-a",),
+    )
+
+    scanner = _scanner(db_path)
+    first = _run(scanner.scan_full(root))
+    old_song = _run(
+        LibraryRepository(str(db_path)).get_song(first.added_song_ids[0])
+    )
+    assert old_song is not None
+    assert old_song.artwork is not None
+    old_artwork_id = old_song.artwork.artwork_id
+
+    _set_flac_pictures(target, b"artwork-b")
+    _run(scanner.scan_paths([target]))
+
+    new_song = _run(
+        LibraryRepository(str(db_path)).get_song(first.added_song_ids[0])
+    )
+    assert new_song is not None
+    assert new_song.artwork is not None
+    assert new_song.artwork.artwork_id != old_artwork_id
+    assert new_song.artwork.content_sha256 == hashlib.sha256(
+        b"artwork-b"
+    ).hexdigest()
+    assert _artwork_row(db_path)[0][0] == new_song.artwork.artwork_id
+
+
+def test_batch5_multiple_pictures_keep_frozen_picture_index_zero(
+    tmp_path: Path,
+    media_fixture_dir: Path,
+) -> None:
+    db_path = tmp_path / "library.db"
+    _run(initialize_database(str(db_path)))
+    root = tmp_path / "library"
+    root.mkdir()
+    target = root / "track.flac"
+    _prepare_artwork_track(
+        media_fixture_dir / "metadata.flac",
+        target,
+        title="Artwork Song",
+        track_number=1,
+        image_payloads=(b"first-picture", b"second-picture"),
+    )
+
+    result = _run(_scanner(db_path).scan_full(root))
+    song = _run(
+        LibraryRepository(str(db_path)).get_song(result.added_song_ids[0])
+    )
+
+    assert song is not None
+    assert song.artwork is not None
+    assert song.artwork.picture_index == 0
+    assert song.artwork.content_sha256 == hashlib.sha256(
+        b"first-picture"
+    ).hexdigest()

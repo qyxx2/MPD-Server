@@ -32,6 +32,27 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _associated_audio_paths(path: Path) -> tuple[Path, ...]:
+    try:
+        entries = path.parent.iterdir()
+    except OSError:
+        return ()
+
+    matches: list[Path] = []
+    for entry in entries:
+        try:
+            if (
+                entry.is_file(follow_symlinks=False)
+                and entry.suffix.casefold() in _SUPPORTED_SUFFIXES
+                and entry.stem == path.stem
+            ):
+                matches.append(entry)
+        except OSError:
+            continue
+
+    return tuple(sorted(matches, key=str))
+
+
 def _identity_key(metadata: ParsedSongMetadata) -> str:
     if metadata.title is None or not metadata.title.strip():
         raise MediaMetadataError("required song title is missing")
@@ -193,11 +214,14 @@ class LibraryScanner:
                         duration=metadata.duration,
                         lyrics=metadata.lyrics,
                         lyrics_format=metadata.lyrics_format,
+                        lyrics_source=metadata.lyrics_source,
+                        lyrics_status=metadata.lyrics_status,
                         bit_depth=metadata.bit_depth,
                         sample_rate_hz=metadata.sample_rate_hz,
                         channel_count=metadata.channel_count,
                         codec=metadata.codec,
                         metadata_status=metadata.metadata_status,
+                        artwork=metadata.artwork,
                         file_size=stat.st_size,
                         file_mtime_ns=stat.st_mtime_ns,
                         content_hash=content_hash,
@@ -246,12 +270,58 @@ class LibraryScanner:
         expanded: list[Path] = []
         for raw_path in paths:
             path = raw_path.resolve()
-            if path.is_dir() and not path.is_symlink():
+            if path.suffix.casefold() == ".lrc":
+                expanded.extend(_associated_audio_paths(path))
+            elif path.is_dir() and not path.is_symlink():
                 files, _ = _walk(path)
                 expanded.extend(files)
             elif path.is_file() and not path.is_symlink():
                 expanded.append(path)
         deduped = {path for path in expanded}
         batch = await self._scan_files(sorted(deduped, key=str))
+        extra_paths: set[Path] = set()
+        for song in batch.songs:
+            if song.song_id is None or song.artwork is not None:
+                continue
+            source_song_id = (
+                await self.repository.get_album_artwork_source_song_id(
+                    song.song_id
+                )
+            )
+            if source_song_id != song.song_id:
+                continue
+            for candidate_song_id, file_uri in (
+                await self.repository.list_song_file_uris_in_album(
+                    song.song_id
+                )
+            ):
+                if candidate_song_id == song.song_id:
+                    continue
+                candidate = Path(file_uri)
+                if candidate in deduped:
+                    continue
+                try:
+                    if candidate.is_file() and not candidate.is_symlink():
+                        extra_paths.add(candidate)
+                except OSError:
+                    continue
+
+        if extra_paths:
+            extra_batch = await self._scan_files(
+                sorted(extra_paths, key=str)
+            )
+            songs_by_uri = {song.file_uri: song for song in batch.songs}
+            songs_by_uri.update(
+                {song.file_uri: song for song in extra_batch.songs}
+            )
+            batch = ScanBatch(
+                songs=tuple(songs_by_uri.values()),
+                unreadable_file_uris=tuple(
+                    sorted(
+                        set(batch.unreadable_file_uris)
+                        | set(extra_batch.unreadable_file_uris)
+                    )
+                ),
+            )
         result = await self.repository.apply_scan_batch(batch)
         return await self._finalize(result)

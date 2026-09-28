@@ -565,6 +565,50 @@ Acceptance:
 - Events occur only after DB success.
 - No WebSocket implementation and no Task 10 configuration dependency.
 
+### Task 3 Corrective Follow-up Final Acceptance (2026-09-28)
+
+The Task 3 corrective follow-up was completed through Batch 1-6 without introducing Task 4 or later production behavior.
+
+Batch verification:
+- Batch 1: Lyrics observability persistence contract hardened. `lyrics`, `lyrics_format`, `lyrics_source`, and `lyrics_status` remain distinguishable through parser → scanner → Song → SQLite → readback.
+- Batch 2: LRC sidecar create/change/delete events rescan the associated supported audio files and refresh persisted lyrics state.
+- Batch 3: The Available Songs repository contract was frozen so callers receive only `AVAILABLE` songs and do not redefine `MISSING` / `UNREADABLE` filtering.
+- Batch 4: Scanner and Repository move-matching semantics were aligned, including exact URI, unique identity, content-hash reuse, ambiguous identity, and missing-candidate behavior.
+- Batch 5: Artwork reference lifecycle was hardened so stale references are replaced deterministically or removed when no valid artwork remains.
+- Batch 6: Final re-acceptance completed after re-running the current HEAD validation suite.
+
+Final validation performed on the current corrective-follow-up HEAD:
+- Task 3 focused tests: 72 passed.
+- Task 2R regression: 24 passed.
+- Task 1R/player regression: 34 passed.
+- Health test: 1 passed.
+- Full `server/tests`: 118 passed.
+- Targeted Task 3 contract regression: 39 passed, 15 deselected.
+- `python -m compileall -q server`: passed.
+- `python -m ruff check server`: passed.
+- Frontend build/typecheck: unaffected; the corrective follow-up contains no `web/` changes.
+
+Scope review:
+- No Task 4 production implementation.
+- No Task 5 production implementation.
+- No Task 6 production implementation.
+- No `config.py`.
+- No WebSocket implementation.
+- No REST API additions.
+- No unrelated architecture refactor.
+
+The corrective follow-up preserves the historical RED checkpoints and records the later GREEN/final acceptance separately. The Task 4 Available Songs dependency contract is now frozen.
+
+Final dependency gate:
+- Task 3 scanner/repository semantics are stable.
+- Lyrics persistence semantics are complete.
+- LRC incremental scan semantics are complete.
+- Available Songs contract is frozen.
+- Move matching semantics are aligned.
+- Artwork reference lifecycle is resolved.
+
+Task 3 corrective follow-up is therefore accepted and the repository is READY FOR TASK 4.
+
 
 ## Task 4：Queue、Playback Context、History、AutoPlay、Playback Service
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS albums (
@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS songs (
     duration REAL,
     lyrics TEXT,
     lyrics_format TEXT,
+    lyrics_source TEXT,
+    lyrics_status TEXT NOT NULL DEFAULT 'missing'
+        CHECK(lyrics_status IN ('available', 'missing', 'read_error')),
     bit_depth INTEGER,
     sample_rate_hz INTEGER,
     channel_count INTEGER,
@@ -285,6 +288,24 @@ def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
         connection.execute("PRAGMA foreign_keys = ON")
 
 
+def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+    connection.execute("BEGIN")
+    try:
+        connection.execute("ALTER TABLE songs ADD COLUMN lyrics_source TEXT")
+        connection.execute(
+            """
+            ALTER TABLE songs
+            ADD COLUMN lyrics_status TEXT NOT NULL DEFAULT 'missing'
+                CHECK(lyrics_status IN ('available', 'missing', 'read_error'))
+            """
+        )
+        connection.execute("PRAGMA user_version = 3")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+
+
 def apply_migrations(connection: sqlite3.Connection) -> None:
     current = connection.execute("PRAGMA user_version").fetchone()[0]
     if current > SCHEMA_VERSION:
@@ -298,3 +319,6 @@ def apply_migrations(connection: sqlite3.Connection) -> None:
         return
     if current == 1:
         _migrate_v1_to_v2(connection)
+        current = 2
+    if current == 2:
+        _migrate_v2_to_v3(connection)

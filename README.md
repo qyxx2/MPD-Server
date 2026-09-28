@@ -2,17 +2,39 @@
 
 Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 
-当前 `main` 已完成 Task 0、Task 1、Task 1R、Task 2 和 Task 2R 的基础能力建设。现阶段重点是服务端分层、MPD 0.23.5 传输契约以及 SQLite 曲库持久化与 Reconciliation 前置硬化；完整的播放业务、REST API、WebSocket、Web 播放器和 NAS 发布流程仍按实施计划继续推进。
+当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R，以及 Task 3（含 corrective follow-up）。Task 3 基础实现已通过原计划的 Task 3 验收并合入 `main`，随后审计发现的跨层契约缺口已在 corrective follow-up 中全部修复并完成最终验收；Task 4 可依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始，但 Task 4 本身尚未实现。
 
 ## 当前实现状态
 
-- Task 0：工程骨架、Vue/Vite、开发/生产 Docker Compose、生产静态文件托管与统一 Makefile 入口。
-- Task 1：PlayerPort、确定性的 Mock MPD、MPD TCP 协议解析、真实 MPD 0.23.5 Adapter，以及 `MPDCapabilities` / `VerifiedPlayerPort` 能力边界。
-- Task 1R：补齐 MPD Queue、Output、Stats、Database Update Status 传输契约，并已针对目标 MPD 0.23.5 完成真实运行时能力验证。
-- Task 2：SQLite 数据库、Library / Playlist / Favorites / History Repository，以及事务和关键写入串行化。
-- Task 2R：Schema v2、Song 文件签名与可用性状态、嵌入式 Artwork 引用、Song 候选匹配和 atomic scan-batch persistence；Missing / Unreadable 状态不会删除 Song 行或破坏 Playlist / Favorites / History 引用。
-- 真实 MPD 环境：已在 Synology DS920 / DSM 7.1.1 的 MPD 0.23.5 上完成能力探针，并记录于 `docs/mpd-0.23.5-capabilities.md`。
-- 下一阶段：Task 3 开始实现媒体元数据、歌词、曲库扫描与监听；随后按依赖顺序推进 Queue/AutoPlay/Playback Service、REST API、Output、WebSocket、Web/PWA、配置与 NAS 部署。
+| Task | 当前状态 | 说明 |
+|---|---|---|
+| Task 0 | 已完成 | 工程骨架、Vue/Vite、开发/生产 Docker Compose、生产静态文件托管与统一 Makefile 入口。 |
+| Task 1 | 已完成 | PlayerPort、确定性的 Mock MPD、MPD TCP 协议解析、真实 MPD 0.23.5 Adapter，以及 `MPDCapabilities` / `VerifiedPlayerPort` 能力边界。 |
+| Task 1R | 已完成 | 补齐 MPD Queue、Output、Stats、Database Update Status 传输契约，并已针对目标 MPD 0.23.5 完成真实运行时验证。 |
+| Task 2 | 已完成 | SQLite 数据库、Library / Playlist / Favorites / History Repository，以及事务和关键写入串行化。 |
+| Task 2R | 已完成 | Schema v2、Song 文件签名与可用性状态、嵌入式 Artwork 引用、Song 候选匹配和 atomic scan-batch persistence；Missing / Unreadable 不删除 Song 行，也不破坏 Playlist / Favorites / History 引用。 |
+| Task 3 | 已完成 corrective follow-up | 媒体元数据、歌词、扫描器、watcher、scheduler、domain event，以及歌词持久化、LRC 增量扫描、Available Songs contract、move matching、Artwork reference lifecycle 修复均已完成最终验收。 |
+| Task 4 | 未开始 | 依赖 Task 3 corrective follow-up 完成；Queue、Playback Context、AutoPlay、Playback Service 尚未实现。 |
+| Task 5 | 未开始 | Collection、Library/Playlist Service、REST API 尚未实现。 |
+| Task 6 | 未开始 | WebSocket 与完整状态恢复尚未实现。 |
+| Task 7 | 未开始 | Output Manager 与 MPD About 尚未实现。 |
+| Task 8 | 未开始 | Web/PWA 状态层与播放器尚未实现。 |
+| Task 9 | 未开始 | Web Queue、Library、Playlist、Search、Favorites、Settings 尚未实现。 |
+| Task 10 | 未开始 | 配置、备份、日志、健康检查尚未实现。 |
+| Task 11 | 未开始 | NAS update.sh 与生产部署流程尚未实现。 |
+| Task 12 | 未开始 | 真实 NAS/MPD 最终验收与 v0.1.0 尚未开始。 |
+
+真实 MPD 环境：已在 Synology DS920 / DSM 7.1.1 的 MPD 0.23.5 上完成能力探针，并记录于 `docs/mpd-0.23.5-capabilities.md`。
+
+### Task 3 Corrective Follow-up
+
+Task 3 corrective follow-up 已完成并合并到 `main`，执行顺序为：
+
+`Batch 0 → Batch 1 → Batch 2 → Batch 3 → Batch 4 → Batch 5 → Batch 6`
+
+完成条件包括：跨层契约问题全部关闭；新增测试遵循 RED → GREEN；Task 3 focused tests、Task 2R regression、全局 Python tests、compileall、Ruff 通过；diff 无越界修改；Plan 有独立 corrective 记录；以及 Task 4 所需的 Available Songs contract 已冻结。
+
+Task 3 corrective follow-up 已完成最终验收；Task 4 可以依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始，但 Task 4 本身尚未实现。
 
 ## 本地检查
 

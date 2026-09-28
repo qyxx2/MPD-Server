@@ -19,15 +19,15 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def test_fresh_database_is_schema_v2_with_reconciliation_and_artwork_tables(tmp_path):
+def test_fresh_database_is_schema_v3_with_reconciliation_and_artwork_tables(tmp_path):
     path = tmp_path / "library.db"
 
     run(initialize_database(str(path)))
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
-        assert SCHEMA_VERSION == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert SCHEMA_VERSION == 3
 
         song_columns = {
             row[1]
@@ -39,6 +39,8 @@ def test_fresh_database_is_schema_v2_with_reconciliation_and_artwork_tables(tmp_
             "content_hash",
             "availability_status",
             "last_seen_at",
+            "lyrics_source",
+            "lyrics_status",
         }.issubset(song_columns)
 
         tables = {
@@ -71,7 +73,7 @@ def test_fresh_database_is_schema_v2_with_reconciliation_and_artwork_tables(tmp_
         connection.close()
 
 
-def test_v1_to_v2_migration_preserves_song_playlist_favorite_history_data(tmp_path):
+def test_v1_to_v3_migration_preserves_song_playlist_favorite_history_data(tmp_path):
     path = tmp_path / "library.db"
 
     connection = sqlite3.connect(path)
@@ -174,9 +176,10 @@ def test_v1_to_v2_migration_preserves_song_playlist_favorite_history_data(tmp_pa
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
         assert connection.execute(
-            "SELECT title, file_uri, identity_key, metadata_status, availability_status "
+            "SELECT title, file_uri, identity_key, metadata_status, "
+            "availability_status, lyrics_source, lyrics_status "
             "FROM songs WHERE song_id = 'song-1'"
         ).fetchone() == (
             "Legacy",
@@ -184,6 +187,8 @@ def test_v1_to_v2_migration_preserves_song_playlist_favorite_history_data(tmp_pa
             "identity-1",
             "OK",
             "AVAILABLE",
+            None,
+            "missing",
         )
         assert connection.execute(
             "SELECT playlist_id, song_id, position FROM playlist_items"
@@ -375,6 +380,7 @@ def test_apply_scan_batch_performs_atomic_insert_update_move_missing_and_unreada
             ScanBatch(
                 songs=(
                     Song(
+                        song_id="song-1",
                         title="Moved Updated",
                         file_uri="music/new.flac",
                         identity_key="identity-1",
@@ -511,3 +517,82 @@ def test_missing_or_unreadable_song_rows_keep_playlist_favorite_history_referenc
     assert run(playlists.list_song_ids(playlist.playlist_id)) == ["song-1", "song-2"]
     assert run(playlists.list_favorite_song_ids()) == ["song-2", "song-1"]
     assert len(run(history.list_history())) == 1
+
+
+@pytest.mark.parametrize(
+    ("lyrics", "lyrics_format", "lyrics_source", "lyrics_status"),
+    [
+        (
+            "[00:00.00] line",
+            "lrc",
+            "sidecar",
+            "available",
+        ),
+        (
+            "embedded line",
+            "text",
+            "embedded",
+            "available",
+        ),
+        (
+            "embedded fallback",
+            "text",
+            "embedded",
+            "read_error",
+        ),
+        (
+            None,
+            None,
+            None,
+            "missing",
+        ),
+    ],
+)
+def test_batch1_lyrics_observability_fields_round_trip(
+    tmp_path,
+    lyrics,
+    lyrics_format,
+    lyrics_source,
+    lyrics_status,
+):
+    path = tmp_path / "library.db"
+    run(initialize_database(str(path)))
+    repository = LibraryRepository(str(path))
+
+    song = Song(
+        song_id="song-lyrics",
+        title="Lyrics Track",
+        file_uri="music/lyrics.flac",
+        lyrics=lyrics,
+        lyrics_format=lyrics_format,
+        lyrics_source=lyrics_source,
+        lyrics_status=lyrics_status,
+    )
+
+    saved = run(repository.upsert_song(song))
+    restored = run(repository.get_song("song-lyrics"))
+
+    assert saved.lyrics_source == lyrics_source
+    assert saved.lyrics_status == lyrics_status
+    assert restored is not None
+    assert restored.lyrics == lyrics
+    assert restored.lyrics_format == lyrics_format
+    assert restored.lyrics_source == lyrics_source
+    assert restored.lyrics_status == lyrics_status
+
+
+def test_batch1_schema_contains_lyrics_observability_columns(tmp_path):
+    path = tmp_path / "library.db"
+
+    run(initialize_database(str(path)))
+
+    connection = sqlite3.connect(path)
+    try:
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(songs)")
+        }
+        assert {"lyrics_source", "lyrics_status"}.issubset(columns)
+        assert connection.execute("PRAGMA user_version").fetchone()[0] >= 3
+    finally:
+        connection.close()
