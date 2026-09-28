@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 
-当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R，以及 Task 3 的基础实现。Task 3 基础实现已通过原计划的 Task 3 验收并合入 `main`，但随后审计发现若干跨层契约缺口；当前 `feature/task-3-corrective-followup` 专用于这些独立修复，Task 3 corrective follow-up 已完成最终验收；Task 4 现在可以依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始。Task 4 本身尚未实现。
+当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R，以及 Task 3（含 corrective follow-up）。Task 3 基础实现已通过原计划的 Task 3 验收并合入 `main`，随后审计发现的跨层契约缺口已在 corrective follow-up 中全部修复并完成最终验收；Task 4 可依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始，但 Task 4 本身尚未实现。
 
 ## 当前实现状态
 
@@ -28,13 +28,13 @@ Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 
 ### Task 3 Corrective Follow-up
 
-Task 3 corrective follow-up 已按以下顺序完成：
+Task 3 corrective follow-up 已完成并合并到 `main`，执行顺序为：
 
 `Batch 0 → Batch 1 → Batch 2 → Batch 3 → Batch 4 → Batch 5 → Batch 6`
 
 完成条件包括：跨层契约问题全部关闭；新增测试遵循 RED → GREEN；Task 3 focused tests、Task 2R regression、全局 Python tests、compileall、Ruff 通过；diff 无越界修改；Plan 有独立 corrective 记录；以及 Task 4 所需的 Available Songs contract 已冻结。
 
-在上述条件全部满足前，`main` 不应进入 Task 4。
+Task 3 corrective follow-up 已完成最终验收；Task 4 可以依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始，但 Task 4 本身尚未实现。
 
 ## 本地检查
 
