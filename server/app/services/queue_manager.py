@@ -73,10 +73,22 @@ class QueueManager:
         return item
 
     async def play_next(self, song_id: str) -> QueueItem:
-        return await self.queue_repository.play_next(song_id)
+        state = await self.playback_state_repository.get_state()
+        return await self.queue_repository.play_next(
+            song_id,
+            playback_context_id=(
+                state.playback_context_id if state is not None else None
+            ),
+        )
 
     async def add_to_queue(self, song_id: str) -> QueueItem:
-        return await self.queue_repository.add_to_queue(song_id)
+        state = await self.playback_state_repository.get_state()
+        return await self.queue_repository.add_to_queue(
+            song_id,
+            playback_context_id=(
+                state.playback_context_id if state is not None else None
+            ),
+        )
 
     async def reorder(
         self,

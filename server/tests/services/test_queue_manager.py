@@ -124,17 +124,20 @@ def test_queue_play_now_preserves_prior_pending_items_after_selected_song(
 def test_play_next_inserts_immediately_after_current_and_add_to_queue_appends(
     components,
 ):
-    manager, queue, _, _ = components
+    manager, queue, state, _ = components
 
-    run(manager.start_track("a"))
+    context = run(manager.start_track("a"))
     first = run(manager.add_to_queue("b"))
     next_item = run(manager.play_next("c"))
     appended = run(manager.add_to_queue("d"))
 
     assert next_item.source == "MANUAL"
     assert next_item.position == 1
+    assert next_item.playback_context_id == context.context_id
+    assert appended.playback_context_id == context.context_id
     assert first.position != appended.position
     assert up_next_song_ids(queue) == ["c", "b", "d"]
+    assert run(state.get_state()).playback_context_id == context.context_id
 
 
 def test_reorder_changes_only_up_next_order(components):
