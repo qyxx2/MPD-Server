@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 
-当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R，以及 Task 3 的基础实现。Task 3 基础实现已通过原计划的 Task 3 验收并合入 `main`，但随后审计发现若干跨层契约缺口；当前 `feature/task-3-corrective-followup` 专用于这些独立修复，在 corrective follow-up 验收完成前，不进入 Task 4。
+当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R，以及 Task 3 的基础实现。Task 3 基础实现已通过原计划的 Task 3 验收并合入 `main`，但随后审计发现若干跨层契约缺口；当前 `feature/task-3-corrective-followup` 专用于这些独立修复，Task 3 corrective follow-up 已完成最终验收；Task 4 现在可以依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始。Task 4 本身尚未实现。
 
 ## 当前实现状态
 
@@ -13,7 +13,7 @@ Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 | Task 1R | 已完成 | 补齐 MPD Queue、Output、Stats、Database Update Status 传输契约，并已针对目标 MPD 0.23.5 完成真实运行时验证。 |
 | Task 2 | 已完成 | SQLite 数据库、Library / Playlist / Favorites / History Repository，以及事务和关键写入串行化。 |
 | Task 2R | 已完成 | Schema v2、Song 文件签名与可用性状态、嵌入式 Artwork 引用、Song 候选匹配和 atomic scan-batch persistence；Missing / Unreadable 不删除 Song 行，也不破坏 Playlist / Favorites / History 引用。 |
-| Task 3 | 基础实现已完成；corrective follow-up 未完成 | 媒体元数据、歌词、扫描器、watcher、scheduler、domain event 已合入 `main`。当前待修复并重新验收：歌词状态持久化、LRC 增量扫描、Available Songs contract、move matching 一致性、Artwork reference 生命周期。 |
+| Task 3 | 已完成 corrective follow-up | 媒体元数据、歌词、扫描器、watcher、scheduler、domain event，以及歌词持久化、LRC 增量扫描、Available Songs contract、move matching、Artwork reference lifecycle 修复均已完成最终验收。 |
 | Task 4 | 未开始 | 依赖 Task 3 corrective follow-up 完成；Queue、Playback Context、AutoPlay、Playback Service 尚未实现。 |
 | Task 5 | 未开始 | Collection、Library/Playlist Service、REST API 尚未实现。 |
 | Task 6 | 未开始 | WebSocket 与完整状态恢复尚未实现。 |
@@ -28,7 +28,7 @@ Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 
 ### Task 3 Corrective Follow-up
 
-当前修复分支的执行顺序固定为：
+Task 3 corrective follow-up 已按以下顺序完成：
 
 `Batch 0 → Batch 1 → Batch 2 → Batch 3 → Batch 4 → Batch 5 → Batch 6`
 
