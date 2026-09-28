@@ -453,6 +453,12 @@ class _ScannerFakeRepository:
             if song.content_hash == content_hash
         ]
 
+    async def get_album_artwork_source_song_id(self, song_id: str):
+        return None
+
+    async def list_song_file_uris_in_album(self, song_id: str):
+        return []
+
     async def list_songs_in_root(self, root_uri_prefix: str):
         return [
             song
