@@ -58,6 +58,37 @@ def test_batch4_repository_does_not_reclassify_live_identity_candidate_as_move(
     assert run(repository.get_song("song-live")).file_uri == "music/old.flac"
 
 
+def test_batch4_repository_reuses_unique_missing_identity_candidate(repository):
+    run(
+        repository.upsert_song(
+            Song(
+                song_id="song-missing",
+                title="Moved",
+                file_uri="music/old.flac",
+                identity_key="identity-x",
+                availability_status="MISSING",
+            )
+        )
+    )
+
+    result = run(
+        repository.apply_scan_batch(
+            ScanBatch(
+                songs=(
+                    Song(
+                        title="Moved",
+                        file_uri="music/new.flac",
+                        identity_key="identity-x",
+                    ),
+                )
+            )
+        )
+    )
+
+    assert result.updated_song_ids == ("song-missing",)
+    assert result.moved_song_ids == ("song-missing",)
+
+
 def test_batch4_repository_persists_explicit_safe_move_identity(repository):
     run(
         repository.upsert_song(
@@ -129,6 +160,45 @@ def test_batch4_repository_ambiguous_identity_creates_new_song(repository):
     assert result.updated_song_ids == ()
     assert result.moved_song_ids == ()
     assert result.added_song_ids[0] not in {"song-a", "song-b"}
+
+
+def test_batch4_repository_identity_ambiguity_is_not_hidden_by_missing_status(
+    repository,
+):
+    for song_id, file_uri, status in (
+        ("song-available", "music/available.flac", "AVAILABLE"),
+        ("song-missing", "music/missing.flac", "MISSING"),
+    ):
+        run(
+            repository.upsert_song(
+                Song(
+                    song_id=song_id,
+                    title="Same",
+                    file_uri=file_uri,
+                    identity_key="identity-x",
+                    availability_status=status,
+                )
+            )
+        )
+
+    result = run(
+        repository.apply_scan_batch(
+            ScanBatch(
+                songs=(
+                    Song(
+                        title="Same",
+                        file_uri="music/new.flac",
+                        identity_key="identity-x",
+                    ),
+                )
+            )
+        )
+    )
+
+    assert len(result.added_song_ids) == 1
+    assert result.added_song_ids[0] not in {"song-available", "song-missing"}
+    assert result.updated_song_ids == ()
+    assert result.moved_song_ids == ()
 
 
 def test_batch4_repository_ambiguous_content_hash_creates_new_song(repository):
@@ -249,7 +319,9 @@ def test_batch4_scanner_reuses_unique_missing_identity_candidate(
         )
     )
 
-    monkeypatch.setattr(scanner_module, "parse_media_file", lambda _path: identity_metadata)
+    monkeypatch.setattr(
+        scanner_module, "parse_media_file", lambda _path: identity_metadata
+    )
 
     result = run(LibraryScanner(repository).scan_paths([target]))
 
@@ -292,7 +364,9 @@ def test_batch4_scanner_reuses_unique_missing_content_hash_candidate(
     from server.app.services import library_scanner as scanner_module
 
     metadata = ParsedSongMetadata(title="New", artists=("Artist",))
-    monkeypatch.setattr(scanner_module, "parse_media_file", lambda _path: metadata)
+    monkeypatch.setattr(
+        scanner_module, "parse_media_file", lambda _path: metadata
+    )
 
     result = run(LibraryScanner(repository).scan_paths([target]))
 
@@ -322,7 +396,10 @@ def test_batch4_scanner_live_copy_stays_a_new_song_through_repository(
 
     metadata = ParsedSongMetadata(title="Same", artists=("Artist",))
     import server.app.services.library_scanner as scanner_module
-    monkeypatch.setattr(scanner_module, "parse_media_file", lambda _path: metadata)
+
+    monkeypatch.setattr(
+        scanner_module, "parse_media_file", lambda _path: metadata
+    )
 
     first = run(LibraryScanner(repository).scan_paths([old_path]))
     live_id = first.added_song_ids[0]
