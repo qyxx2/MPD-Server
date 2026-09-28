@@ -484,7 +484,7 @@ class LibraryRepository:
                             for row in candidates
                             if row[0] not in reserved_ids
                         ]
-                        if len(candidates) == 1:
+                        if len(candidates) == 1 and candidates[0][2] == "MISSING":
                             song_id, old_uri = candidates[0][0], candidates[0][1]
 
                     if song_id is None and song.content_hash is not None:
