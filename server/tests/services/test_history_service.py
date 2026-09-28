@@ -42,7 +42,7 @@ def components(tmp_path):
 
 
 def test_played_view_and_persistent_history_are_independent(components):
-    queue, history, service = components
+    queue, _history, service = components
     started_at = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     switched_at = datetime(2026, 1, 1, 10, 3, tzinfo=timezone.utc)
 
@@ -76,7 +76,7 @@ def test_played_view_and_persistent_history_are_independent(components):
 
 
 def test_persistent_history_does_not_create_a_played_queue_entry(components):
-    queue, history, service = components
+    _queue, history, service = components
     started_at = datetime(2026, 1, 1, 11, 0, tzinfo=timezone.utc)
     ended_at = datetime(2026, 1, 1, 11, 4, tzinfo=timezone.utc)
 
