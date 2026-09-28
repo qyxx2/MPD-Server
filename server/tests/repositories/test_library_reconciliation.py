@@ -380,6 +380,7 @@ def test_apply_scan_batch_performs_atomic_insert_update_move_missing_and_unreada
             ScanBatch(
                 songs=(
                     Song(
+                        song_id="song-1",
                         title="Moved Updated",
                         file_uri="music/new.flac",
                         identity_key="identity-1",
@@ -516,7 +517,6 @@ def test_missing_or_unreadable_song_rows_keep_playlist_favorite_history_referenc
     assert run(playlists.list_song_ids(playlist.playlist_id)) == ["song-1", "song-2"]
     assert run(playlists.list_favorite_song_ids()) == ["song-2", "song-1"]
     assert len(run(history.list_history())) == 1
-
 
 
 @pytest.mark.parametrize(
