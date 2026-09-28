@@ -53,7 +53,7 @@ def test_batch2_watch_lrc_event_rescans_associated_audio(
     root = tmp_path / "library"
     root.mkdir()
     target = root / "track.mp3"
-    copy2(media_fixture_dir / "no_lyrics.mp3", target)
+    copy2(media_fixture_dir / "sidecar.mp3", target)
 
     scanner = LibraryScanner(LibraryRepository(str(db_path)))
     first = _run(scanner.scan_full(root))

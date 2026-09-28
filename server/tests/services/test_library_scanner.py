@@ -727,7 +727,7 @@ def test_batch2_lrc_create_and_change_rescans_associated_audio(
     root = tmp_path / "library"
     root.mkdir()
     target = root / "track.mp3"
-    copy2(media_fixture_dir / "no_lyrics.mp3", target)
+    copy2(media_fixture_dir / "sidecar.mp3", target)
 
     scanner = _scanner(db_path)
     first = _run(scanner.scan_full(root))
@@ -827,7 +827,7 @@ def test_batch2_lrc_with_flac_and_mp3_same_stem_rescans_both(
     mp3 = root / "track.mp3"
     lrc = root / "track.lrc"
     copy2(media_fixture_dir / "metadata.flac", flac)
-    copy2(media_fixture_dir / "no_lyrics.mp3", mp3)
+    copy2(media_fixture_dir / "sidecar.mp3", mp3)
 
     scanner = _scanner(db_path)
     first = _run(scanner.scan_full(root))
@@ -871,7 +871,7 @@ def test_batch2_full_scan_ignores_lrc_as_independent_song(
     _run(initialize_database(str(db_path)))
     root = tmp_path / "library"
     root.mkdir()
-    copy2(media_fixture_dir / "no_lyrics.mp3", root / "track.mp3")
+    copy2(media_fixture_dir / "sidecar.mp3", root / "track.mp3")
     (root / "track.lrc").write_text(
         "[00:00.00] full scan sidecar\\n",
         encoding="utf-8",
@@ -886,13 +886,20 @@ def test_batch2_deleted_lrc_recomputes_to_missing_when_no_embedded_lyrics(
     tmp_path: Path,
     media_fixture_dir: Path,
 ) -> None:
+    from mutagen.mp3 import MP3
+
     db_path = tmp_path / "library.db"
     _run(initialize_database(str(db_path)))
     root = tmp_path / "library"
     root.mkdir()
     target = root / "track.mp3"
     lrc = root / "track.lrc"
-    copy2(media_fixture_dir / "no_lyrics.mp3", target)
+    copy2(media_fixture_dir / "sidecar.mp3", target)
+    audio = MP3(target)
+    assert audio.tags is not None
+    audio.tags.delall("USLT")
+    audio.save()
+
     lrc.write_text("[00:00.00] temporary lyrics\\n", encoding="utf-8")
 
     scanner = _scanner(db_path)
