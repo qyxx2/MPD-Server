@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from shutil import copy2
 
 from server.app.models.library import ScanResult
+from server.app.repositories.database import initialize_database
+from server.app.repositories.library_repository import LibraryRepository
+from server.app.services.library_scanner import LibraryScanner
 
 
 def _run(coro):
@@ -51,7 +55,7 @@ def test_batch2_watch_lrc_event_rescans_associated_audio(
     target = root / "track.mp3"
     copy2(media_fixture_dir / "no_lyrics.mp3", target)
 
-    scanner = _scanner(db_path)
+    scanner = LibraryScanner(LibraryRepository(str(db_path)))
     first = _run(scanner.scan_full(root))
     assert len(first.added_song_ids) == 1
 
