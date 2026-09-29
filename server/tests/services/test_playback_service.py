@@ -270,7 +270,7 @@ def test_next_failure_does_not_advance_service_state(components):
     before = run(components["state"].get_state())
     assert before is not None
 
-    player.fail_next("next", "injected next failure")
+    player.fail_next("play", "injected next failure")
     with pytest.raises(PlayerCommandError, match="injected next failure"):
         run(service.next())
 
