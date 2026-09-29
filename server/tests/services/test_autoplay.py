@@ -187,7 +187,6 @@ class CoordinatedQueueRepository(QueueRepository):
         super().__init__(path)
         self.first_autoplay_started = first_autoplay_started
         self.release_first_autoplay = release_first_autoplay
-        self._paused_once = False
 
     async def add_autoplay_batch(
         self,
@@ -197,18 +196,14 @@ class CoordinatedQueueRepository(QueueRepository):
         max_items: int = 5,
         allow_current_repeat: bool = False,
     ):
-        items = await super().add_autoplay_batch(
+        self.first_autoplay_started.set()
+        await self.release_first_autoplay.wait()
+        return await super().add_autoplay_batch(
             song_ids,
             playback_context_id=playback_context_id,
             max_items=max_items,
             allow_current_repeat=allow_current_repeat,
         )
-        if items and not self._paused_once:
-            self._paused_once = True
-            self.first_autoplay_started.set()
-            await self.release_first_autoplay.wait()
-        return items
-
 
 def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
     library, _queue, _manager = components
@@ -239,5 +234,5 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
 
     assert manual.source == "MANUAL"
     assert [item.song_id for item in generated] == ["b", "c", "d", "e", "f"]
-    assert [item.song_id for item in items] == ["b", "j", "c", "d", "e", "f"]
-    assert items[1].source == "MANUAL"
+    assert [item.song_id for item in items] == ["b", "c", "d", "e", "f", "j"]
+    assert items[-1].source == "MANUAL"
