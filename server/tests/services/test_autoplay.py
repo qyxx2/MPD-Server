@@ -80,7 +80,7 @@ def test_autoplay_refill_uses_playback_context_before_global_available_candidate
     assert [item.song_id for item in up_next(queue)] == ["d", "c", "b", "e", "f"]
 
 
-def test_autoplay_does_nothing_when_up_next_is_above_low_watermark(components):
+def test_autoplay_does_nothing_when_up_next_is_at_low_watermark(components):
     library, queue, manager = components
     seed_songs(library, "a", "b", "c", "d", "e", "f", "g")
     run(manager.start_track("a"))
@@ -95,7 +95,7 @@ def test_autoplay_does_nothing_when_up_next_is_above_low_watermark(components):
 
 def test_autoplay_refills_five_when_up_next_is_below_low_watermark(components):
     library, queue, manager = components
-    seed_songs(library, "a", "b", "c", "d", "e", "f", "g")
+    seed_songs(library, "a", "b", "c", "d", "e", "f", "g", "h", "i")
     run(manager.start_track("a"))
     for song_id in "bc":
         run(manager.add_to_queue(song_id))
@@ -103,7 +103,16 @@ def test_autoplay_refills_five_when_up_next_is_below_low_watermark(components):
     generated = run(AutoPlay(queue, library).refill(current_context()))
 
     assert len(generated) == 5
-    assert [item.song_id for item in up_next(queue)] == ["b", "c", "d", "e", "f", "g", "??"][:0]
+    assert [item.song_id for item in generated] == ["d", "e", "f", "g", "h"]
+    assert [item.song_id for item in up_next(queue)] == [
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "g",
+        "h",
+    ]
 
 
 def test_autoplay_never_removes_or_reorders_manual_items(components):
@@ -129,21 +138,15 @@ def test_autoplay_never_removes_or_reorders_manual_items(components):
         "h",
     ]
     assert manual_b.position != manual_c.position
-    assert all(item.source != "MANUAL" or item.queue_item_id in {
-        manual_b.queue_item_id,
-        manual_c.queue_item_id,
-    } for item in items)
+    assert all(
+        item.source != "MANUAL"
+        or item.queue_item_id in {manual_b.queue_item_id, manual_c.queue_item_id}
+        for item in items
+    )
 
 
 def test_autoplay_empty_library_returns_no_items(components):
-    library, queue, manager = components
-    seed_songs(library, "a")
-    run(manager.start_track("a"))
-
-    run(library.apply_scan_batch(__import__("server.app.models.library", fromlist=["ScanBatch"]).ScanBatch(
-        reconciled_root_uri_prefix="music/"
-    )))
-
+    library, queue, _manager = components
     generated = run(AutoPlay(queue, library).refill(current_context()))
 
     assert generated == []
@@ -206,8 +209,8 @@ class CoordinatedQueueRepository(QueueRepository):
 
 
 def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
-    library, _queue, manager = components
-    seed_songs(library, "a", "b", "c", "d", "e", "f", "g", "h")
+    library, _queue, _manager = components
+    seed_songs(library, "a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
     path = library.path
     started = asyncio.Event()
     release = asyncio.Event()
@@ -222,7 +225,7 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
         task = asyncio.create_task(autoplay.refill(current_context()))
         await started.wait()
         manual = await queue.add_to_queue(
-            "h",
+            "j",
             playback_context_id="context-a",
             source="MANUAL",
         )
@@ -233,6 +236,6 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
     manual, generated, items = run(exercise())
 
     assert manual.source == "MANUAL"
-    assert [item.song_id for item in items].count("h") == 1
-    assert items[-1].song_id == "g"
-    assert all(item.source == "AUTOPLAY" for item in generated)
+    assert [item.song_id for item in generated] == ["b", "c", "d", "e", "f"]
+    assert [item.song_id for item in items] == ["b", "j", "c", "d", "e", "f"]
+    assert items[1].source == "MANUAL"
