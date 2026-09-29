@@ -189,6 +189,7 @@ class CoordinatedQueueRepository(QueueRepository):
         super().__init__(path)
         self.first_autoplay_started = first_autoplay_started
         self.release_first_autoplay = release_first_autoplay
+        self.autoplay_attempts = 0
 
     async def add_autoplay_batch(
         self,
@@ -197,14 +198,18 @@ class CoordinatedQueueRepository(QueueRepository):
         playback_context_id: str | None = None,
         max_items: int = 5,
         allow_current_repeat: bool = False,
+        expected_revision: int | None = None,
     ):
-        self.first_autoplay_started.set()
-        await self.release_first_autoplay.wait()
+        self.autoplay_attempts += 1
+        if self.autoplay_attempts == 1:
+            self.first_autoplay_started.set()
+            await self.release_first_autoplay.wait()
         return await super().add_autoplay_batch(
             song_ids,
             playback_context_id=playback_context_id,
             max_items=max_items,
             allow_current_repeat=allow_current_repeat,
+            expected_revision=expected_revision,
         )
 
 
@@ -221,7 +226,7 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
     context = run(manager.start_track("a"))
 
     async def exercise():
-        autoplay = AutoPlay(queue, library)
+        autoplay = AutoPlay(queue, library, state)
         task = asyncio.create_task(autoplay.refill(context))
         await started.wait()
         manual = await queue.add_to_queue(
@@ -255,7 +260,7 @@ def test_autoplay_aborts_when_playback_context_changes_during_refill(components)
     old_context = run(manager.start_track("a"))
 
     async def exercise():
-        autoplay = AutoPlay(queue, library)
+        autoplay = AutoPlay(queue, library, state)
         task = asyncio.create_task(autoplay.refill(old_context))
         await started.wait()
         new_context = await queue.start_track(
@@ -279,3 +284,40 @@ def test_autoplay_aborts_when_playback_context_changes_during_refill(components)
         items_by_song["a"].position,
         items_by_song["a"].playback_context_id,
     ) == (-1, old_context.context_id)
+
+
+def test_autoplay_does_not_refill_after_stop(components):
+    library, queue, manager = components
+    seed_songs(library, "a", "b", "c")
+    context = run(manager.start_track("a"))
+    run(manager.stop())
+
+    generated = run(
+        AutoPlay(queue, library, manager.playback_state_repository).refill(
+            context
+        )
+    )
+
+    assert generated == []
+    assert up_next(queue) == []
+
+
+def test_queue_exhaustion_does_not_turn_playback_terminal(components):
+    library, queue, manager = components
+    seed_songs(library, "a", "b", "c", "d")
+    context = run(manager.start_track("a"))
+    run(queue.clear_pending())
+
+    before = run(manager.playback_state_repository.get_state())
+    assert before is not None
+    assert before.state == "PLAYING"
+    assert before.autoplay_enabled is True
+
+    generated = run(
+        AutoPlay(queue, library, manager.playback_state_repository).refill(context)
+    )
+
+    after = run(manager.playback_state_repository.get_state())
+    assert after == before
+    assert [item.song_id for item in generated] == ["b", "c", "d"]
+    assert after.state != "STOPPED"

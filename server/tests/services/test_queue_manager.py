@@ -11,6 +11,8 @@ from server.app.repositories.playback_state_repository import PlaybackStateRepos
 from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import (
     CurrentTrackDeletionError,
+    QueueItemNotFoundError,
+    QueueRevisionConflictError,
     QueueRepository,
 )
 from server.app.services.queue_manager import QueueManager
@@ -255,3 +257,142 @@ def test_save_as_playlist_contains_only_up_next_and_does_not_change_queue(
     assert before_state is not None
     assert before_state.playback_context_id == context.context_id
     assert item_b.song_id == "b"
+
+
+def test_queue_revision_cas_rejects_stale_mutation_without_overwriting_new_queue(
+    components,
+):
+    manager, queue, _, _ = components
+
+    run(manager.start_track("a"))
+    snapshot = run(queue.get_snapshot())
+
+    run(
+        manager.add_to_queue(
+            "b",
+            expected_revision=snapshot.revision,
+        )
+    )
+
+    with pytest.raises(QueueRevisionConflictError) as exc:
+        run(
+            manager.add_to_queue(
+                "c",
+                expected_revision=snapshot.revision,
+            )
+        )
+
+    assert exc.value.expected_revision == snapshot.revision
+    assert exc.value.actual_revision == snapshot.revision + 1
+    assert up_next_song_ids(queue) == ["b"]
+    assert run(queue.get_revision()) == snapshot.revision + 1
+
+
+def test_concurrent_queue_mutations_with_same_revision_allow_only_one_writer(
+    components,
+):
+    manager, queue, _, _ = components
+
+    run(manager.start_track("a"))
+    snapshot = run(queue.get_snapshot())
+
+    async def exercise():
+        return await asyncio.gather(
+            manager.add_to_queue("b", expected_revision=snapshot.revision),
+            manager.add_to_queue("c", expected_revision=snapshot.revision),
+            return_exceptions=True,
+        )
+
+    results = run(exercise())
+
+    successes = [result for result in results if not isinstance(result, Exception)]
+    conflicts = [
+        result
+        for result in results
+        if isinstance(result, QueueRevisionConflictError)
+    ]
+    unexpected = [
+        result
+        for result in results
+        if isinstance(result, Exception)
+        and not isinstance(result, QueueRevisionConflictError)
+    ]
+
+    assert len(successes) == 1
+    assert len(conflicts) == 1
+    assert unexpected == []
+    assert len(up_next_song_ids(queue)) == 1
+
+
+def test_pause_preserves_autoplay_and_playback_session(components):
+    manager, _, state, _ = components
+
+    context = run(manager.start_track("a"))
+    paused = run(manager.pause())
+
+    assert paused is not None
+    assert paused.state == "PAUSED"
+    assert paused.song_id == "a"
+    assert paused.playback_context_id == context.context_id
+    assert paused.autoplay_enabled is True
+    assert run(state.get_state()) == paused
+
+
+def test_stop_disables_autoplay_and_keeps_stopped_session(components):
+    manager, _, state, _ = components
+
+    context = run(manager.start_track("a"))
+    stopped = run(manager.stop())
+
+    assert stopped is not None
+    assert stopped.state == "STOPPED"
+    assert stopped.song_id == "a"
+    assert stopped.playback_context_id == context.context_id
+    assert stopped.autoplay_enabled is False
+    assert run(state.get_state()) == stopped
+
+
+def test_pause_does_not_restart_a_stopped_session(components):
+    manager, _, state, _ = components
+
+    run(manager.start_track("a"))
+    stopped = run(manager.stop())
+
+    assert run(manager.pause()) == stopped
+    assert run(state.get_state()) == stopped
+
+
+def test_queue_manager_cas_forwards_expected_revision_to_repository(components):
+    manager, queue, _, _ = components
+
+    run(manager.start_track("a"))
+    revision = run(queue.get_revision())
+
+    item = run(
+        manager.play_next(
+            "b",
+            expected_revision=revision,
+        )
+    )
+
+    assert item.song_id == "b"
+    assert run(queue.get_revision()) == revision + 1
+
+
+def test_queue_manager_maps_missing_items_without_bypassing_repository(
+    components,
+):
+    manager, queue, _, _ = components
+
+    run(manager.start_track("a"))
+    revision = run(queue.get_revision())
+
+    with pytest.raises(QueueItemNotFoundError):
+        run(
+            manager.delete(
+                "missing",
+                expected_revision=revision,
+            )
+        )
+
+    assert run(queue.get_revision()) == revision
