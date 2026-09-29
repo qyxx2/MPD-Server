@@ -12,8 +12,8 @@ from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import (
     CurrentTrackDeletionError,
     QueueItemNotFoundError,
-    QueueRevisionConflictError,
     QueueRepository,
+    QueueRevisionConflictError,
 )
 from server.app.services.queue_manager import QueueManager
 
