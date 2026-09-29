@@ -76,7 +76,9 @@ def test_autoplay_refill_uses_playback_context_before_global_available_candidate
 
     assert [item.song_id for item in generated] == ["d", "c", "b", "e", "f"]
     assert all(item.source == "AUTOPLAY" for item in generated)
-    assert all(item.playback_context_id == context.context_id for item in generated)
+    assert all(
+        item.playback_context_id == context.context_id for item in generated
+    )
     assert [item.song_id for item in up_next(queue)] == ["d", "c", "b", "e", "f"]
 
 
@@ -204,6 +206,7 @@ class CoordinatedQueueRepository(QueueRepository):
             max_items=max_items,
             allow_current_repeat=allow_current_repeat,
         )
+
 
 def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
     library, _queue, _manager = components
