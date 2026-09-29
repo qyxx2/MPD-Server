@@ -46,8 +46,8 @@ class QueueRepository:
             FROM queue_items
             ORDER BY
                 CASE
-                    WHEN position = 0 THEN 0
-                    WHEN position < 0 THEN 1
+                    WHEN position < 0 THEN 0
+                    WHEN position = 0 THEN 1
                     ELSE 2
                 END,
                 CASE
@@ -496,7 +496,6 @@ class QueueRepository:
         song_ids: list[str],
         *,
         playback_context_id: str | None = None,
-        expected_current_context_id: str | None = None,
         max_items: int = 5,
         allow_current_repeat: bool = False,
     ) -> list[QueueItem]:
@@ -527,7 +526,11 @@ class QueueRepository:
                 ),
                 None,
             )
-            if expected_current_context_id != current_context_id:
+            if (
+                playback_context_id is not None
+                and current_context_id is not None
+                and current_context_id != playback_context_id
+            ):
                 return []
             pending_candidates: list[str] = []
             seen_candidates: set[str] = set()

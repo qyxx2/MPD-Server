@@ -23,14 +23,6 @@ class AutoPlay:
             return []
 
         queue_items = await self.queue_repository.list_items()
-        current_context_id = next(
-            (
-                item.playback_context_id
-                for item in queue_items
-                if item.position == 0
-            ),
-            None,
-        )
         queued_song_ids = {item.song_id for item in queue_items}
         available_songs = await self.library_repository.list_available_songs()
         available_ids = [song.song_id for song in available_songs if song.song_id]
@@ -64,7 +56,6 @@ class AutoPlay:
         return await self.queue_repository.add_autoplay_batch(
             candidates,
             playback_context_id=playback_context.context_id,
-            expected_current_context_id=current_context_id,
             max_items=self.REFILL_COUNT,
             allow_current_repeat=bool(
                 current_song_id is not None
