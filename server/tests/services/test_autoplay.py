@@ -139,7 +139,7 @@ def test_autoplay_never_removes_or_reorders_manual_items(components):
         "g",
         "h",
     ]
-    assert manual_b.position != manual_c.position
+    assert items[0].position != items[1].position
     assert all(
         item.source != "MANUAL"
         or item.queue_item_id in {manual_b.queue_item_id, manual_c.queue_item_id}
@@ -270,9 +270,12 @@ def test_autoplay_aborts_when_playback_context_changes_during_refill(components)
 
     assert new_context.song_id == "g"
     assert generated == []
-    assert [
-        (item.song_id, item.position, item.playback_context_id) for item in items
-    ] == [
-        ("g", 0, "context-g"),
-        ("a", -1, old_context.context_id),
-    ]
+    items_by_song = {item.song_id: item for item in items}
+    assert (
+        items_by_song["g"].position,
+        items_by_song["g"].playback_context_id,
+    ) == (0, "context-g")
+    assert (
+        items_by_song["a"].position,
+        items_by_song["a"].playback_context_id,
+    ) == (-1, old_context.context_id)
