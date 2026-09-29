@@ -25,6 +25,11 @@ class QueueItem(BaseModel):
     playback_context_id: str | None = None
 
 
+class QueueSnapshot(BaseModel):
+    revision: int
+    items: tuple[QueueItem, ...]
+
+
 class PlaybackState(BaseModel):
     song_id: str | None = None
     state: PlaybackStateValue

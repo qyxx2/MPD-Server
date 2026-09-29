@@ -25,7 +25,12 @@ class QueueManager:
         self.playback_state_repository = playback_state_repository
         self.playlist_repository = playlist_repository
 
-    async def start_track(self, song_id: str) -> PlaybackContext:
+    async def start_track(
+        self,
+        song_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> PlaybackContext:
         context = PlaybackContext(
             context_id=str(uuid.uuid4()),
             source_type="TRACK",
@@ -35,6 +40,7 @@ class QueueManager:
         await self.queue_repository.start_track(
             song_id=song_id,
             playback_context_id=context.context_id,
+            expected_revision=expected_revision,
         )
         await self.playback_state_repository.save(
             PlaybackState(
@@ -48,9 +54,17 @@ class QueueManager:
         )
         return context
 
-    async def play_now(self, queue_item_id: str) -> QueueItem:
+    async def play_now(
+        self,
+        queue_item_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> QueueItem:
         current_state = await self.playback_state_repository.get_state()
-        item = await self.queue_repository.play_now(queue_item_id)
+        item = await self.queue_repository.play_now(
+            queue_item_id,
+            expected_revision=expected_revision,
+        )
         await self.playback_state_repository.save(
             PlaybackState(
                 song_id=item.song_id,
@@ -72,41 +86,64 @@ class QueueManager:
         )
         return item
 
-    async def play_next(self, song_id: str) -> QueueItem:
+    async def play_next(
+        self,
+        song_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> QueueItem:
         state = await self.playback_state_repository.get_state()
         return await self.queue_repository.play_next(
             song_id,
             playback_context_id=(
                 state.playback_context_id if state is not None else None
             ),
+            expected_revision=expected_revision,
         )
 
-    async def add_to_queue(self, song_id: str) -> QueueItem:
+    async def add_to_queue(
+        self,
+        song_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> QueueItem:
         state = await self.playback_state_repository.get_state()
         return await self.queue_repository.add_to_queue(
             song_id,
             playback_context_id=(
                 state.playback_context_id if state is not None else None
             ),
+            expected_revision=expected_revision,
         )
 
     async def reorder(
         self,
         queue_item_id: str,
         before_queue_item_id: str | None = None,
+        *,
+        expected_revision: int | None = None,
     ) -> list[QueueItem]:
         return await self.queue_repository.reorder(
             queue_item_id,
             before_queue_item_id,
+            expected_revision=expected_revision,
         )
 
-    async def delete(self, queue_item_id: str) -> QueueItem | None:
+    async def delete(
+        self,
+        queue_item_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> QueueItem | None:
         state = await self.playback_state_repository.get_state()
         selected = await self.queue_repository.get_item(queue_item_id)
         if selected is None:
             raise QueueItemNotFoundError(queue_item_id)
 
-        promoted = await self.queue_repository.delete_item(queue_item_id)
+        promoted = await self.queue_repository.delete_item(
+            queue_item_id,
+            expected_revision=expected_revision,
+        )
         if selected.position == 0 and promoted is not None:
             await self.playback_state_repository.save(
                 PlaybackState(
@@ -126,8 +163,41 @@ class QueueManager:
             )
         return promoted
 
-    async def clear(self) -> None:
-        await self.queue_repository.clear_pending()
+    async def clear(
+        self,
+        *,
+        expected_revision: int | None = None,
+    ) -> None:
+        await self.queue_repository.clear_pending(
+            expected_revision=expected_revision,
+        )
+
+    async def pause(self) -> PlaybackState | None:
+        state = await self.playback_state_repository.get_state()
+        if state is None or state.state == "STOPPED":
+            return state
+        return await self.playback_state_repository.save(
+            state.model_copy(
+                update={
+                    "state": "PAUSED",
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            )
+        )
+
+    async def stop(self) -> PlaybackState | None:
+        state = await self.playback_state_repository.get_state()
+        if state is None or state.state == "STOPPED":
+            return state
+        return await self.playback_state_repository.save(
+            state.model_copy(
+                update={
+                    "state": "STOPPED",
+                    "autoplay_enabled": False,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            )
+        )
 
     async def save_as_playlist(self, name: str):
         up_next = await self.queue_repository.list_up_next()

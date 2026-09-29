@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from server.app.models.queue import QueueItem, QueueItemSource
+from server.app.models.queue import QueueItem, QueueItemSource, QueueSnapshot
 
 from .database import run_transaction
 
@@ -15,15 +15,81 @@ class CurrentTrackDeletionError(ValueError):
     """Raised when the current track cannot be deleted safely."""
 
 
-class QueueRepository:
-    """Persistent authoritative Queue storage.
+class QueueRevisionConflictError(ValueError):
+    """Raised when a Queue mutation is based on a stale revision."""
 
-    Negative positions are the current-session Played area, position zero is
-    Now Playing, and positive positions are the visible Up Next area.
+    def __init__(self, expected_revision: int, actual_revision: int) -> None:
+        self.expected_revision = expected_revision
+        self.actual_revision = actual_revision
+        super().__init__(
+            "Queue revision conflict: "
+            f"expected {expected_revision}, actual {actual_revision}"
+        )
+
+
+class QueueRepository:
+    """Persistent authoritative Queue storage."""
+
+    _QUEUE_STATE_SCHEMA = """
+        CREATE TABLE IF NOT EXISTS queue_state (
+            id INTEGER PRIMARY KEY CHECK(id = 1),
+            revision INTEGER NOT NULL CHECK(revision >= 0)
+        )
     """
 
     def __init__(self, path: str) -> None:
         self.path = path
+
+    @classmethod
+    def _ensure_queue_state(cls, connection) -> None:
+        connection.execute(cls._QUEUE_STATE_SCHEMA)
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO queue_state(id, revision)
+            VALUES(1, 0)
+            """
+        )
+
+    @classmethod
+    def _current_revision(cls, connection) -> int:
+        cls._ensure_queue_state(connection)
+        row = connection.execute(
+            "SELECT revision FROM queue_state WHERE id = 1"
+        ).fetchone()
+        assert row is not None
+        return int(row[0])
+
+    @classmethod
+    def _reserve_mutation(
+        cls,
+        connection,
+        expected_revision: int | None,
+    ) -> int:
+        cls._ensure_queue_state(connection)
+        if expected_revision is None:
+            connection.execute(
+                """
+                UPDATE queue_state
+                SET revision = revision + 1
+                WHERE id = 1
+                """
+            )
+        else:
+            result = connection.execute(
+                """
+                UPDATE queue_state
+                SET revision = revision + 1
+                WHERE id = 1 AND revision = ?
+                """,
+                (expected_revision,),
+            )
+            if result.rowcount != 1:
+                actual_revision = cls._current_revision(connection)
+                raise QueueRevisionConflictError(
+                    expected_revision,
+                    actual_revision,
+                )
+        return cls._current_revision(connection)
 
     @staticmethod
     def _item_from_row(row: tuple[object, ...]) -> QueueItem:
@@ -59,14 +125,32 @@ class QueueRepository:
         ).fetchall()
         return [QueueRepository._item_from_row(row) for row in rows]
 
+    async def get_revision(self) -> int:
+        async def operation(connection):
+            return self._current_revision(connection)
+
+        return await run_transaction(self.path, operation)
+
+    async def get_snapshot(self) -> QueueSnapshot:
+        async def operation(connection):
+            revision = self._current_revision(connection)
+            return QueueSnapshot(
+                revision=revision,
+                items=tuple(self._list_from_connection(connection)),
+            )
+
+        return await run_transaction(self.path, operation)
+
     async def list_items(self) -> list[QueueItem]:
         async def operation(connection):
+            self._ensure_queue_state(connection)
             return self._list_from_connection(connection)
 
         return await run_transaction(self.path, operation)
 
     async def get_item(self, queue_item_id: str) -> QueueItem | None:
         async def operation(connection):
+            self._ensure_queue_state(connection)
             row = connection.execute(
                 """
                 SELECT queue_item_id, song_id, position, source,
@@ -84,8 +168,11 @@ class QueueRepository:
         self,
         song_id: str,
         playback_context_id: str,
+        *,
+        expected_revision: int | None = None,
     ) -> QueueItem:
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             connection.execute(
                 """
                 UPDATE queue_items
@@ -131,8 +218,14 @@ class QueueRepository:
 
         return await run_transaction(self.path, operation)
 
-    async def play_now(self, queue_item_id: str) -> QueueItem:
+    async def play_now(
+        self,
+        queue_item_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> QueueItem:
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             row = connection.execute(
                 """
                 SELECT queue_item_id, song_id, position, source,
@@ -249,8 +342,10 @@ class QueueRepository:
         *,
         playback_context_id: str | None = None,
         source: QueueItemSource = "MANUAL",
+        expected_revision: int | None = None,
     ) -> QueueItem:
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             connection.execute(
                 """
                 UPDATE queue_items
@@ -284,8 +379,10 @@ class QueueRepository:
         *,
         playback_context_id: str | None = None,
         source: QueueItemSource = "MANUAL",
+        expected_revision: int | None = None,
     ) -> QueueItem:
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             row = connection.execute(
                 """
                 SELECT COALESCE(MAX(position), 0)
@@ -318,8 +415,11 @@ class QueueRepository:
         self,
         queue_item_id: str,
         before_queue_item_id: str | None = None,
+        *,
+        expected_revision: int | None = None,
     ) -> list[QueueItem]:
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             row = connection.execute(
                 """
                 SELECT position
@@ -378,8 +478,14 @@ class QueueRepository:
 
         return await run_transaction(self.path, operation)
 
-    async def delete_item(self, queue_item_id: str) -> QueueItem | None:
+    async def delete_item(
+        self,
+        queue_item_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> QueueItem | None:
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             row = connection.execute(
                 """
                 SELECT queue_item_id, song_id, position, source,
@@ -485,8 +591,13 @@ class QueueRepository:
 
         return await run_transaction(self.path, operation)
 
-    async def clear_pending(self) -> None:
+    async def clear_pending(
+        self,
+        *,
+        expected_revision: int | None = None,
+    ) -> None:
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             connection.execute("DELETE FROM queue_items WHERE position > 0")
 
         await run_transaction(self.path, operation)
@@ -498,13 +609,13 @@ class QueueRepository:
         playback_context_id: str | None = None,
         max_items: int = 5,
         allow_current_repeat: bool = False,
+        expected_revision: int | None = None,
     ) -> list[QueueItem]:
-        if max_items <= 0:
-            return []
-        if not song_ids:
+        if max_items <= 0 or not song_ids:
             return []
 
         async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
             rows = connection.execute(
                 """
                 SELECT queue_item_id, song_id, position, source,
@@ -532,6 +643,7 @@ class QueueRepository:
                 and current_context_id != playback_context_id
             ):
                 return []
+
             pending_candidates: list[str] = []
             seen_candidates: set[str] = set()
             for song_id in song_ids:
@@ -598,6 +710,7 @@ class QueueRepository:
 
     async def list_up_next(self) -> list[QueueItem]:
         async def operation(connection):
+            self._ensure_queue_state(connection)
             rows = connection.execute(
                 """
                 SELECT queue_item_id, song_id, position, source,
