@@ -30,9 +30,9 @@ class QueueManager:
         song_id: str,
         *,
         expected_revision: int | None = None,
-    ) -> PlaybackContext:
         persist_state: bool = True,
     ) -> PlaybackContext:
+        context = PlaybackContext(
             context_id=str(uuid.uuid4()),
             source_type="TRACK",
             source_id=song_id,
