@@ -121,11 +121,11 @@ class StatefulFakeMPD:
                     response = self._dispatch(request)
                 except ValueError as exc:
                     writer.write(
-                        f"ACK [2@0] {{command}} {exc}\n".encode("utf-8")
+                        f"ACK [2@0] {{command}} {exc}\n".encode()
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     writer.write(
-                        f"ACK [50@0] {{command}} {exc}\n".encode("utf-8")
+                        f"ACK [50@0] {{command}} {exc}\n".encode()
                     )
                 else:
                     writer.write(response.encode("utf-8"))
