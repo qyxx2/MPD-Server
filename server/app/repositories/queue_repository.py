@@ -615,7 +615,6 @@ class QueueRepository:
             return []
 
         async def operation(connection):
-            self._reserve_mutation(connection, expected_revision)
             rows = connection.execute(
                 """
                 SELECT queue_item_id, song_id, position, source,
@@ -624,7 +623,6 @@ class QueueRepository:
                 ORDER BY position, queue_item_id
                 """
             ).fetchall()
-            queued_song_ids = {str(row[1]) for row in rows}
             current_song_id = next(
                 (str(row[1]) for row in rows if int(row[2]) == 0),
                 None,
@@ -642,8 +640,17 @@ class QueueRepository:
                 and current_context_id is not None
                 and current_context_id != playback_context_id
             ):
+                if expected_revision is not None:
+                    actual_revision = self._current_revision(connection)
+                    if actual_revision != expected_revision:
+                        raise QueueRevisionConflictError(
+                            expected_revision,
+                            actual_revision,
+                        )
                 return []
 
+            self._reserve_mutation(connection, expected_revision)
+            queued_song_ids = {str(row[1]) for row in rows}
             pending_candidates: list[str] = []
             seen_candidates: set[str] = set()
             for song_id in song_ids:

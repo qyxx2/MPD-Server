@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from server.app.models.queue import PlaybackContext, QueueItem
+from server.app.models.queue import PlaybackContext, QueueItem, PlaybackState
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.queue_repository import (
