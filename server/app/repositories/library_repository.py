@@ -122,6 +122,7 @@ class LibraryRepository:
             title=row[1],
             file_uri=row[2],
             identity_key=row[3],
+            album_id=row[4],
             album=album[0] if album else None,
             artists=artists,
             album_artists=album_artists,

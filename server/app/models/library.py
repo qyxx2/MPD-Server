@@ -27,6 +27,7 @@ class Song(BaseModel):
     file_uri: str
     identity_key: str | None = None
     artists: tuple[str, ...] = ()
+    album_id: str | None = None
     album: str | None = None
     album_artists: tuple[str, ...] = ()
     track_number: int | None = Field(default=None, ge=0)
