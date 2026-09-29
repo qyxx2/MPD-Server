@@ -324,6 +324,448 @@ Contract Audit 本身不引入业务行为。
 
 ---
 
+# 4.7 Contract Audit Record（2026-09-29）
+
+本记录以本分支当时的实际 HEAD
+`ca9b25b970f7e332d776c985af9cabeaac0d3c17`
+为审计基线。GitHub 实际检查确认：
+
+- branch = `feature/task-5-library-api`
+- `feature/task-5-library-api` 相对 `main` 为 ahead 1、behind 0
+- 当前唯一分支新增提交为本 Task 5 Batch Plan
+- `main` 当前 HEAD = `29c7d6158c235f1070a4dc2c61cfe44261fe2458`
+- Task 0–4 integration gate 已在 main，Task 4 Batch 6 commit
+  `cb02824273881fcb328f20391ec99fe144ac84d9` 已被当前 main 基线包含
+- Task 0–4 永久回归文件均位于 `server/tests/`，本 Task 5 不建立对 Web build 的依赖
+
+## 4.7.1 Dependency / Architecture Gate
+
+当前代码实际具备：
+
+- `Song`：包含 song_id、title、file_uri、artist/album/album_artist、
+  genre/tag、year、disc/track、lyrics、音频规格、availability、
+  ArtworkRef 等字段；
+- `Playlist`：包含 playlist_id、name、created_at、updated_at、
+  is_system；
+- `PlaybackContext` / `QueueItem` / `PlaybackState`；
+- `LibraryRepository`；
+- `PlaylistRepository`；
+- `PlaybackService`、`QueueManager`、`HistoryService`、
+  `AutoPlay`；
+- `PlayerPort`，且 Task 4 服务层已经通过 PlayerPort 与播放引擎交互；
+- `DomainEvent` / `LibraryChangedEvent`。
+
+当前 Task 5 不需要引入 Task 6/7/8/9/10/11/12 任何实现或 contract。
+
+架构冻结为：
+
+```
+REST API
+    ↓
+Service
+    ↓
+Repository / PlayerPort
+```
+
+API 不访问 SQLite、QueueRepository、HistoryRepository 或 concrete
+MPD adapter；Service 不依赖 concrete MPD adapter；CollectionService
+不依赖 WebSocket。
+
+## 4.7.2 LibraryRepository Audit
+
+实际存在并核对的主要能力：
+
+- `get_song(song_id)`
+- `find_song_by_file_uri(file_uri)`
+- `list_songs_in_root(root_uri_prefix)`
+- `list_available_songs()`
+- identity/content-hash candidate lookup
+- artwork persisted-reference/source-song lookup
+- scan-batch transactional persistence
+
+结论：当前库规模和既有 contract 足以采用：
+
+```
+LibraryRepository.list_available_songs()
+        ↓
+LibraryService / CollectionService
+        ↓
+Album / Artist / Genre / Year / Tag / Search 聚合、过滤、排序
+```
+
+因此 Contract Audit **不新增 LibraryRepository 的通用 SQL 搜索/聚合接口**。
+这样避免把 Task 5 的业务排序规则泄漏到 Repository，并保持 API 永远不直接访问
+SQLite。
+
+必要的最小 Repository hardening 由 Batch 1 在出现不可避免的数据访问缺口时再补，
+且必须保持 `Song` / `availability_status` / 既有扫描事务语义不变。
+
+### Artwork contract
+
+Artwork 继续使用：
+
+```
+Song.artwork: ArtworkRef
+        ↓
+Artwork source song
+        ↓
+read-only media file
+```
+
+Repository 只提供持久化引用和 source-song 信息；实际 artwork bytes 的读取由
+LibraryService 在既有只读文件边界内完成。不得生成、修改、重命名、删除或写回
+音乐文件。
+
+## 4.7.3 PlaylistRepository Audit
+
+实际存在：
+
+- `create_playlist`
+- `add_song`
+- `remove_song`
+- `reorder_playlist`
+- `set_favorite`
+- `list_favorite_song_ids`
+- `list_song_ids`
+
+实际缺口：
+
+- list/get playlist
+- rename/update playlist
+- delete playlist
+- 对不存在 playlist 的明确 not-found 语义
+- list playlist songs 的资源级读取 contract
+
+冻结的最小 hardening 分配如下：
+
+- Batch 2 增加 playlist list/get/update/delete contract；
+- 继续复用现有 SQLite transaction boundary；
+- 不修改已经稳定的 duplicate-song、remove、reorder 事务语义；
+- delete 依赖现有 `ON DELETE CASCADE` 删除 playlist_items，但不得删除 Song；
+- `is_system=true` 的系统 Playlist 不允许通过普通自定义 Playlist CRUD 删除或重命名。
+
+Favorites 不实现为 Queue，也不与 History 混用。当前 favorites relation
+继续由 `favorites(song_id, created_at)` 持久化，默认顺序冻结为
+`created_at DESC, song_id DESC`，与现有 Repository 实际行为一致。
+
+## 4.7.4 Collection Contract Freeze
+
+Collection 统一来源：
+
+```
+ALBUM
+ARTIST
+GENRE
+YEAR
+TAG
+SEARCH
+PLAYLIST
+FAVORITES
+LIBRARY
+SONGS
+```
+
+字段语义冻结：
+
+- `source_type`：以上固定枚举之一；
+- `source_id`：实体型来源使用稳定实体 ID；`YEAR` 使用规范化年份字符串；
+  `SEARCH`、`LIBRARY`、`SONGS` 无实体 source_id 时保持 null；
+- `song_ids`：按最终播放顺序排列、且只出现一次的 Song ID；
+- `unavailable_song_ids`：源集合中已知但当前不可用、因此未进入可播放
+  `song_ids` 的 Song ID；不得伪装成 AVAILABLE；
+- `random_seed`：随机播放时生成一次并固化；顺序播放为 null；
+- `playback_context_id`：真正开始播放后由 PlaybackContext 持有，Collection
+  本身不持有 Queue。
+
+默认排序冻结：
+
+- ALBUM：`disc_number ASC NULLS LAST` → `track_number ASC NULLS LAST`
+  → `file_uri ASC` → `song_id ASC`；
+- PLAYLIST：用户保存的 position；
+- FAVORITES：`created_at DESC` → `song_id DESC`；
+- ARTIST / GENRE / YEAR / TAG / LIBRARY：`title.casefold()` →
+  `album.casefold()` → `file_uri` → `song_id`；
+- SEARCH：按 Search contract 的稳定 score/rank，其后使用与 LIBRARY 相同的
+  稳定 fallback；
+- SONGS：用户提供的顺序，去重后保留第一次出现。
+
+去重规则：
+
+- 同一最终 `song_id` 只出现一次；
+- 对用户明确选中的 `SONGS`，first occurrence wins；
+- 不得把去重做成“发现重复即静默替换为其他歌曲”。
+
+Availability 规则：
+
+- Library、分类、Search、Playlist、Favorites 默认仅把
+  `availability_status == AVAILABLE` 放入 `song_ids`；
+- 不可用成员进入 `unavailable_song_ids`；
+- 若 source 本身为空，Collection 为空；
+- 空 Collection 不得用随机歌曲补齐；
+- Explicitly selected empty Collection 不得触发随机替代。
+
+Random / PlaybackContext：
+
+- random 只在创建本次播放集合或开始本次播放时生成一次；
+- 使用冻结的 `random_seed` 产生确定的 `ordered_song_ids`；
+- 同一 PlaybackContext 内刷新、重读或重新生成展示数据不得改变既有随机顺序；
+- 新的 PlaybackContext 才允许重新生成随机顺序。
+
+Collection 负责“哪些歌曲、什么顺序”，PlaybackService 负责真正替换 Queue、
+启动播放以及 AutoPlay 语义。
+
+## 4.7.5 Search Contract Freeze
+
+首期只搜索 Song 已存在且可由 `list_available_songs()` 获得的数据：
+
+- title
+- artists
+- album
+- album_artists
+- genres
+- tag_names
+- year
+
+默认匹配：
+
+- 去除首尾空白；
+- 使用 Unicode 文本的 `casefold()` 进行不区分大小写匹配；
+- 非空 query 对上述字段执行 substring match；
+- year 按规范化十进制字符串匹配；
+- 不引入 FTS、外部搜索引擎或复杂相关性基础设施。
+
+稳定排序：
+
+```
+exact field match
+→ prefix field match
+→ substring match
+→ title.casefold()
+→ album.casefold()
+→ file_uri
+→ song_id
+```
+
+如果同一 Song 同时命中多个字段，只返回一个 Song ID；排序 score 取该 Song
+的最佳匹配级别，再使用稳定 fallback。
+
+空 query：
+
+- 返回空结果，不解释为“整个音乐库”。
+
+无结果：
+
+- 返回合法空结果集合，不视为错误。
+
+Search 结果可直接作为 Collection；API 不得另行定义一套 Search 排序或去重规则。
+
+## 4.7.6 REST Contract Freeze
+
+Task 5 首期 API 路径统一使用 `/api` 前缀。
+
+### Library read
+
+- `GET /api/library/songs`
+- `GET /api/library/songs/{song_id}`
+- `GET /api/library/albums`
+- `GET /api/library/albums/{album_id}/songs`
+- `GET /api/library/artists`
+- `GET /api/library/artists/{artist_id}/songs`
+- `GET /api/library/genres`
+- `GET /api/library/genres/{genre_id}/songs`
+- `GET /api/library/years`
+- `GET /api/library/years/{year}/songs`
+- `GET /api/library/tags`
+- `GET /api/library/tags/{tag_id}/songs`
+- `GET /api/library/search?q={query}`
+- `POST /api/library/collections`（请求复杂、结果只读，故使用 POST）
+- `GET /api/library/songs/{song_id}/artwork`
+
+### Library mutation
+
+- `POST /api/library/scan`
+
+### Playlist / Favorites
+
+- `GET /api/playlists`
+- `POST /api/playlists`
+- `GET /api/playlists/{playlist_id}`
+- `PATCH /api/playlists/{playlist_id}`
+- `DELETE /api/playlists/{playlist_id}`
+- `GET /api/playlists/{playlist_id}/songs`
+- `POST /api/playlists/{playlist_id}/songs`
+- `DELETE /api/playlists/{playlist_id}/songs/{song_id}`
+- `PUT /api/playlists/{playlist_id}/songs/order`
+- `GET /api/favorites`
+- `PUT /api/favorites/{song_id}`
+- `DELETE /api/favorites/{song_id}`
+
+### Playback / Queue
+
+- `GET /api/playback/state`
+- `GET /api/playback/queue`
+- `POST /api/playback/tracks/{song_id}/play`
+- `POST /api/playback/queue/items/{queue_item_id}/play`
+- `POST /api/playback/songs/{song_id}/play-next`
+- `POST /api/playback/songs/{song_id}/queue`
+- `POST /api/playback/pause`
+- `POST /api/playback/stop`
+- `POST /api/playback/next`
+- `POST /api/playback/previous`
+- `POST /api/playback/seek`
+- `PUT /api/playback/queue/items/{queue_item_id}`（reorder）
+- `DELETE /api/playback/queue/items/{queue_item_id}`
+- `DELETE /api/playback/queue`
+- `POST /api/playback/queue/save-as-playlist`
+- `POST /api/playback/collections/play`
+
+### History
+
+- `GET /api/history`
+- `GET /api/history/played`
+
+Request body / response model 原则：
+
+- API schemas 与 domain models 分离；
+- 同一资源类型使用同一 response schema；
+- list endpoint 使用 `items` + `count` 的统一 envelope；
+- 单资源使用资源对象本身；
+- mutation 返回 mutation 后的 authoritative resource/state；
+- DELETE 成功返回 HTTP 204，不再返回另一套资源 schema；
+- artwork 成功返回真实媒体 bytes 和持久化 MIME type。
+
+### Validation / status mapping
+
+统一错误对象冻结为：
+
+```json
+{
+  "error": {
+    "code": "STABLE_MACHINE_CODE",
+    "message": "human-readable message",
+    "details": null
+  }
+}
+```
+
+其中 `details` 可为固定结构对象，不得因 endpoint 随意变更字段名。
+
+状态映射：
+
+- 200：读取成功、播放/控制成功并返回 state/resource；
+- 201：创建 Playlist 成功；
+- 204：删除 Playlist、删除 playlist song、取消 favorite、删除 Queue item、
+  清空 Queue；
+- 400：已通过 schema 校验但请求语义本身无效；
+- 404：Song / Playlist / Queue item / collection source / artwork source 不存在；
+- 409：duplicate playlist song、playlist reorder member mismatch、
+  Queue revision conflict、Idempotency-Key payload conflict、系统 Playlist
+  禁止修改等资源状态冲突；
+- 422：Pydantic/request schema validation failure；
+- 500：Repository / unexpected service failure；
+- 502：MPD / PlayerPort 已到达但上游命令失败；
+- 503：MPD / PlayerPort 当前不可达；
+- artwork read failure 使用 500 + `ARTWORK_READ_ERROR`，绝不伪装成 404
+  “无封面”；
+- 空 Collection 是成功的 200 结果，不是错误。
+
+### Playback request semantics
+
+REST 不重新解释 Playback Service 语义：
+
+- `tracks/{song_id}/play` 对应已有 Start Track / 新 PlaybackContext；
+- Queue item play 对应已有 Play Now；
+- song play-next / queue 对应已有 Play Next / Add to Queue；
+- pause / stop / next / previous / seek 原样进入 PlaybackService；
+- queue reorder/delete/clear/save-as-playlist 只调用 QueueManager/
+  PlaybackService/PlaylistService 现有业务；
+- collection play 先通过 CollectionService 生成统一 Collection，再交由
+  PlaybackService 执行；
+- API 不直接修改 Queue，不直接向 MPD 发命令。
+
+## 4.7.7 Idempotency Contract Freeze
+
+Task 5 使用标准 HTTP header：
+
+```
+Idempotency-Key: <opaque-client-key>
+```
+
+以下所有 mutation endpoint 都要求 `Idempotency-Key`：
+
+- library scan；
+- playlist CRUD / song membership / reorder；
+- favorite / unfavorite；
+- playback / queue mutations。
+
+同一路径、同 HTTP method、同 canonical request payload 与同
+`Idempotency-Key`：
+
+- 第一次执行实际调用 Service；
+- 后续重复成功请求直接返回第一次保存的 status + response body；
+- 不再次执行业务 mutation。
+
+同一 Key：
+
+- endpoint/method/payload 任一不同 → HTTP 409 +
+  `IDEMPOTENCY_KEY_CONFLICT`；
+- 不得错误复用前一次结果。
+
+失败语义：
+
+- schema validation 失败不创建幂等记录；
+- Service/Repository/Player 失败且业务事务未提交时，不保存 terminal response，
+  同一 Key 可以 retry；
+- 不允许通过进程内 dict、global mutable cache 或单进程状态作为唯一保证。
+
+持久化位置冻结为 SQLite 专用幂等记录表，后续 Batch 5 实现；记录至少需要：
+
+- operation scope（method + canonical path）
+- idempotency key
+- canonical payload hash
+- response status
+- serialized response body
+- created_at
+
+并建立唯一约束：
+
+```
+(operation_scope, idempotency_key)
+```
+
+事务关系冻结为：
+
+```
+business mutation
++
+idempotency terminal result
+```
+
+必须具有明确的同一 SQLite transaction / unit-of-work 原子边界。Batch 5
+不得通过“先执行业务、后写幂等记录”的可竞态序列实现保证。
+
+失败业务若未提交，则 terminal idempotency result 不存在；因此 retry 可以重新执行。
+
+## 4.7.8 Audit Conclusion / Batch Allocation
+
+Contract Audit 本身**不实现业务功能**，当前审计结果为：
+
+- Dependency Gate：通过；
+- Architecture Gate：通过；
+- LibraryRepository：现有 Available Songs contract 足以支撑首期 Service 聚合；
+- PlaylistRepository：确认存在 CRUD contract gap，分配到 Batch 2 的最小 hardening；
+- Collection contract：已冻结；
+- Search contract：已冻结；
+- REST contract：已冻结；
+- Idempotency contract：已冻结，实际 SQLite persistence 分配到 Batch 5；
+- Future Task dependency：未发现；
+- WebSocket / Output Manager / final config / deployment / physical acceptance：
+  均不属于 Task 5。
+
+后续 Batch 不得重新定义上述语义；如实际代码暴露不可绕过的新冲突，必须先停止当前 Batch，
+记录冲突并修正本计划，再继续实现。
+
+
 # 5. Batch 1：Collection + LibraryService
 
 ## 对应原 Plan
