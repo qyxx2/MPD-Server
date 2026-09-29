@@ -226,19 +226,17 @@ def test_reconcile_external_status_updates_service_state_but_not_server_queue(
     player = components["player"]
 
     run(service.start_track("a"))
-    player.fail_next("play", "one-shot failure")
-    # The failure injection is consumed by an external command, leaving
-    # service operations free to keep the server authoritative.
-    with pytest.raises(PlayerCommandError):
-        run(player.play("music/b.mp3"))
+    run(player.play("music/b.mp3"))
 
     run(service.reconcile_external_status())
 
     state = run(components["state"].get_state())
     assert state is not None
-    assert state.song_id == "a"
+    assert state.song_id == "b"
     assert state.state == "PLAYING"
     assert current_song_id(components["queue"]) == "a"
+    assert components["history_service"].active_event is not None
+    assert components["history_service"].active_event.song_id == "b"
 
 
 def test_successful_next_promotes_server_queue_and_records_switch(
@@ -278,3 +276,21 @@ def test_next_failure_does_not_advance_service_state(components):
 
     assert run(components["state"].get_state()) == before
     assert current_song_id(components["queue"]) == "a"
+
+def test_playback_service_reconciles_status_after_successful_play(components):
+    seed_songs(components["library"], *"ab")
+    service = components["service"]
+    player = components["player"]
+
+    original_status = player.status
+    calls = 0
+
+    async def status():
+        nonlocal calls
+        calls += 1
+        return await original_status()
+
+    player.status = status
+    run(service.start_track("a"))
+
+    assert calls >= 1
