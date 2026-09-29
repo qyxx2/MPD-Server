@@ -24,6 +24,22 @@ Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 | Task 11 | 未开始 | NAS update.sh 与生产部署流程尚未实现。 |
 | Task 12 | 未开始 | 真实 NAS/MPD 最终验收与 v0.1.0 尚未开始。 |
 
+## Task 0–4 Integration Gate
+
+Task 0–4 后端集成协调验收已完成。用户在真实 ARM64 Python 本地环境中完成了集成验证，覆盖：
+
+- Task 3 → Task 2：真实媒体 fixture → Scanner → SQLite 持久化。
+- Task 3 → MPD update / Domain Event：提交顺序及失败语义。
+- Task 4 → PlayerPort → MPDAdapter：本地 Stateful Fake MPD TCP 集成。
+- Task 2 → Task 3 → Task 4：完整后端播放链路。
+- Integration suite 与 `server/tests` 全量回归，以及 compile、Ruff、diff 检查。
+
+本 Gate 的长期回归范围为**后端集成测试**。Web/PWA build、typecheck 和 Web 测试此前已经单独验证，**不纳入本 Gate 的永久回归命令**，避免每次后端回归都重复执行 Web 构建。
+
+详细验收记录：
+
+`docs/superpowers/plans/2026-09-29-mpd-server-task-0-4-integration-gate-acceptance.md`
+
 ### Task 4 最终验收
 
 Task 4 已完成 Batch 1 → Batch 6，共 15 个 Plan Steps。
