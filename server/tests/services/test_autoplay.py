@@ -271,7 +271,9 @@ def test_autoplay_aborts_when_playback_context_changes_during_refill(components)
 
     assert new_context.song_id == "g"
     assert generated == []
-    assert [(item.song_id, item.position, item.playback_context_id) for item in items] == [
+    assert [
+        (item.song_id, item.position, item.playback_context_id) for item in items
+    ] == [
         ("g", 0, "context-g"),
         ("a", -1, old_context.context_id),
     ]
