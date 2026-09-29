@@ -127,7 +127,7 @@ def test_start_track_failure_does_not_advance_service_state_or_history(
     assert after == before
     assert components["history_service"].active_event is not None
     assert components["history_service"].active_event.song_id == "a"
-    assert current_song_id(components["queue"]) == "b"
+    assert current_song_id(components["queue"]) == "a"
 
     status = run(player.status())
     assert status.song_uri == "music/a.mp3"
@@ -152,7 +152,7 @@ def test_play_now_failure_does_not_record_switch_or_advance_state(components):
     assert run(components["state"].get_state()) == before
     assert components["history_service"].active_event is not None
     assert components["history_service"].active_event.song_id == "a"
-    assert current_song_id(components["queue"]) == "b"
+    assert current_song_id(components["queue"]) == "a"
     assert run(player.status()).song_uri == "music/a.mp3"
 
 
