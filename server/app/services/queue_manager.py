@@ -31,7 +31,8 @@ class QueueManager:
         *,
         expected_revision: int | None = None,
     ) -> PlaybackContext:
-        context = PlaybackContext(
+        persist_state: bool = True,
+    ) -> PlaybackContext:
             context_id=str(uuid.uuid4()),
             source_type="TRACK",
             source_id=song_id,
@@ -42,16 +43,17 @@ class QueueManager:
             playback_context_id=context.context_id,
             expected_revision=expected_revision,
         )
-        await self.playback_state_repository.save(
-            PlaybackState(
-                song_id=song_id,
-                state="PLAYING",
-                playback_context_id=context.context_id,
-                autoplay_enabled=True,
-                position_seconds=0.0,
-                updated_at=datetime.now(timezone.utc),
+        if persist_state:
+            await self.playback_state_repository.save(
+                PlaybackState(
+                    song_id=song_id,
+                    state="PLAYING",
+                    playback_context_id=context.context_id,
+                    autoplay_enabled=True,
+                    position_seconds=0.0,
+                    updated_at=datetime.now(timezone.utc),
+                )
             )
-        )
         return context
 
     async def play_now(
@@ -59,31 +61,33 @@ class QueueManager:
         queue_item_id: str,
         *,
         expected_revision: int | None = None,
+        persist_state: bool = True,
     ) -> QueueItem:
         current_state = await self.playback_state_repository.get_state()
         item = await self.queue_repository.play_now(
             queue_item_id,
             expected_revision=expected_revision,
         )
-        await self.playback_state_repository.save(
-            PlaybackState(
-                song_id=item.song_id,
-                state="PLAYING",
-                playback_context_id=item.playback_context_id
-                or (
-                    current_state.playback_context_id
-                    if current_state is not None
-                    else None
-                ),
-                autoplay_enabled=(
-                    current_state.autoplay_enabled
-                    if current_state is not None
-                    else True
-                ),
-                position_seconds=0.0,
-                updated_at=datetime.now(timezone.utc),
+        if persist_state:
+            await self.playback_state_repository.save(
+                PlaybackState(
+                    song_id=item.song_id,
+                    state="PLAYING",
+                    playback_context_id=item.playback_context_id
+                    or (
+                        current_state.playback_context_id
+                        if current_state is not None
+                        else None
+                    ),
+                    autoplay_enabled=(
+                        current_state.autoplay_enabled
+                        if current_state is not None
+                        else True
+                    ),
+                    position_seconds=0.0,
+                    updated_at=datetime.now(timezone.utc),
+                )
             )
-        )
         return item
 
     async def play_next(
@@ -198,6 +202,18 @@ class QueueManager:
                 }
             )
         )
+
+    async def get_playback_state(self) -> PlaybackState | None:
+        return await self.playback_state_repository.get_state()
+
+    async def set_playback_state(self, state: PlaybackState) -> PlaybackState:
+        return await self.playback_state_repository.save(state)
+
+    async def list_items(self) -> list[QueueItem]:
+        return await self.queue_repository.list_items()
+
+    async def get_item(self, queue_item_id: str) -> QueueItem | None:
+        return await self.queue_repository.get_item(queue_item_id)
 
     async def save_as_playlist(self, name: str):
         up_next = await self.queue_repository.list_up_next()
