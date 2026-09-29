@@ -63,10 +63,10 @@ def test_autoplay_refill_uses_playback_context_before_global_available_candidate
 ):
     library, queue, manager = components
     seed_songs(library, "a", "b", "c", "d", "e", "f", "g")
-    run(manager.start_track("a"))
+    started_context = run(manager.start_track("a"))
 
     context = PlaybackContext(
-        context_id="album-context",
+        context_id=started_context.context_id,
         source_type="ALBUM",
         source_id="album-1",
         ordered_song_ids=("d", "c", "b"),
@@ -85,11 +85,11 @@ def test_autoplay_refill_uses_playback_context_before_global_available_candidate
 def test_autoplay_does_nothing_when_up_next_is_at_low_watermark(components):
     library, queue, manager = components
     seed_songs(library, "a", "b", "c", "d", "e", "f", "g")
-    run(manager.start_track("a"))
+    context = run(manager.start_track("a"))
     for song_id in "bcdef":
         run(manager.add_to_queue(song_id))
 
-    generated = run(AutoPlay(queue, library).refill(current_context()))
+    generated = run(AutoPlay(queue, library).refill(context))
 
     assert generated == []
     assert [item.song_id for item in up_next(queue)] == list("bcdef")
@@ -98,11 +98,11 @@ def test_autoplay_does_nothing_when_up_next_is_at_low_watermark(components):
 def test_autoplay_refills_five_when_up_next_is_below_low_watermark(components):
     library, queue, manager = components
     seed_songs(library, "a", "b", "c", "d", "e", "f", "g", "h", "i")
-    run(manager.start_track("a"))
+    context = run(manager.start_track("a"))
     for song_id in "bc":
         run(manager.add_to_queue(song_id))
 
-    generated = run(AutoPlay(queue, library).refill(current_context()))
+    generated = run(AutoPlay(queue, library).refill(context))
 
     assert len(generated) == 5
     assert [item.song_id for item in generated] == ["d", "e", "f", "g", "h"]
@@ -120,11 +120,11 @@ def test_autoplay_refills_five_when_up_next_is_below_low_watermark(components):
 def test_autoplay_never_removes_or_reorders_manual_items(components):
     library, queue, manager = components
     seed_songs(library, "a", "b", "c", "d", "e", "f", "g", "h")
-    run(manager.start_track("a"))
+    context = run(manager.start_track("a"))
     manual_b = run(manager.add_to_queue("b"))
     manual_c = run(manager.play_next("c"))
 
-    generated = run(AutoPlay(queue, library).refill(current_context()))
+    generated = run(AutoPlay(queue, library).refill(context))
 
     items = up_next(queue)
     assert [(item.song_id, item.source) for item in items[:2]] == [
@@ -158,9 +158,9 @@ def test_autoplay_empty_library_returns_no_items(components):
 def test_autoplay_one_song_library_reuses_only_available_song_when_needed(components):
     library, queue, manager = components
     seed_songs(library, "a")
-    run(manager.start_track("a"))
+    context = run(manager.start_track("a"))
 
-    generated = run(AutoPlay(queue, library).refill(current_context()))
+    generated = run(AutoPlay(queue, library).refill(context))
 
     assert len(generated) == 1
     assert generated[0].song_id == "a"
@@ -170,9 +170,9 @@ def test_autoplay_one_song_library_reuses_only_available_song_when_needed(compon
 def test_autoplay_insufficient_candidates_does_not_duplicate_within_batch(components):
     library, queue, manager = components
     seed_songs(library, "a", "b", "c")
-    run(manager.start_track("a"))
+    context = run(manager.start_track("a"))
 
-    generated = run(AutoPlay(queue, library).refill(current_context()))
+    generated = run(AutoPlay(queue, library).refill(context))
 
     assert [item.song_id for item in generated] == ["b", "c"]
     assert len({item.song_id for item in generated}) == len(generated)
@@ -218,11 +218,11 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
     state = PlaybackStateRepository(path)
     playlists = PlaylistRepository(path)
     manager = QueueManager(queue, state, playlists)
-    run(manager.start_track("a"))
+    context = run(manager.start_track("a"))
 
     async def exercise():
         autoplay = AutoPlay(queue, library)
-        task = asyncio.create_task(autoplay.refill(current_context()))
+        task = asyncio.create_task(autoplay.refill(context))
         await started.wait()
         manual = await queue.add_to_queue(
             "j",
@@ -252,8 +252,7 @@ def test_autoplay_aborts_when_playback_context_changes_during_refill(components)
     state = PlaybackStateRepository(path)
     playlists = PlaylistRepository(path)
     manager = QueueManager(queue, state, playlists)
-    old_context = current_context("a")
-    run(manager.start_track("a"))
+    old_context = run(manager.start_track("a"))
 
     async def exercise():
         autoplay = AutoPlay(queue, library)
