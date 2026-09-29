@@ -82,26 +82,28 @@ def build_service(components: dict[str, object], adapter: MPDAdapter):
     )
 
 
-def server_queue_items(queue: QueueRepository):
-    return run(queue.list_items())
+async def server_queue_items(queue: QueueRepository):
+    return await queue.list_items()
 
 
-def server_queue_song_ids(queue: QueueRepository) -> list[str]:
+async def server_queue_song_ids(queue: QueueRepository) -> list[str]:
+    items = await server_queue_items(queue)
     return [
         item.song_id
         for item in sorted(
-            server_queue_items(queue),
+            items,
             key=lambda item: item.position,
         )
         if item.position >= 0
     ]
 
 
-def server_queue_sources(queue: QueueRepository) -> list[tuple[str, str]]:
+async def server_queue_sources(queue: QueueRepository) -> list[tuple[str, str]]:
+    items = await server_queue_items(queue)
     return [
         (item.song_id, item.source)
         for item in sorted(
-            server_queue_items(queue),
+            items,
             key=lambda item: item.position,
         )
         if item.position >= 0
@@ -172,7 +174,7 @@ def test_scanned_real_song_enters_playback_service_and_reaches_mpd(
             assert state.autoplay_enabled is True
             assert state.playback_context_id == context.context_id
 
-            assert server_queue_song_ids(runtime["queue"]) == [
+            assert await server_queue_song_ids(runtime["queue"]) == [
                 song_id,
                 next(
                     other.song_id
@@ -214,7 +216,7 @@ def test_next_keeps_server_current_mpd_current_and_history_consistent(
             assert next_state.state == "PLAYING"
             assert next_state.autoplay_enabled is True
 
-            items = server_queue_items(runtime["queue"])
+            items = await server_queue_items(runtime["queue"])
             current = [item for item in items if item.position == 0]
             played = [item for item in items if item.position < 0]
             up_next = [item for item in items if item.position > 0]
@@ -261,7 +263,7 @@ def test_autoplay_play_next_and_add_to_queue_match_server_and_mpd_queue(
                 song_ids[7],
             ]
 
-            assert server_queue_song_ids(runtime["queue"]) == expected
+            assert await server_queue_song_ids(runtime["queue"]) == expected
             assert [
                 entry.song_uri
                 for entry in await runtime["fake"].queue_entries()
@@ -272,7 +274,7 @@ def test_autoplay_play_next_and_add_to_queue_match_server_and_mpd_queue(
                 for song_id in expected
             ]
 
-            sources = server_queue_sources(runtime["queue"])
+            sources = await server_queue_sources(runtime["queue"])
             assert sources[0] == (song_ids[0], "MANUAL")
             assert sources[1] == (song_ids[6], "MANUAL")
             assert sources[-1] == (song_ids[7], "MANUAL")
