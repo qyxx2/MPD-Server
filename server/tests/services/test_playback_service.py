@@ -186,7 +186,7 @@ def test_play_next_and_add_to_queue_sync_mpd_without_restarting_current(
 
 
 def test_pause_and_stop_commit_service_state_only_after_mpd_success(components):
-    seed_songs(components["library"], *"ab")
+    seed_songs(components["library"], *"abcdefg")
     service = components["service"]
     player = components["player"]
 
@@ -309,11 +309,15 @@ def test_mpd_queue_sync_failure_keeps_server_queue_authoritative(components):
         run(service.add_to_queue("b"))
 
     items = run(components["queue"].list_up_next())
-    assert [item.song_id for item in items] == ["b"]
+    assert [item.song_id for item in items] == list("bcdefg")
     assert run(components["state"].get_state()) == before
     assert [entry.song_uri for entry in run(player.queue_entries())] == [
         "music/a.mp3",
         "music/b.mp3",
+        "music/c.mp3",
+        "music/d.mp3",
+        "music/e.mp3",
+        "music/f.mp3",
     ]
 
 
