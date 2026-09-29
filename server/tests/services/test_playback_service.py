@@ -6,7 +6,7 @@ import pytest
 
 from server.app.models.queue import PlaybackState
 from server.app.player.mock_mpd import MockMPD
-from server.app.player.ports import PlayerCommandError
+from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.library_repository import LibraryRepository
@@ -294,3 +294,41 @@ def test_playback_service_reconciles_status_after_successful_play(components):
     run(service.start_track("a"))
 
     assert calls >= 1
+
+def test_mpd_queue_sync_failure_keeps_server_queue_authoritative(components):
+    seed_songs(components["library"], *"ab")
+    service = components["service"]
+    player = components["player"]
+
+    run(service.start_track("a"))
+    before = run(components["state"].get_state())
+    assert before is not None
+
+    player.fail_next("queue_add", "injected queue sync failure")
+    with pytest.raises(PlayerCommandError, match="injected queue sync failure"):
+        run(service.add_to_queue("b"))
+
+    items = run(components["queue"].list_up_next())
+    assert [item.song_id for item in items] == ["b"]
+    assert run(components["state"].get_state()) == before
+    assert [entry.song_uri for entry in run(player.queue_entries())] == [
+        "music/a.mp3",
+        "music/b.mp3",
+    ]
+
+
+def test_player_unavailable_does_not_advance_server_playback_state(components):
+    seed_songs(components["library"], *"ab")
+    service = components["service"]
+    player = components["player"]
+
+    run(service.start_track("a"))
+    before_state = run(components["state"].get_state())
+    before_queue = run(components["queue"].get_snapshot())
+
+    player.disconnect()
+    with pytest.raises(PlayerUnavailable):
+        run(service.start_track("b"))
+
+    assert run(components["state"].get_state()) == before_state
+    assert run(components["queue"].get_snapshot()) == before_queue
