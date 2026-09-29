@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 
-当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R，以及 Task 3（含 corrective follow-up）。Task 3 基础实现已通过原计划的 Task 3 验收并合入 `main`，随后审计发现的跨层契约缺口已在 corrective follow-up 中全部修复并完成最终验收；Task 4 可依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始，但 Task 4 本身尚未实现。
+当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R、Task 3（含 corrective follow-up）以及 **Task 4**。Task 4 已完成全部 15 个 Plan Steps，覆盖 Queue、Playback Context、Played / History、AutoPlay、Queue revision/CAS 与 Playback Service；最终验收在真实 ARM64 Python virtualenv 中完成。
 
 ## 当前实现状态
 
@@ -14,7 +14,7 @@ Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 | Task 2 | 已完成 | SQLite 数据库、Library / Playlist / Favorites / History Repository，以及事务和关键写入串行化。 |
 | Task 2R | 已完成 | Schema v2、Song 文件签名与可用性状态、嵌入式 Artwork 引用、Song 候选匹配和 atomic scan-batch persistence；Missing / Unreadable 不删除 Song 行，也不破坏 Playlist / Favorites / History 引用。 |
 | Task 3 | 已完成 corrective follow-up | 媒体元数据、歌词、扫描器、watcher、scheduler、domain event，以及歌词持久化、LRC 增量扫描、Available Songs contract、move matching、Artwork reference lifecycle 修复均已完成最终验收。 |
-| Task 4 | 未开始 | 依赖 Task 3 corrective follow-up 完成；Queue、Playback Context、AutoPlay、Playback Service 尚未实现。 |
+| Task 4 | 已完成 | Queue、Playback Context、Played / History、AutoPlay、Queue transaction/revision-CAS、Playback Service 与 MPD/PlayerPort 一致性均已完成最终验收。 |
 | Task 5 | 未开始 | Collection、Library/Playlist Service、REST API 尚未实现。 |
 | Task 6 | 未开始 | WebSocket 与完整状态恢复尚未实现。 |
 | Task 7 | 未开始 | Output Manager 与 MPD About 尚未实现。 |
@@ -24,17 +24,44 @@ Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 | Task 11 | 未开始 | NAS update.sh 与生产部署流程尚未实现。 |
 | Task 12 | 未开始 | 真实 NAS/MPD 最终验收与 v0.1.0 尚未开始。 |
 
+### Task 4 最终验收
+
+Task 4 已完成 Batch 1 → Batch 6，共 15 个 Plan Steps。
+
+最终 ARM64 Python virtualenv 验证：
+
+- Task 4 service aggregate：**46 passed**
+- Queue + AutoPlay：**27 passed**
+- Queue/History/AutoPlay：**35 passed**
+- Playback Service：**11 passed**
+- 其它受影响回归：**30 passed、32 passed、10 passed、34 passed**
+- Health：**1 passed**
+- 全局 `server/tests`：**164 passed**
+- compileall：通过
+- Ruff：通过
+- `git diff --check`：通过
+- 架构边界、changed-files、真实音乐文件只读检查：通过
+
+核心架构约束保持不变：
+
+- Music Server 是 Queue、AutoPlay、Playback State 与业务状态权威。
+- Playback engine 只通过 `PlayerPort` 访问。
+- Playback Service 不直接访问 SQLite 或具体 MPD transport。
+- AutoPlay 不覆盖 MANUAL Queue items。
+- Pause 保留 AutoPlay，Stop 禁用 AutoPlay，Queue exhaustion 非 terminal。
+- 真实音乐文件严格只读。
+- Task 4 未引入 Task 5–12 的未来实现。
+
+Task 4 验收记录：
+
+`docs/superpowers/plans/2026-09-29-mpd-server-task-4-batch-6-acceptance.md`
+
+Batch 6 required commit：
+
+`cb02824273881fcb328f20391ec99fe144ac84d9`  
+`feat: implement authoritative playback model`
+
 真实 MPD 环境：已在 Synology DS920 / DSM 7.1.1 的 MPD 0.23.5 上完成能力探针，并记录于 `docs/mpd-0.23.5-capabilities.md`。
-
-### Task 3 Corrective Follow-up
-
-Task 3 corrective follow-up 已完成并合并到 `main`，执行顺序为：
-
-`Batch 0 → Batch 1 → Batch 2 → Batch 3 → Batch 4 → Batch 5 → Batch 6`
-
-完成条件包括：跨层契约问题全部关闭；新增测试遵循 RED → GREEN；Task 3 focused tests、Task 2R regression、全局 Python tests、compileall、Ruff 通过；diff 无越界修改；Plan 有独立 corrective 记录；以及 Task 4 所需的 Available Songs contract 已冻结。
-
-Task 3 corrective follow-up 已完成最终验收；Task 4 可以依据已冻结的 Available Songs contract 和 Task 3 dependency gate 开始，但 Task 4 本身尚未实现。
 
 ## 本地检查
 
