@@ -234,5 +234,5 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
 
     assert manual.source == "MANUAL"
     assert [item.song_id for item in generated] == ["b", "c", "d", "e", "f"]
-    assert [item.song_id for item in items] == ["b", "c", "d", "e", "f", "j"]
-    assert items[-1].source == "MANUAL"
+    assert [item.song_id for item in items] == ["j", "b", "c", "d", "e", "f"]
+    assert items[0].source == "MANUAL"
