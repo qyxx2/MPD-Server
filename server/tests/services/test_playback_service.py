@@ -306,7 +306,7 @@ def test_mpd_queue_sync_failure_keeps_server_queue_authoritative(components):
 
     player.fail_next("queue_add", "injected queue sync failure")
     with pytest.raises(PlayerCommandError, match="injected queue sync failure"):
-        run(service.add_to_queue("b"))
+        run(service.add_to_queue("g"))
 
     items = run(components["queue"].list_up_next())
     assert [item.song_id for item in items] == list("bcdefg")
