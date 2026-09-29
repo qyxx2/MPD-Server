@@ -324,7 +324,7 @@ Contract Audit 本身不引入业务行为。
 
 ---
 
-# 4.7 Contract Audit Record（2026-09-29）
+## 4.7 Contract Audit Record（2026-09-29）
 
 本记录以本分支当时的实际 HEAD
 `ca9b25b970f7e332d776c985af9cabeaac0d3c17`
@@ -338,7 +338,7 @@ Contract Audit 本身不引入业务行为。
   `cb02824273881fcb328f20391ec99fe144ac84d9` 已被当前 main 基线包含
 - Task 0–4 永久回归文件均位于 `server/tests/`，本 Task 5 不建立对 Web build 的依赖
 
-## 4.7.1 Dependency / Architecture Gate
+### 4.7.1 Dependency / Architecture Gate
 
 当前代码实际具备：
 
@@ -371,7 +371,7 @@ API 不访问 SQLite、QueueRepository、HistoryRepository 或 concrete
 MPD adapter；Service 不依赖 concrete MPD adapter；CollectionService
 不依赖 WebSocket。
 
-## 4.7.2 LibraryRepository Audit
+### 4.7.2 LibraryRepository Audit
 
 实际存在并核对的主要能力：
 
@@ -416,7 +416,7 @@ Repository 只提供持久化引用和 source-song 信息；实际 artwork bytes
 LibraryService 在既有只读文件边界内完成。不得生成、修改、重命名、删除或写回
 音乐文件。
 
-## 4.7.3 PlaylistRepository Audit
+### 4.7.3 PlaylistRepository Audit
 
 实际存在：
 
@@ -448,7 +448,7 @@ Favorites 不实现为 Queue，也不与 History 混用。当前 favorites relat
 继续由 `favorites(song_id, created_at)` 持久化，默认顺序冻结为
 `created_at DESC, song_id DESC`，与现有 Repository 实际行为一致。
 
-## 4.7.4 Collection Contract Freeze
+### 4.7.4 Collection Contract Freeze
 
 Collection 统一来源：
 
@@ -514,7 +514,7 @@ Random / PlaybackContext：
 Collection 负责“哪些歌曲、什么顺序”，PlaybackService 负责真正替换 Queue、
 启动播放以及 AutoPlay 语义。
 
-## 4.7.5 Search Contract Freeze
+### 4.7.5 Search Contract Freeze
 
 首期只搜索 Song 已存在且可由 `list_available_songs()` 获得的数据：
 
@@ -559,7 +559,7 @@ exact field match
 
 Search 结果可直接作为 Collection；API 不得另行定义一套 Search 排序或去重规则。
 
-## 4.7.6 REST Contract Freeze
+### 4.7.6 REST Contract Freeze
 
 Task 5 首期 API 路径统一使用 `/api` 前缀。
 
@@ -683,7 +683,7 @@ REST 不重新解释 Playback Service 语义：
   PlaybackService 执行；
 - API 不直接修改 Queue，不直接向 MPD 发命令。
 
-## 4.7.7 Idempotency Contract Freeze
+### 4.7.7 Idempotency Contract Freeze
 
 Task 5 使用标准 HTTP header：
 
@@ -746,7 +746,7 @@ idempotency terminal result
 
 失败业务若未提交，则 terminal idempotency result 不存在；因此 retry 可以重新执行。
 
-## 4.7.8 Audit Conclusion / Batch Allocation
+### 4.7.8 Audit Conclusion / Batch Allocation
 
 Contract Audit 本身**不实现业务功能**，当前审计结果为：
 
