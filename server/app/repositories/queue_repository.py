@@ -518,6 +518,16 @@ class QueueRepository:
                 (str(row[1]) for row in rows if int(row[2]) == 0),
                 None,
             )
+            current_context_id = next(
+                (str(row[4]) for row in rows if int(row[2]) == 0 and row[4] is not None),
+                None,
+            )
+            if (
+                playback_context_id is not None
+                and current_context_id is not None
+                and current_context_id != playback_context_id
+            ):
+                return []
             pending_candidates: list[str] = []
             seen_candidates: set[str] = set()
             for song_id in song_ids:
