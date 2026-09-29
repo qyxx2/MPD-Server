@@ -4,7 +4,6 @@ import asyncio
 
 import pytest
 
-from server.app.models.queue import PlaybackState
 from server.app.player.mock_mpd import MockMPD
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.repositories.database import initialize_database
@@ -17,6 +16,7 @@ from server.app.services.autoplay import AutoPlay
 from server.app.services.history_service import HistoryService
 from server.app.services.playback_service import PlaybackService
 from server.app.services.queue_manager import QueueManager
+
 from server.app.models.library import Song
 
 
@@ -276,6 +276,7 @@ def test_next_failure_does_not_advance_service_state(components):
 
     assert run(components["state"].get_state()) == before
     assert current_song_id(components["queue"]) == "a"
+
 
 def test_playback_service_reconciles_status_after_successful_play(components):
     seed_songs(components["library"], *"ab")
