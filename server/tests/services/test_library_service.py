@@ -85,6 +85,13 @@ def test_get_song_delegates_to_repository(service):
     assert song.song_id == "1"
 
 
+def test_list_songs_preserves_known_unavailable_members(service):
+    songs = run(service.list_songs())
+    by_id = {song.song_id: song for song in songs}
+    assert set(by_id) == {"1", "2", "3", "4"}
+    assert by_id["4"].availability_status == "MISSING"
+
+
 def test_available_songs_keep_available_only(service):
     songs = run(service.list_available_songs())
     assert all(song.availability_status == "AVAILABLE" for song in songs)

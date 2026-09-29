@@ -9,6 +9,7 @@ from server.app.models.library import Song
 class LibraryRepositoryReader(Protocol):
     async def get_song(self, song_id: str) -> Song | None: ...
 
+    async def list_songs(self) -> list[Song]: ...
     async def list_available_songs(self) -> list[Song]: ...
 
 
@@ -20,6 +21,9 @@ class LibraryService:
 
     async def get_song(self, song_id: str) -> Song | None:
         return await self._repository.get_song(song_id)
+
+    async def list_songs(self) -> list[Song]:
+        return await self._repository.list_songs()
 
     async def list_available_songs(self) -> list[Song]:
         songs = await self._repository.list_available_songs()

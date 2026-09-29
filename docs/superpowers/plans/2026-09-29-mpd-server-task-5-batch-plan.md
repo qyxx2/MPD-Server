@@ -400,6 +400,36 @@ SQLite。
 必要的最小 Repository hardening 由 Batch 1 在出现不可避免的数据访问缺口时再补，
 且必须保持 `Song` / `availability_status` / 既有扫描事务语义不变。
 
+### 4.7.2.1 Corrective Audit: Collection availability enumeration (2026-09-29)
+
+Batch 1 implementation exposed a contract gap in the original audit conclusion.
+`list_available_songs()` intentionally returns only `AVAILABLE` rows, so it cannot
+enumerate source members that remain known in the library with
+`MISSING`/`UNREADABLE` availability. Using it as the sole input for Album,
+Artist, Genre, Year, Tag, or Library Collection construction loses the members
+required by `Collection.unavailable_song_ids`.
+
+The minimum hardening is a read-only complete-song enumeration contract:
+
+```text
+LibraryRepository.list_songs()
+        ↓
+LibraryService.list_songs()
+        ↓
+CollectionService source filtering + stable ordering
+        ↓
+split AVAILABLE / unavailable members
+```
+
+`list_available_songs()` remains unchanged and continues to mean only currently
+playable `AVAILABLE` songs. `Search` continues to use the frozen
+available-only search contract. Playlist, Favorites, and explicit `SONGS`
+continue to resolve membership by song ID and existing availability status.
+
+This is a corrective audit limited to Batch 1 availability semantics. It does
+not change the Batch 1/Batch 2 boundary and does not introduce PlaylistService,
+REST API, idempotency, or other future Task functionality.
+
 ### Artwork contract
 
 Artwork 继续使用：

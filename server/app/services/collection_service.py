@@ -134,26 +134,57 @@ class CollectionService:
         if playback_context is not None:
             return await self._resolve_members(playback_context.ordered_song_ids)
 
-        if source_type == "ALBUM":
-            if source_id is None:
-                raise ValueError("source_id is required for ALBUM")
-            return await self._library.find_songs_by_album(source_id), []
-        if source_type == "ARTIST":
-            if source_id is None:
-                raise ValueError("source_id is required for ARTIST")
-            return await self._library.find_songs_by_artist(source_id), []
-        if source_type == "GENRE":
-            if source_id is None:
-                raise ValueError("source_id is required for GENRE")
-            return await self._library.find_songs_by_genre(source_id), []
-        if source_type == "YEAR":
-            if source_id is None:
-                raise ValueError("source_id is required for YEAR")
-            return await self._library.find_songs_by_year(source_id), []
-        if source_type == "TAG":
-            if source_id is None:
-                raise ValueError("source_id is required for TAG")
-            return await self._library.find_songs_by_tag(source_id), []
+        if source_type in {"ALBUM", "ARTIST", "GENRE", "YEAR", "TAG", "LIBRARY"}:
+            songs = await self._library.list_songs()
+            if source_type == "ALBUM":
+                if source_id is None:
+                    raise ValueError("source_id is required for ALBUM")
+                songs = [song for song in songs if song.album_id == source_id]
+                songs = _sort_album(songs)
+            elif source_type == "ARTIST":
+                if source_id is None:
+                    raise ValueError("source_id is required for ARTIST")
+                normalized = source_id.strip().casefold()
+                songs = [
+                    song
+                    for song in songs
+                    if any(
+                        value.casefold() == normalized
+                        for value in (*song.artists, *song.album_artists)
+                    )
+                ]
+                songs = _sort_standard(songs)
+            elif source_type == "GENRE":
+                if source_id is None:
+                    raise ValueError("source_id is required for GENRE")
+                normalized = source_id.strip().casefold()
+                songs = [
+                    song
+                    for song in songs
+                    if any(value.casefold() == normalized for value in song.genres)
+                ]
+                songs = _sort_standard(songs)
+            elif source_type == "YEAR":
+                if source_id is None:
+                    raise ValueError("source_id is required for YEAR")
+                normalized = source_id.strip()
+                songs = [song for song in songs if str(song.year) == normalized]
+                songs = _sort_standard(songs)
+            elif source_type == "TAG":
+                if source_id is None:
+                    raise ValueError("source_id is required for TAG")
+                normalized = source_id.strip().casefold()
+                songs = [
+                    song
+                    for song in songs
+                    if any(
+                        value.casefold() == normalized for value in song.tag_names
+                    )
+                ]
+                songs = _sort_standard(songs)
+            else:
+                songs = _sort_standard(songs)
+            return _split_availability(songs)
         if source_type == "SEARCH":
             return await self._library.search_library(query or source_id or ""), []
         if source_type == "PLAYLIST":
@@ -210,6 +241,21 @@ class CollectionService:
             unavailable_song_ids=tuple(unavailable),
             random_seed=context.random_seed,
         )
+
+
+def _split_availability(songs: list[Song]) -> tuple[list[Song], list[str]]:
+    available: list[Song] = []
+    unavailable: list[str] = []
+    seen: set[str] = set()
+    for song in songs:
+        if song.song_id is None or song.song_id in seen:
+            continue
+        seen.add(song.song_id)
+        if song.availability_status == "AVAILABLE":
+            available.append(song)
+        else:
+            unavailable.append(song.song_id)
+    return available, unavailable
 
 
 def _validate_source_type(value: str) -> CollectionSourceType:

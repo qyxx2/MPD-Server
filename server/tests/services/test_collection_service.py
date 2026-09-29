@@ -23,6 +23,10 @@ class FakeLibraryRepository:
         self.calls.append(f"get_song:{song_id}")
         return self.songs.get(song_id)
 
+    async def list_songs(self) -> list[Song]:
+        self.calls.append("list_songs")
+        return list(self.songs.values())
+
     async def list_available_songs(self) -> list[Song]:
         self.calls.append("list_available_songs")
         return [
@@ -156,9 +160,37 @@ def test_every_collection_source_is_supported(
     assert result.song_ids == song_ids
     assert result.unavailable_song_ids == (
         ("song-missing",)
-        if source_type in {"PLAYLIST", "FAVORITES", "SONGS"}
+        if source_type != "SEARCH"
         else ()
     )
+
+
+@pytest.mark.parametrize(
+    ("source_type", "source_id", "expected_song_ids"),
+    [
+        ("ALBUM", "album-a", ("song-2", "song-3")),
+        ("ARTIST", "Artist A", ("song-2", "song-3")),
+        ("GENRE", "Rock", ("song-3", "song-1", "song-4")),
+        ("YEAR", "2024", ("song-1", "song-4")),
+        ("TAG", "Live", ("song-3", "song-1", "song-4")),
+        ("LIBRARY", None, ("song-2", "song-3", "song-1", "song-4")),
+    ],
+)
+def test_catalog_collection_preserves_known_unavailable_members(
+    services,
+    source_type: str,
+    source_id: str | None,
+    expected_song_ids: tuple[str, ...],
+):
+    _, _, _, collections = services
+    result = run(
+        collections.get_collection(
+            source_type=source_type,
+            source_id=source_id,
+        )
+    )
+    assert result.song_ids == expected_song_ids
+    assert result.unavailable_song_ids == ("song-missing",)
 
 
 def test_random_order_is_seeded_and_stable(services):
