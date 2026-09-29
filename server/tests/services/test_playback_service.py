@@ -186,7 +186,7 @@ def test_play_next_and_add_to_queue_sync_mpd_without_restarting_current(
 
 
 def test_pause_and_stop_commit_service_state_only_after_mpd_success(components):
-    seed_songs(components["library"], *"abcdefg")
+    seed_songs(components["library"], *"ab")
     service = components["service"]
     player = components["player"]
 
@@ -296,7 +296,7 @@ def test_playback_service_reconciles_status_after_successful_play(components):
     assert calls >= 1
 
 def test_mpd_queue_sync_failure_keeps_server_queue_authoritative(components):
-    seed_songs(components["library"], *"ab")
+    seed_songs(components["library"], *"abcdefg")
     service = components["service"]
     player = components["player"]
 
