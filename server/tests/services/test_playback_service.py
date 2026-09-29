@@ -10,8 +10,8 @@ from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.library_repository import LibraryRepository
-from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
+from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import QueueRepository
 from server.app.services.autoplay import AutoPlay
 from server.app.services.history_service import HistoryService
