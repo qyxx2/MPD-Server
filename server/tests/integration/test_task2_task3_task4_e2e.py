@@ -191,7 +191,7 @@ def test_scanned_real_song_enters_playback_service_and_reaches_mpd(
             assert status.song_uri == song.file_uri
             assert status.state.value == "playing"
 
-    await scenario()
+    run(scenario())
 
 
 def test_next_keeps_server_current_mpd_current_and_history_consistent(
@@ -234,7 +234,7 @@ def test_next_keeps_server_current_mpd_current_and_history_consistent(
             assert history[0].song_id == song_ids[0]
             assert history[0].reason == HistoryService.SWITCH_AWAY
 
-    await scenario()
+    run(scenario())
 
 
 def test_autoplay_play_next_and_add_to_queue_match_server_and_mpd_queue(
@@ -287,7 +287,7 @@ def test_autoplay_play_next_and_add_to_queue_match_server_and_mpd_queue(
             ).file_uri
             assert snapshot.player_state == "play"
 
-    await scenario()
+    run(scenario())
 
 
 def test_missing_scanned_song_is_rejected_before_mpd_play(
@@ -328,7 +328,7 @@ def test_missing_scanned_song_is_rejected_before_mpd_play(
             history = await runtime["history"].list_history()
             assert history == []
 
-    await scenario()
+    run(scenario())
 
 
 def test_missing_song_does_not_consume_mpd_play_failure_injection(
@@ -367,4 +367,4 @@ def test_missing_song_does_not_consume_mpd_play_failure_injection(
             ):
                 await runtime["adapter"].queue_play(mpd_song_id)
 
-    await scenario()
+    run(scenario())
