@@ -21,7 +21,6 @@ from server.app.services.history_service import HistoryService
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.playback_service import PlaybackService
 from server.app.services.queue_manager import QueueManager
-
 from server.tests.integration.support.stateful_fake_mpd import StatefulFakeMPD
 
 
