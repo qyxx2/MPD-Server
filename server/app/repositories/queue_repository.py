@@ -491,6 +491,98 @@ class QueueRepository:
 
         await run_transaction(self.path, operation)
 
+    async def add_autoplay_batch(
+        self,
+        song_ids: list[str],
+        *,
+        playback_context_id: str | None = None,
+        max_items: int = 5,
+        allow_current_repeat: bool = False,
+    ) -> list[QueueItem]:
+        if max_items <= 0:
+            return []
+        if not song_ids:
+            return []
+
+        async def operation(connection):
+            rows = connection.execute(
+                """
+                SELECT queue_item_id, song_id, position, source,
+                       playback_context_id
+                FROM queue_items
+                ORDER BY position, queue_item_id
+                """
+            ).fetchall()
+            queued_song_ids = {str(row[1]) for row in rows}
+            current_song_id = next(
+                (str(row[1]) for row in rows if int(row[2]) == 0),
+                None,
+            )
+            pending_candidates: list[str] = []
+            seen_candidates: set[str] = set()
+            for song_id in song_ids:
+                if song_id in seen_candidates:
+                    continue
+                seen_candidates.add(song_id)
+                if song_id in queued_song_ids:
+                    if not (
+                        allow_current_repeat
+                        and song_id == current_song_id
+                        and not any(
+                            int(row[2]) > 0 and str(row[1]) == song_id
+                            for row in rows
+                        )
+                    ):
+                        continue
+                pending_candidates.append(song_id)
+                if len(pending_candidates) >= max_items:
+                    break
+
+            if not pending_candidates:
+                return []
+
+            row = connection.execute(
+                """
+                SELECT COALESCE(MAX(position), 0)
+                FROM queue_items
+                WHERE position > 0
+                """
+            ).fetchone()
+            start_position = int(row[0] or 0) + 1
+
+            created: list[QueueItem] = []
+            for offset, song_id in enumerate(
+                pending_candidates,
+                start=start_position,
+            ):
+                queue_item_id = str(uuid.uuid4())
+                connection.execute(
+                    """
+                    INSERT INTO queue_items(
+                        queue_item_id, song_id, position, source,
+                        playback_context_id
+                    ) VALUES(?, ?, ?, 'AUTOPLAY', ?)
+                    """,
+                    (
+                        queue_item_id,
+                        song_id,
+                        offset,
+                        playback_context_id,
+                    ),
+                )
+                created.append(
+                    QueueItem(
+                        queue_item_id=queue_item_id,
+                        song_id=song_id,
+                        position=offset,
+                        source="AUTOPLAY",
+                        playback_context_id=playback_context_id,
+                    )
+                )
+            return created
+
+        return await run_transaction(self.path, operation)
+
     async def list_up_next(self) -> list[QueueItem]:
         async def operation(connection):
             rows = connection.execute(
