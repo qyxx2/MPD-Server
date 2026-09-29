@@ -17,6 +17,7 @@ from server.app.repositories.queue_repository import QueueRepository
 from server.app.services.autoplay import AutoPlay
 from server.app.services.history_service import HistoryService
 from server.app.services.playback_service import PlaybackService
+from server.app.services.queue_manager import QueueManager
 
 from server.tests.integration.support.stateful_fake_mpd import StatefulFakeMPD
 
@@ -35,21 +36,16 @@ def components(tmp_path: Path):
     state = PlaybackStateRepository(db_path)
     playlists = PlaylistRepository(db_path)
     history = HistoryRepository(db_path)
-    service = PlaybackService(
-        queue_manager=__import__(
-            "server.app.services.queue_manager",
-            fromlist=["QueueManager"],
-        ).QueueManager(queue, state, playlists),
-        history_service=HistoryService(queue, history),
-        autoplay=AutoPlay(queue, library, state),
-        player=None,  # replaced by the real MPDAdapter below
-        library_repository=library,
-    )
-
     fake = StatefulFakeMPD()
     run(fake.start())
     adapter = MPDAdapter("127.0.0.1", port=fake.port)
-    service.player = adapter
+    service = PlaybackService(
+        queue_manager=QueueManager(queue, state, playlists),
+        history_service=HistoryService(queue, history),
+        autoplay=AutoPlay(queue, library, state),
+        player=adapter,
+        library_repository=library,
+    )
 
     try:
         yield {
