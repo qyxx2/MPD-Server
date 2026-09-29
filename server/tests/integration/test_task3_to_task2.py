@@ -65,7 +65,7 @@ def test_task3_to_task2_scans_real_flac_and_mp3_into_get_song(
     assert flac.disc_number == 1
     assert flac.year == 2024
     assert flac.date == "2024-08-09"
-    assert flac.genres == ("Rock", "Alt")
+    assert set(flac.genres) == {"Rock", "Alt"}
     assert flac.codec == "FLAC"
     assert flac.bit_depth == 16
     assert flac.sample_rate_hz == 8000
@@ -250,7 +250,7 @@ def test_task3_to_task2_list_available_songs_returns_only_available(
     available_path = root / "available.flac"
     removed_path = root / "removed.mp3"
     copy2(media_fixture_dir / "metadata.flac", available_path)
-    copy2(media_fixture_dir / "no_lyrics.mp3", removed_path)
+    copy2(media_fixture_dir / "sidecar.mp3", removed_path)
 
     scanner, repository = make_scanner(db_path)
     first = run(scanner.scan_full(root))
