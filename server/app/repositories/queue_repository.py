@@ -538,16 +538,15 @@ class QueueRepository:
                 if song_id in seen_candidates:
                     continue
                 seen_candidates.add(song_id)
-                if song_id in queued_song_ids:
-                    if not (
-                        allow_current_repeat
-                        and song_id == current_song_id
-                        and not any(
-                            int(row[2]) > 0 and str(row[1]) == song_id
-                            for row in rows
-                        )
-                    ):
-                        continue
+                if song_id in queued_song_ids and not (
+                    allow_current_repeat
+                    and song_id == current_song_id
+                    and not any(
+                        int(row[2]) > 0 and str(row[1]) == song_id
+                        for row in rows
+                    )
+                ):
+                    continue
                 pending_candidates.append(song_id)
                 if len(pending_candidates) >= max_items:
                     break
