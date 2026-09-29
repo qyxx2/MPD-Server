@@ -239,3 +239,39 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
     assert [item.song_id for item in generated] == ["b", "c", "d", "e", "f"]
     assert [item.song_id for item in items] == ["j", "b", "c", "d", "e", "f"]
     assert items[0].source == "MANUAL"
+
+
+
+def test_autoplay_aborts_when_playback_context_changes_during_refill(components):
+    library, _queue, _manager = components
+    seed_songs(library, "a", "b", "c", "d", "e", "f", "g")
+    path = library.path
+    started = asyncio.Event()
+    release = asyncio.Event()
+    queue = CoordinatedQueueRepository(path, started, release)
+    state = PlaybackStateRepository(path)
+    playlists = PlaylistRepository(path)
+    manager = QueueManager(queue, state, playlists)
+    old_context = current_context("a")
+    run(manager.start_track("a"))
+
+    async def exercise():
+        autoplay = AutoPlay(queue, library)
+        task = asyncio.create_task(autoplay.refill(old_context))
+        await started.wait()
+        new_context = await queue.start_track(
+            "g",
+            playback_context_id="context-g",
+        )
+        release.set()
+        generated = await task
+        return new_context, generated, await queue.list_items()
+
+    new_context, generated, items = run(exercise())
+
+    assert new_context.song_id == "g"
+    assert generated == []
+    assert [(item.song_id, item.position, item.playback_context_id) for item in items] == [
+        ("g", 0, "context-g"),
+        ("a", -1, old_context.context_id),
+    ]
