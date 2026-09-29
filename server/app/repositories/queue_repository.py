@@ -519,7 +519,11 @@ class QueueRepository:
                 None,
             )
             current_context_id = next(
-                (str(row[4]) for row in rows if int(row[2]) == 0 and row[4] is not None),
+                (
+                    str(row[4])
+                    for row in rows
+                    if int(row[2]) == 0 and row[4] is not None
+                ),
                 None,
             )
             if (
