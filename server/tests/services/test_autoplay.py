@@ -189,23 +189,25 @@ class CoordinatedQueueRepository(QueueRepository):
         self.release_first_autoplay = release_first_autoplay
         self._paused_once = False
 
-    async def add_to_queue(
+    async def add_autoplay_batch(
         self,
-        song_id: str,
+        song_ids: list[str],
         *,
         playback_context_id: str | None = None,
-        source: str = "MANUAL",
+        max_items: int = 5,
+        allow_current_repeat: bool = False,
     ):
-        item = await super().add_to_queue(
-            song_id,
+        items = await super().add_autoplay_batch(
+            song_ids,
             playback_context_id=playback_context_id,
-            source=source,
+            max_items=max_items,
+            allow_current_repeat=allow_current_repeat,
         )
-        if source == "AUTOPLAY" and not self._paused_once:
+        if items and not self._paused_once:
             self._paused_once = True
             self.first_autoplay_started.set()
             await self.release_first_autoplay.wait()
-        return item
+        return items
 
 
 def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
