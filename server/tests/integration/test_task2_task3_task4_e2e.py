@@ -141,15 +141,23 @@ def test_scanned_real_song_enters_playback_service_and_reaches_mpd(
     media_fixture_dir: Path,
 ) -> None:
     async def scenario() -> None:
-        root, _ = scan_fixture_files(tmp_path, media_fixture_dir, 1)
+        root, _ = scan_fixture_files(tmp_path, media_fixture_dir, 2)
         scanner = LibraryScanner(components["library"])
         result = await scanner.scan_full(root)
 
-        assert len(result.added_song_ids) == 1
-        song_id = result.added_song_ids[0]
-
-        song = await components["library"].get_song(song_id)
-        assert song is not None
+        assert len(result.added_song_ids) == 2
+        songs = [
+            await components["library"].get_song(song_id)
+            for song_id in result.added_song_ids
+        ]
+        assert all(song is not None for song in songs)
+        song = next(
+            song
+            for song in songs
+            if song is not None and song.file_uri.endswith("track-00.flac")
+        )
+        song_id = song.song_id
+        assert song_id is not None
         assert song.file_uri.startswith(str(root))
         assert song.availability_status == "AVAILABLE"
         assert song.title == "Test Song"
@@ -164,10 +172,17 @@ def test_scanned_real_song_enters_playback_service_and_reaches_mpd(
             assert state.autoplay_enabled is True
             assert state.playback_context_id == context.context_id
 
-            assert server_queue_song_ids(runtime["queue"]) == [song_id]
+            assert server_queue_song_ids(runtime["queue"]) == [
+                song_id,
+                next(
+                    other.song_id
+                    for other in songs
+                    if other is not None and other.song_id != song_id
+                ),
+            ]
 
             snapshot = await runtime["fake"].snapshot()
-            assert len(snapshot.queue) == 1
+            assert len(snapshot.queue) == 2
             assert snapshot.queue[0].song_uri == song.file_uri
             assert snapshot.current_song_uri == song.file_uri
             assert snapshot.player_state == "play"
@@ -343,10 +358,13 @@ def test_missing_song_does_not_consume_mpd_play_failure_injection(
             ):
                 await runtime["service"].start_track(song_id)
 
+            mpd_song_id = await runtime["adapter"].queue_add(
+                "unreachable-before.mp3"
+            )
             with pytest.raises(
                 PlayerCommandError,
                 match="play should never be reached for a missing Song",
             ):
-                await runtime["adapter"].play("unreachable-before")
+                await runtime["adapter"].queue_play(mpd_song_id)
 
     await scenario()
