@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from server.app.models.library import Song
+from server.app.models.queue import PlaybackContext
 from server.app.player.mock_mpd import MockMPD
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.repositories.database import initialize_database
@@ -553,7 +554,16 @@ def test_play_context_does_not_fake_state_or_history_when_play_fails(
 
     assert run(components["state"].get_state()) == before_state
     assert components["history_service"].active_event == before_history
-    assert current_song_id(components["queue"]) == "a"
+    queue_items = [
+        item
+        for item in run(components["queue"].list_items())
+        if item.position >= 0
+    ]
+    assert [item.song_id for item in queue_items] == ["a", "b", "c"]
+    assert all(
+        item.playback_context_id == context.context_id
+        for item in queue_items
+    )
 
 
 def test_play_context_does_not_fake_state_or_history_when_player_unavailable(
