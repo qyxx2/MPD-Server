@@ -33,7 +33,7 @@ def components(tmp_path):
     playlists = PlaylistRepository(path)
     manager = QueueManager(queue, playback_state, playlists)
 
-    for song_id in "abcdef":
+    for song_id in "abcdefxyz":
         run(
             library.upsert_song(
                 Song(
