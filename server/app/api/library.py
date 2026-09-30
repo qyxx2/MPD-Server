@@ -16,9 +16,9 @@ from server.app.services.library_service import (
 )
 
 from .dependencies import (
-    get_library_scanner,
     get_library_service,
     resolve_collection_service,
+    resolve_library_scanner,
 )
 from .schemas import (
     AlbumListResponse,
@@ -379,8 +379,8 @@ async def create_collection(
 @router.post("/scan", response_model=ScanResultResponse)
 async def scan_library(
     request: ScanRequest,
-    scanner: LibraryScanner = Depends(get_library_scanner),
 ) -> ScanResultResponse:
+    scanner = await resolve_library_scanner(request)
     try:
         result: ScanResult = await scanner.scan_full(Path(request.root))
     except LibraryScanError as exc:
