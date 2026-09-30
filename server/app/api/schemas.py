@@ -90,7 +90,7 @@ class CollectionRequest(BaseModel):
     random_seed: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
-    def validate_source_contract(self) -> "CollectionRequest":
+    def validate_source_contract(self) -> CollectionRequest:
         id_sources = {"ALBUM", "ARTIST", "GENRE", "YEAR", "TAG", "PLAYLIST"}
         if self.source_type in id_sources and not self.source_id:
             raise ValueError(f"source_id is required for {self.source_type}")
@@ -100,9 +100,9 @@ class CollectionRequest(BaseModel):
             if self.query is None:
                 raise ValueError("query is required for SEARCH")
         elif self.query is not None:
-            raise ValueError(f"query is only allowed for SEARCH")
+            raise ValueError("query is only allowed for SEARCH")
         if self.source_type != "SONGS" and self.song_ids:
-            raise ValueError(f"song_ids are only allowed for SONGS")
+            raise ValueError("song_ids are only allowed for SONGS")
         return self
 
 

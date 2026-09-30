@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from server.app.models.library import ScanResult, Song
 from server.app.repositories.playlist_repository import PlaylistNotFoundError
-from server.app.services.library_scanner import LibraryScanError, LibraryScanner
+from server.app.services.library_scanner import LibraryScanError
 from server.app.services.library_service import (
     ArtworkNotFoundError,
     ArtworkReadError,
@@ -73,7 +74,7 @@ async def _songs_from_collection(
 
 @router.get("/songs", response_model=SongListResponse)
 async def list_songs(
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
     items = [_song_response(song) for song in await service.list_songs()]
     return SongListResponse(items=items, count=len(items))
@@ -82,7 +83,7 @@ async def list_songs(
 @router.get("/songs/{song_id}/artwork")
 async def get_song_artwork(
     song_id: str,
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ):
     try:
         data, mime_type = await service.read_artwork(song_id)
@@ -120,7 +121,7 @@ async def get_song_artwork(
 @router.get("/songs/{song_id}", response_model=SongResponse)
 async def get_song(
     song_id: str,
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongResponse:
     song = await service.get_song(song_id)
     if song is None:
@@ -136,7 +137,7 @@ async def get_song(
 
 @router.get("/albums", response_model=AlbumListResponse)
 async def list_albums(
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> AlbumListResponse:
     songs = await service.list_available_songs()
     groups: dict[str, list[Song]] = {}
@@ -182,7 +183,7 @@ async def list_albums(
 async def list_album_songs(
     album_id: str,
     request: Request,
-    library_service: LibraryService = Depends(get_library_service),
+    library_service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
     collection_service = await resolve_collection_service(request)
     collection = await collection_service.get_collection(
@@ -194,7 +195,7 @@ async def list_album_songs(
 
 @router.get("/artists", response_model=ArtistListResponse)
 async def list_artists(
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> ArtistListResponse:
     songs = sorted(
         await service.list_available_songs(),
@@ -228,7 +229,7 @@ async def list_artists(
 async def list_artist_songs(
     artist_id: str,
     request: Request,
-    library_service: LibraryService = Depends(get_library_service),
+    library_service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
     collection_service = await resolve_collection_service(request)
     collection = await collection_service.get_collection(
@@ -240,7 +241,7 @@ async def list_artist_songs(
 
 @router.get("/genres", response_model=GenreListResponse)
 async def list_genres(
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> GenreListResponse:
     items = _name_summary(
         await service.list_available_songs(),
@@ -255,7 +256,7 @@ async def list_genres(
 async def list_genre_songs(
     genre_id: str,
     request: Request,
-    library_service: LibraryService = Depends(get_library_service),
+    library_service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
     collection_service = await resolve_collection_service(request)
     collection = await collection_service.get_collection(
@@ -267,7 +268,7 @@ async def list_genre_songs(
 
 @router.get("/years", response_model=YearListResponse)
 async def list_years(
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> YearListResponse:
     songs = await service.list_available_songs()
     counts: dict[int, set[str]] = {}
@@ -286,7 +287,7 @@ async def list_years(
 async def list_year_songs(
     year: str,
     request: Request,
-    library_service: LibraryService = Depends(get_library_service),
+    library_service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
     collection_service = await resolve_collection_service(request)
     collection = await collection_service.get_collection(
@@ -298,7 +299,7 @@ async def list_year_songs(
 
 @router.get("/tags", response_model=TagListResponse)
 async def list_tags(
-    service: LibraryService = Depends(get_library_service),
+    service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> TagListResponse:
     items = _name_summary(
         await service.list_available_songs(),
@@ -313,7 +314,7 @@ async def list_tags(
 async def list_tag_songs(
     tag_id: str,
     request: Request,
-    library_service: LibraryService = Depends(get_library_service),
+    library_service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
     collection_service = await resolve_collection_service(request)
     collection = await collection_service.get_collection(

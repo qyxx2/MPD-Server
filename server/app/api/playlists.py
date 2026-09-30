@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.app.models.library import Song
 from server.app.repositories.playlist_repository import PlaylistNotFoundError
+from server.app.services.collection_service import CollectionService
 from server.app.services.library_service import LibraryService
 from server.app.services.playlist_service import PlaylistService
 
@@ -44,7 +47,7 @@ def _song_response(song: Song) -> SongResponse:
 
 @router.get("/api/playlists", response_model=PlaylistListResponse)
 async def list_playlists(
-    service: PlaylistService = Depends(get_playlist_service),
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
 ) -> PlaylistListResponse:
     playlists = await service.list_playlists()
     items = [
@@ -61,7 +64,7 @@ async def list_playlists(
 async def get_playlist(
     playlist_id: str,
     request: Request,
-    service: PlaylistService = Depends(get_playlist_service),
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
 ) -> PlaylistResponse:
     playlist = await service.get_playlist(playlist_id)
     if playlist is None:
@@ -96,8 +99,8 @@ async def get_playlist(
 async def list_playlist_songs(
     playlist_id: str,
     request: Request,
-    playlist_service: PlaylistService = Depends(get_playlist_service),
-    library_service: LibraryService = Depends(get_library_service),
+    playlist_service: Annotated[PlaylistService, Depends(get_playlist_service)],
+    library_service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
     playlist = await playlist_service.get_playlist(playlist_id)
     if playlist is None:
@@ -136,7 +139,7 @@ async def list_playlist_songs(
 
 @router.get("/api/favorites", response_model=CollectionResponse)
 async def get_favorites(
-    collection_service: CollectionService = Depends(resolve_collection_service),
+    collection_service: Annotated[CollectionService, Depends(resolve_collection_service)],
 ) -> CollectionResponse:
     return _collection_response(
         await collection_service.get_collection(source_type="FAVORITES")
