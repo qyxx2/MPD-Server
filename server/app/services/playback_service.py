@@ -53,7 +53,6 @@ class PlaybackService:
         await self._sync_player_queue()
         return context
 
-
     async def play_context(
         self,
         context: PlaybackContext,
@@ -70,7 +69,7 @@ class PlaybackService:
 
         status = await self._prepare_play(songs[0])
         state = await self._save_confirmed_playing(
-            songs[0].song_id,
+            context.ordered_song_ids[0],
             context_id=context.context_id,
             status=status,
         )
@@ -208,7 +207,6 @@ class PlaybackService:
             context_id=state.playback_context_id,
             autoplay_enabled=state.autoplay_enabled,
         )
-
 
     async def seek(self, seconds: float) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
