@@ -53,6 +53,32 @@ class PlaybackService:
         await self._sync_player_queue()
         return context
 
+
+    async def play_context(
+        self,
+        context: PlaybackContext,
+    ) -> PlaybackState | None:
+        if not context.ordered_song_ids:
+            return await self.queue_manager.get_playback_state()
+
+        songs = [
+            await self._require_available_song(song_id)
+            for song_id in context.ordered_song_ids
+        ]
+
+        await self.queue_manager.replace_with_context(context)
+
+        status = await self._prepare_play(songs[0])
+        state = await self._save_confirmed_playing(
+            songs[0].song_id,
+            context_id=context.context_id,
+            status=status,
+        )
+        await self.history_service.start_track(songs[0].song_id)
+        await self.autoplay.refill(context)
+        await self._sync_player_queue()
+        return state
+
     async def play_now(self, queue_item_id: str) -> QueueItem:
         item = await self.queue_manager.get_item(queue_item_id)
         if item is None:
@@ -179,6 +205,21 @@ class PlaybackService:
         status = await self.player.status()
         return await self._save_confirmed_status(
             status,
+            context_id=state.playback_context_id,
+            autoplay_enabled=state.autoplay_enabled,
+        )
+
+
+    async def seek(self, seconds: float) -> PlaybackState | None:
+        state = await self.queue_manager.get_playback_state()
+        if state is None or state.state == "STOPPED":
+            return state
+
+        await self.player.seek(seconds)
+        status = await self.player.status()
+        return await self._save_confirmed_status(
+            status,
+            song_id=state.song_id,
             context_id=state.playback_context_id,
             autoplay_enabled=state.autoplay_enabled,
         )
