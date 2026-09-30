@@ -38,7 +38,7 @@ def test_playlist_crud_and_list_order_preserve_songs(tmp_path):
         )
 
     first = run(playlists.create_playlist("First"))
-    second = run(playlists.create_playlist("Second"))
+    run(playlists.create_playlist("Second"))
 
     listed = run(playlists.list_playlists())
     assert [item.name for item in listed] == ["First", "Second"]
