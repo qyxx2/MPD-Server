@@ -287,6 +287,21 @@ def _deduplicate(songs: list[Song]) -> list[Song]:
     return result
 
 
+def _sort_album(songs: list[Song]) -> list[Song]:
+    return sorted(songs, key=_album_sort_key)
+
+
+def _album_sort_key(song: Song) -> tuple[object, ...]:
+    return (
+        song.disc_number is None,
+        song.disc_number if song.disc_number is not None else 0,
+        song.track_number is None,
+        song.track_number if song.track_number is not None else 0,
+        song.file_uri,
+        song.song_id or "",
+    )
+
+
 def _sort_standard(songs: list[Song]) -> list[Song]:
     return sorted(
         songs,

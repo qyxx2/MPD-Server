@@ -114,6 +114,9 @@ def make_songs() -> list[Song]:
             album_id="album-a",
             album="Album A",
             artists=("Artist A",),
+            genres=("Rock",),
+            tag_names=("Live",),
+            year=2024,
             availability_status="MISSING",
         ),
     ]
