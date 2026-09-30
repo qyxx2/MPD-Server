@@ -12,9 +12,41 @@ class DuplicatePlaylistSongError(ValueError):
     """Raised when a song already exists in the target playlist."""
 
 
+class PlaylistNotFoundError(ValueError):
+    """Raised when a requested Playlist does not exist."""
+
+
+class SystemPlaylistModificationError(ValueError):
+    """Raised when a protected system Playlist is renamed or deleted."""
+
+
 class PlaylistRepository:
     def __init__(self, path: str) -> None:
         self.path = path
+
+    @staticmethod
+    def _playlist_from_row(row: tuple[object, ...]) -> Playlist:
+        return Playlist(
+            playlist_id=str(row[0]),
+            name=str(row[1]),
+            created_at=datetime.fromisoformat(str(row[2])),
+            updated_at=datetime.fromisoformat(str(row[3])),
+            is_system=bool(row[4]),
+        )
+
+    @staticmethod
+    def _require_playlist(connection, playlist_id: str) -> Playlist:
+        row = connection.execute(
+            """
+            SELECT playlist_id, name, created_at, updated_at, is_system
+            FROM playlists
+            WHERE playlist_id = ?
+            """,
+            (playlist_id,),
+        ).fetchone()
+        if row is None:
+            raise PlaylistNotFoundError(playlist_id)
+        return PlaylistRepository._playlist_from_row(row)
 
     async def create_playlist(self, name: str) -> Playlist:
         async def operation(connection):
@@ -37,10 +69,76 @@ class PlaylistRepository:
 
         return await run_transaction(self.path, operation)
 
+    async def list_playlists(self) -> list[Playlist]:
+        async def operation(connection):
+            rows = connection.execute(
+                """
+                SELECT playlist_id, name, created_at, updated_at, is_system
+                FROM playlists
+                ORDER BY created_at ASC, playlist_id ASC
+                """
+            ).fetchall()
+            return [self._playlist_from_row(row) for row in rows]
+
+        return await run_transaction(self.path, operation)
+
+    async def get_playlist(self, playlist_id: str) -> Playlist | None:
+        async def operation(connection):
+            row = connection.execute(
+                """
+                SELECT playlist_id, name, created_at, updated_at, is_system
+                FROM playlists
+                WHERE playlist_id = ?
+                """,
+                (playlist_id,),
+            ).fetchone()
+            return self._playlist_from_row(row) if row is not None else None
+
+        return await run_transaction(self.path, operation)
+
+    async def update_playlist(self, playlist_id: str, name: str) -> Playlist:
+        async def operation(connection):
+            playlist = self._require_playlist(connection, playlist_id)
+            if playlist.is_system:
+                raise SystemPlaylistModificationError(playlist_id)
+
+            now = datetime.now(timezone.utc)
+            connection.execute(
+                """
+                UPDATE playlists
+                SET name = ?, updated_at = ?
+                WHERE playlist_id = ?
+                """,
+                (name, now.isoformat(), playlist_id),
+            )
+            return Playlist(
+                playlist_id=playlist.playlist_id,
+                name=name,
+                created_at=playlist.created_at,
+                updated_at=now,
+                is_system=playlist.is_system,
+            )
+
+        return await run_transaction(self.path, operation)
+
+    async def delete_playlist(self, playlist_id: str) -> None:
+        async def operation(connection):
+            playlist = self._require_playlist(connection, playlist_id)
+            if playlist.is_system:
+                raise SystemPlaylistModificationError(playlist_id)
+
+            connection.execute(
+                "DELETE FROM playlists WHERE playlist_id = ?",
+                (playlist_id,),
+            )
+
+        await run_transaction(self.path, operation)
+
     async def add_song(
         self, playlist_id: str, song_id: str, position: int | None = None
     ) -> None:
         async def operation(connection):
+            self._require_playlist(connection, playlist_id)
             duplicate = connection.execute(
                 """
                 SELECT 1
@@ -90,6 +188,7 @@ class PlaylistRepository:
 
     async def remove_song(self, playlist_id: str, song_id: str) -> None:
         async def operation(connection):
+            self._require_playlist(connection, playlist_id)
             row = connection.execute(
                 """
                 SELECT position
@@ -126,6 +225,7 @@ class PlaylistRepository:
         self, playlist_id: str, ordered_song_ids: list[str]
     ) -> None:
         async def operation(connection):
+            self._require_playlist(connection, playlist_id)
             current_song_ids = [
                 row[0]
                 for row in connection.execute(
@@ -203,6 +303,7 @@ class PlaylistRepository:
 
     async def list_song_ids(self, playlist_id: str) -> list[str]:
         async def operation(connection):
+            self._require_playlist(connection, playlist_id)
             return [
                 row[0]
                 for row in connection.execute(
