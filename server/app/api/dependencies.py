@@ -1,32 +1,19 @@
 from __future__ import annotations
 
-import os
-
 from fastapi import Request
 
-from server.app.repositories.library_repository import LibraryRepository
-from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
-from server.app.services.playback_service import PlaybackService
 from server.app.services.queue_manager import QueueManager
-
-
-def _database_path() -> str:
-    return os.environ.get("DATABASE_PATH", "music-server.db")
 
 
 async def resolve_library_service(request: Request) -> LibraryService:
     service = getattr(request.app.state, "library_service", None)
-    if service is not None:
-        return service
-
-    path = _database_path()
-    service = LibraryService(LibraryRepository(path))
-    request.app.state.library_service = service
+    if service is None:
+        raise RuntimeError("library service is not configured")
     return service
 
 
@@ -36,12 +23,8 @@ async def get_library_service(request: Request) -> LibraryService:
 
 async def resolve_playlist_service(request: Request) -> PlaylistService:
     service = getattr(request.app.state, "playlist_service", None)
-    if service is not None:
-        return service
-
-    path = _database_path()
-    service = PlaylistService(PlaylistRepository(path))
-    request.app.state.playlist_service = service
+    if service is None:
+        raise RuntimeError("playlist service is not configured")
     return service
 
 
@@ -51,13 +34,8 @@ async def get_playlist_service(request: Request) -> PlaylistService:
 
 async def resolve_collection_service(request: Request) -> CollectionService:
     service = getattr(request.app.state, "collection_service", None)
-    if service is not None:
-        return service
-
-    library_service = await resolve_library_service(request)
-    playlist_service = await resolve_playlist_service(request)
-    service = CollectionService(library_service, playlist_service)
-    request.app.state.collection_service = service
+    if service is None:
+        raise RuntimeError("collection service is not configured")
     return service
 
 
@@ -89,12 +67,8 @@ async def get_playback_service(request: Request) -> PlaybackService:
 
 async def resolve_library_scanner(request: Request) -> LibraryScanner:
     service = getattr(request.app.state, "library_scanner", None)
-    if service is not None:
-        return service
-
-    path = _database_path()
-    service = LibraryScanner(LibraryRepository(path))
-    request.app.state.library_scanner = service
+    if service is None:
+        raise RuntimeError("library scanner is not configured")
     return service
 
 
