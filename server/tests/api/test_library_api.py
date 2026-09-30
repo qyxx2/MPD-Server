@@ -247,7 +247,7 @@ def test_search_requires_query_and_preserves_empty_query_behavior(services):
     assert missing.status_code == 422
     assert missing.json()["code"] == "VALIDATION_ERROR"
     assert empty.status_code == 200
-    assert empty.json()["song_ids"] == ()
+    assert empty.json()["song_ids"] == []
     assert collection_service.calls[-1]["source_type"] == "SEARCH"
     assert collection_service.calls[-1]["query"] == ""
 
@@ -358,3 +358,34 @@ def test_service_boundary_is_explicit(services):
     assert collection_service.calls
     assert playlist_service.calls
     assert not hasattr(library, "connection")
+
+
+def test_catalog_list_routes_expose_stable_summary_resources(services):
+    client, _, _, _, _ = services
+
+    for path, key in (
+        ("/api/library/albums", "album_id"),
+        ("/api/library/artists", "name"),
+        ("/api/library/genres", "name"),
+        ("/api/library/years", "value"),
+        ("/api/library/tags", "name"),
+    ):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert isinstance(response.json()["items"], list)
+        assert key in response.json()["items"][0]
+
+
+def test_playlist_list_response_has_only_playlist_resource_shape(services):
+    client, _, _, _, _ = services
+
+    response = client.get("/api/playlists")
+
+    assert response.status_code == 200
+    assert response.json()["items"][0].keys() == {
+        "playlist_id",
+        "name",
+        "created_at",
+        "updated_at",
+        "is_system",
+    }
