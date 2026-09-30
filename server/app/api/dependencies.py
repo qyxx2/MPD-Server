@@ -4,7 +4,6 @@ import os
 
 from fastapi import Request
 
-from server.app.repositories.database import initialize_database
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.services.collection_service import CollectionService
@@ -23,7 +22,6 @@ async def resolve_library_service(request: Request) -> LibraryService:
         return service
 
     path = _database_path()
-    await initialize_database(path)
     service = LibraryService(LibraryRepository(path))
     request.app.state.library_service = service
     return service
@@ -39,7 +37,6 @@ async def resolve_playlist_service(request: Request) -> PlaylistService:
         return service
 
     path = _database_path()
-    await initialize_database(path)
     service = PlaylistService(PlaylistRepository(path))
     request.app.state.playlist_service = service
     return service
@@ -71,7 +68,6 @@ async def resolve_library_scanner(request: Request) -> LibraryScanner:
         return service
 
     path = _database_path()
-    await initialize_database(path)
     service = LibraryScanner(LibraryRepository(path))
     request.app.state.library_scanner = service
     return service
