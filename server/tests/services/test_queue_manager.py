@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from server.app.models.library import Song
+from server.app.models.queue import PlaybackContext
 from server.app.repositories.database import initialize_database
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
@@ -32,7 +33,7 @@ def components(tmp_path):
     playlists = PlaylistRepository(path)
     manager = QueueManager(queue, playback_state, playlists)
 
-    for song_id in "abcdef":
+    for song_id in "abcdefxyz":
         run(
             library.upsert_song(
                 Song(
@@ -396,3 +397,65 @@ def test_queue_manager_maps_missing_items_without_bypassing_repository(
         )
 
     assert run(queue.get_revision()) == revision
+
+
+def test_replace_with_context_replaces_queue_atomically_and_uses_one_revision(
+    components,
+):
+    manager, queue, state, _ = components
+
+    run(manager.start_track("x"))
+    run(manager.clear())
+    run(manager.add_to_queue("y"))
+    run(manager.add_to_queue("z"))
+    before_revision = run(queue.get_revision())
+
+    context = PlaybackContext(
+        context_id="context-1",
+        source_type="TEST",
+        source_id="collection-1",
+        ordered_song_ids=("a", "b", "c"),
+        random_seed=123,
+    )
+    items = run(manager.replace_with_context(context))
+
+    visible = [item for item in items if item.position >= 0]
+    assert [item.song_id for item in visible] == ["a", "b", "c"]
+    assert [item.position for item in visible] == [0, 1, 2]
+    assert all(
+        item.playback_context_id == context.context_id
+        for item in visible
+    )
+    assert [item.song_id for item in items if item.position < 0] == ["x"]
+    assert run(queue.get_revision()) == before_revision + 1
+    assert run(state.get_state()).song_id == "x"
+
+
+def test_replace_with_context_rolls_back_the_entire_mutation_on_invalid_song(
+    components,
+):
+    import sqlite3
+
+    manager, queue, state, _ = components
+
+    run(manager.start_track("x"))
+    run(manager.clear())
+    run(manager.add_to_queue("y"))
+    before_queue = run(queue.get_snapshot())
+    before_state = run(state.get_state())
+    before_revision = before_queue.revision
+
+    context = PlaybackContext(
+        context_id="context-2",
+        source_type="TEST",
+        source_id="collection-2",
+        ordered_song_ids=("a", "missing", "b"),
+        random_seed=7,
+    )
+
+    with pytest.raises(sqlite3.IntegrityError):
+        run(manager.replace_with_context(context))
+
+    assert run(queue.get_snapshot()) == before_queue
+    assert run(state.get_state()) == before_state
+    assert run(queue.get_revision()) == before_revision
