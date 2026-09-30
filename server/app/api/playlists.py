@@ -5,7 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.app.models.library import Song
-from server.app.repositories.playlist_repository import PlaylistNotFoundError
+from server.app.repositories.playlist_repository import (
+    DuplicatePlaylistSongError,
+    PlaylistNotFoundError,
+    SystemPlaylistModificationError,
+)
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_service import LibraryService
 from server.app.services.playlist_service import PlaylistService
@@ -17,7 +21,12 @@ from .dependencies import (
 )
 from .schemas import (
     CollectionResponse,
+    PlaylistCreateRequest,
     PlaylistListResponse,
+    PlaylistOrderRequest,
+    PlaylistResponse,
+    PlaylistSongRequest,
+    PlaylistUpdateRequest,
     PlaylistResponse,
     SongListResponse,
     SongResponse,
@@ -144,3 +153,163 @@ async def get_favorites(
     return _collection_response(
         await collection_service.get_collection(source_type="FAVORITES")
     )
+
+
+def _raise_playlist_http_error(exc: Exception) -> None:
+    if isinstance(exc, PlaylistNotFoundError):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "PLAYLIST_NOT_FOUND",
+                "message": f"playlist not found: {exc.args[0]}",
+                "details": None,
+            },
+        ) from exc
+    if isinstance(exc, (DuplicatePlaylistSongError, SystemPlaylistModificationError)):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": (
+                    "DUPLICATE_PLAYLIST_SONG"
+                    if isinstance(exc, DuplicatePlaylistSongError)
+                    else "SYSTEM_PLAYLIST_MODIFICATION"
+                ),
+                "message": str(exc),
+                "details": None,
+            },
+        ) from exc
+    if isinstance(exc, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "PLAYLIST_REQUEST_INVALID",
+                "message": str(exc),
+                "details": None,
+            },
+        ) from exc
+    raise exc
+
+
+@router.post("/api/playlists", response_model=PlaylistResponse, status_code=201)
+async def create_playlist(
+    request: PlaylistCreateRequest,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> PlaylistResponse:
+    return _playlist_response(await service.create_playlist(request.name), [])
+
+
+@router.patch("/api/playlists/{playlist_id}", response_model=PlaylistResponse)
+async def update_playlist(
+    playlist_id: str,
+    request: PlaylistUpdateRequest,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> PlaylistResponse:
+    try:
+        playlist = await service.update_playlist(playlist_id, request.name)
+        return _playlist_response(
+            playlist,
+            await service.list_song_ids(playlist_id),
+        )
+    except Exception as exc:
+        _raise_playlist_http_error(exc)
+        raise
+
+
+@router.delete("/api/playlists/{playlist_id}", status_code=204)
+async def delete_playlist(
+    playlist_id: str,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> None:
+    try:
+        await service.delete_playlist(playlist_id)
+    except Exception as exc:
+        _raise_playlist_http_error(exc)
+        raise
+
+
+@router.post(
+    "/api/playlists/{playlist_id}/songs",
+    response_model=PlaylistResponse,
+)
+async def add_playlist_song(
+    playlist_id: str,
+    request: PlaylistSongRequest,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> PlaylistResponse:
+    try:
+        await service.add_song(
+            playlist_id,
+            request.song_id,
+            position=request.position,
+        )
+        playlist = await service.get_playlist(playlist_id)
+        if playlist is None:
+            raise PlaylistNotFoundError(playlist_id)
+        return _playlist_response(
+            playlist,
+            await service.list_song_ids(playlist_id),
+        )
+    except Exception as exc:
+        _raise_playlist_http_error(exc)
+        raise
+
+
+@router.delete(
+    "/api/playlists/{playlist_id}/songs/{song_id}",
+    status_code=204,
+)
+async def remove_playlist_song(
+    playlist_id: str,
+    song_id: str,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> None:
+    try:
+        await service.remove_song(playlist_id, song_id)
+    except Exception as exc:
+        _raise_playlist_http_error(exc)
+        raise
+
+
+@router.put(
+    "/api/playlists/{playlist_id}/songs/order",
+    response_model=PlaylistResponse,
+)
+async def reorder_playlist(
+    playlist_id: str,
+    request: PlaylistOrderRequest,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> PlaylistResponse:
+    try:
+        await service.reorder_playlist(playlist_id, request.ordered_song_ids)
+        playlist = await service.get_playlist(playlist_id)
+        if playlist is None:
+            raise PlaylistNotFoundError(playlist_id)
+        return _playlist_response(
+            playlist,
+            await service.list_song_ids(playlist_id),
+        )
+    except Exception as exc:
+        _raise_playlist_http_error(exc)
+        raise
+
+
+@router.put("/api/favorites/{song_id}", response_model=CollectionResponse)
+async def favorite_song(
+    song_id: str,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+    collection_service: Annotated[
+        CollectionService, Depends(resolve_collection_service)
+    ],
+) -> CollectionResponse:
+    await service.set_favorite(song_id, True)
+    return _collection_response(
+        await collection_service.get_collection(source_type="FAVORITES")
+    )
+
+
+@router.delete("/api/favorites/{song_id}", status_code=204)
+async def unfavorite_song(
+    song_id: str,
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> None:
+    await service.set_favorite(song_id, False)
