@@ -289,10 +289,10 @@ The corrective branch is remote and remains separate from main.
 - Base: `main`
 - Base SHA: `29c7d6158c235f1070a4dc2c61cfe44261fe2458`
 - Corrective plan commit: `79162d11f26e106fab103a78e78d27428fc7e85f5`
-- Final acceptance-record commit: recorded after this file is created.
-- Commit message for acceptance-record commit: `docs: record Task 4 corrective acceptance`
+- Latest implementation commit: `f2cf8868976a74b4a98675450d0b9b39e3b7e281` (`fix: import playback context in queue repository`).
+- Final acceptance-record update is committed remotely immediately after this review.
 - Remote branch: `origin/feature/task-4-playback-service-corrective`
-- Commit exists remotely: verified after creation.
+- Commit exists remotely: verified after this update.
 
 No merge to main was performed.
 
