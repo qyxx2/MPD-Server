@@ -193,6 +193,7 @@ def test_list_songs_returns_stable_song_schema(services):
     body = response.json()
     assert body["items"][0]["song_id"] == "song-1"
     assert body["items"][0]["availability_status"] == "AVAILABLE"
+    assert body["count"] == 3
     assert "identity_key" not in body["items"][0]
 
 
@@ -209,18 +210,17 @@ def test_get_missing_song_is_404_and_does_not_return_fake_content(services):
     response = client.get("/api/library/songs/not-found")
 
     assert response.status_code == 404
-    assert response.json()["code"] == "SONG_NOT_FOUND"
+    assert response.json()["error"]["code"] == "SONG_NOT_FOUND"
 
 
 @pytest.mark.parametrize(
     ("path", "expected_source_type", "expected_source_id"),
     [
-        ("/api/library", "LIBRARY", None),
-        ("/api/library/albums/album-1", "ALBUM", "album-1"),
-        ("/api/library/artists/Artist%20One", "ARTIST", "Artist One"),
-        ("/api/library/genres/Rock", "GENRE", "Rock"),
-        ("/api/library/years/2024", "YEAR", "2024"),
-        ("/api/library/tags/Live", "TAG", "Live"),
+        ("/api/library/albums/album-1/songs", "ALBUM", "album-1"),
+        ("/api/library/artists/artist-1/songs", "ARTIST", "artist-1"),
+        ("/api/library/genres/genre-1/songs", "GENRE", "genre-1"),
+        ("/api/library/years/2024/songs", "YEAR", "2024"),
+        ("/api/library/tags/tag-1/songs", "TAG", "tag-1"),
     ],
 )
 def test_catalog_routes_use_one_collection_service_contract(
@@ -234,10 +234,10 @@ def test_catalog_routes_use_one_collection_service_contract(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["source_type"] == expected_source_type
-    assert body["source_id"] == expected_source_id
-    assert body["song_ids"] == ["song-1", "song-2"]
+    assert body["count"] == 2
+    assert [item["song_id"] for item in body["items"]] == ["song-1", "song-2"]
     assert collection_service.calls[-1]["source_type"] == expected_source_type
+    assert collection_service.calls[-1]["source_id"] == expected_source_id
 
 
 def test_search_requires_query_and_preserves_empty_query_behavior(services):
@@ -247,7 +247,7 @@ def test_search_requires_query_and_preserves_empty_query_behavior(services):
     empty = client.get("/api/library/search", params={"q": ""})
 
     assert missing.status_code == 422
-    assert missing.json()["code"] == "VALIDATION_ERROR"
+    assert missing.json()["error"]["code"] == "VALIDATION_ERROR"
     assert empty.status_code == 200
     assert empty.json()["song_ids"] == []
     assert collection_service.calls[-1]["source_type"] == "SEARCH"
@@ -257,12 +257,13 @@ def test_search_requires_query_and_preserves_empty_query_behavior(services):
 def test_collection_route_rejects_missing_required_source_id_before_service(services):
     client, _, collection_service, _, _ = services
 
-    response = client.get(
-        "/api/library/collections/ALBUM",
+    response = client.post(
+        "/api/library/collections",
+        json={"source_type": "ALBUM"},
     )
 
     assert response.status_code == 422
-    assert response.json()["code"] == "VALIDATION_ERROR"
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert collection_service.calls == []
 
 
@@ -271,9 +272,12 @@ def test_collection_route_supports_explicit_song_selection_as_read_contract(
 ):
     client, _, collection_service, _, _ = services
 
-    response = client.get(
-        "/api/library/collections/SONGS",
-        params=[("song_id", "song-1"), ("song_id", "song-2")],
+    response = client.post(
+        "/api/library/collections",
+        json={
+            "source_type": "SONGS",
+            "song_ids": ["song-1", "song-2", "song-1"],
+        },
     )
 
     assert response.status_code == 200
@@ -300,7 +304,7 @@ def test_missing_playlist_is_404(services):
     response = client.get("/api/playlists/missing")
 
     assert response.status_code == 404
-    assert response.json()["code"] == "PLAYLIST_NOT_FOUND"
+    assert response.json()["error"]["code"] == "PLAYLIST_NOT_FOUND"
 
 
 def test_favorites_read_is_a_collection_and_not_a_queue(services):
@@ -325,8 +329,11 @@ def test_album_artwork_read_failure_is_observable(services):
 
     assert response.status_code == 500
     assert response.json() == {
-        "code": "ARTWORK_READ_ERROR",
-        "message": "artwork source read failed",
+        "error": {
+            "code": "ARTWORK_READ_ERROR",
+            "message": "artwork source read failed",
+            "details": None,
+        }
     }
 
 
@@ -370,7 +377,7 @@ def test_service_boundary_is_explicit(services):
     client, library, collection_service, playlist_service, _ = services
 
     client.get("/api/library/songs/song-1")
-    client.get("/api/library/collections/LIBRARY")
+    client.post("/api/library/collections", json={"source_type": "LIBRARY"})
     client.get("/api/playlists")
 
     assert all(call[0] == "get_song" for call in library.calls[:1])
@@ -384,14 +391,15 @@ def test_catalog_list_routes_expose_stable_summary_resources(services):
 
     for path, key in (
         ("/api/library/albums", "album_id"),
-        ("/api/library/artists", "name"),
-        ("/api/library/genres", "name"),
+        ("/api/library/artists", "artist_id"),
+        ("/api/library/genres", "genre_id"),
         ("/api/library/years", "value"),
-        ("/api/library/tags", "name"),
+        ("/api/library/tags", "tag_id"),
     ):
         response = client.get(path)
         assert response.status_code == 200
         assert isinstance(response.json()["items"], list)
+        assert response.json()["count"] == len(response.json()["items"])
         assert key in response.json()["items"][0]
 
 
@@ -409,4 +417,5 @@ def test_playlist_list_response_has_only_playlist_resource_shape(services):
         "is_system",
         "song_ids",
     }
+    assert response.json()["count"] == 1
     assert response.json()["items"][0]["song_ids"] == ["song-1", "song-2"]
