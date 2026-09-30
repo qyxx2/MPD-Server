@@ -394,6 +394,7 @@ def test_playlist_and_favorite_mutations_delegate_to_playlist_service(client):
         "remove_song",
         "delete_playlist",
         "set_favorite",
+        "set_favorite",
     ]
 
 
