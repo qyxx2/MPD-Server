@@ -11,12 +11,12 @@ from server.app.api.library import router as library_router
 from server.app.api.playlists import router as playlists_router
 from server.app.api.playback import router as playback_router
 from server.app.player.mpd_adapter import MPDAdapter
+from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import QueueRepository
-from server.app.repositories.database import initialize_database
 from server.app.services.autoplay import AutoPlay
 from server.app.services.collection_service import CollectionService
 from server.app.services.history_service import HistoryService
