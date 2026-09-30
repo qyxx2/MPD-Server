@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Protocol
 
+from mutagen import MutagenError
 from mutagen.flac import FLAC
 from mutagen.id3 import APIC
 from mutagen.mp3 import MP3
@@ -153,7 +154,7 @@ class LibraryService:
                 raise ArtworkReadError(
                     f"unsupported artwork source format: {path.suffix or '<none>'}"
                 )
-        except (OSError, ValueError) as exc:
+        except (MutagenError, OSError, UnicodeError, ValueError) as exc:
             raise ArtworkReadError(
                 f"artwork source read failed: {exc}"
             ) from exc
@@ -164,7 +165,12 @@ class LibraryService:
                 f"artwork picture index is unavailable: {index}"
             )
 
-        data = bytes(pictures[index].data)
+        try:
+            data = bytes(pictures[index].data)
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise ArtworkReadError(
+                f"artwork data read failed: {exc}"
+            ) from exc
         if artwork.content_sha256 is not None:
             digest = hashlib.sha256(data).hexdigest()
             if digest != artwork.content_sha256:
