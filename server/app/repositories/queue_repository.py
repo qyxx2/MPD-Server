@@ -218,6 +218,66 @@ class QueueRepository:
 
         return await run_transaction(self.path, operation)
 
+
+    async def replace_with_context(
+        self,
+        playback_context: PlaybackContext,
+        *,
+        expected_revision: int | None = None,
+    ) -> list[QueueItem]:
+        async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
+
+            connection.execute(
+                """
+                UPDATE queue_items
+                SET position = position - 1
+                WHERE position < 0
+                """
+            )
+
+            current = connection.execute(
+                """
+                SELECT queue_item_id
+                FROM queue_items
+                WHERE position = 0
+                """
+            ).fetchone()
+            if current is not None:
+                connection.execute(
+                    """
+                    UPDATE queue_items
+                    SET position = -1
+                    WHERE queue_item_id = ?
+                    """,
+                    (current[0],),
+                )
+
+            connection.execute("DELETE FROM queue_items WHERE position > 0")
+
+            for position, song_id in enumerate(
+                playback_context.ordered_song_ids
+            ):
+                queue_item_id = str(uuid.uuid4())
+                connection.execute(
+                    """
+                    INSERT INTO queue_items(
+                        queue_item_id, song_id, position, source,
+                        playback_context_id
+                    ) VALUES(?, ?, ?, 'MANUAL', ?)
+                    """,
+                    (
+                        queue_item_id,
+                        song_id,
+                        position,
+                        playback_context.context_id,
+                    ),
+                )
+
+            return self._list_from_connection(connection)
+
+        return await run_transaction(self.path, operation)
+
     async def play_now(
         self,
         queue_item_id: str,
