@@ -4,19 +4,14 @@ import os
 
 from fastapi import Request
 
-from server.app.player.mpd_adapter import MPDAdapter
-from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.library_repository import LibraryRepository
-from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
-from server.app.repositories.queue_repository import QueueRepository
-from server.app.services.autoplay import AutoPlay
 from server.app.services.collection_service import CollectionService
-from server.app.services.history_service import HistoryService
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
+from server.app.services.playback_service import PlaybackService
 from server.app.services.queue_manager import QueueManager
 
 
@@ -72,16 +67,8 @@ async def get_collection_service(request: Request) -> CollectionService:
 
 async def resolve_queue_manager(request: Request) -> QueueManager:
     manager = getattr(request.app.state, "queue_manager", None)
-    if manager is not None:
-        return manager
-
-    path = _database_path()
-    manager = QueueManager(
-        QueueRepository(path),
-        PlaybackStateRepository(path),
-        PlaylistRepository(path),
-    )
-    request.app.state.queue_manager = manager
+    if manager is None:
+        raise RuntimeError("queue manager is not configured")
     return manager
 
 
@@ -91,33 +78,8 @@ async def get_queue_manager(request: Request) -> QueueManager:
 
 async def resolve_playback_service(request: Request) -> PlaybackService:
     service = getattr(request.app.state, "playback_service", None)
-    if service is not None:
-        return service
-
-    path = _database_path()
-    queue_manager = await resolve_queue_manager(request)
-    history_service = HistoryService(
-        QueueRepository(path),
-        HistoryRepository(path),
-    )
-    autoplay = AutoPlay(
-        QueueRepository(path),
-        LibraryRepository(path),
-        PlaybackStateRepository(path),
-    )
-    player = MPDAdapter(
-        os.environ.get("MPD_HOST", "127.0.0.1"),
-        port=int(os.environ.get("MPD_PORT", "6600")),
-        password=os.environ.get("MPD_PASSWORD"),
-    )
-    service = PlaybackService(
-        queue_manager=queue_manager,
-        history_service=history_service,
-        autoplay=autoplay,
-        player=player,
-        library_repository=LibraryRepository(path),
-    )
-    request.app.state.playback_service = service
+    if service is None:
+        raise RuntimeError("playback service is not configured")
     return service
 
 
