@@ -27,7 +27,6 @@ from .schemas import (
     PlaylistResponse,
     PlaylistSongRequest,
     PlaylistUpdateRequest,
-    PlaylistResponse,
     SongListResponse,
     SongResponse,
 )
@@ -195,7 +194,11 @@ async def create_playlist(
     request: PlaylistCreateRequest,
     service: Annotated[PlaylistService, Depends(get_playlist_service)],
 ) -> PlaylistResponse:
-    return _playlist_response(await service.create_playlist(request.name), [])
+    playlist = await service.create_playlist(request.name)
+    return _playlist_response(
+        playlist,
+        await service.list_song_ids(playlist.playlist_id),
+    )
 
 
 @router.patch("/api/playlists/{playlist_id}", response_model=PlaylistResponse)
