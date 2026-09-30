@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Protocol
@@ -30,6 +31,15 @@ class LibraryRepositoryReader(Protocol):
     async def get_album_artwork_source_song_id(
         self, song_id: str
     ) -> str | None: ...
+
+
+def library_entity_id(kind: str, name: str) -> str:
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"mpd-server:{kind}:{name.casefold()}",
+        )
+    )
 
 
 class LibraryService:
