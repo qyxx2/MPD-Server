@@ -196,3 +196,68 @@ class ScanResultResponse(BaseModel):
 
 class ScanRequest(BaseModel):
     root: str = Field(min_length=1)
+
+
+class QueueItemResponse(BaseModel):
+    queue_item_id: str
+    song_id: str
+    position: int
+    source: Literal["MANUAL", "AUTOPLAY"]
+    playback_context_id: str | None = None
+
+
+class QueueListResponse(BaseModel):
+    items: list[QueueItemResponse] = Field(default_factory=list)
+    count: int = 0
+
+
+class PlaybackStateResponse(BaseModel):
+    song_id: str | None = None
+    state: Literal["PLAYING", "PAUSED", "STOPPED"]
+    playback_context_id: str | None = None
+    position_seconds: float | None = Field(default=None, ge=0)
+    autoplay_enabled: bool = False
+    updated_at: datetime
+
+
+class SeekRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    seconds: float = Field(ge=0)
+
+
+class QueueReorderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    before_queue_item_id: str | None = None
+
+
+class PlaylistCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+
+
+class PlaylistUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+
+
+class PlaylistSongRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    song_id: str = Field(min_length=1)
+    position: int | None = Field(default=None, ge=0)
+
+
+class PlaylistOrderRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ordered_song_ids: list[str] = Field(default_factory=list)
+
+
+class SaveQueueAsPlaylistRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
