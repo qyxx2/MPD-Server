@@ -7,6 +7,7 @@ from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import (
+    CurrentTrackDeletionError,
     QueueItemNotFoundError,
     QueueRepository,
 )
