@@ -7,7 +7,7 @@ import pytest
 from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext
 from server.app.services.collection_service import CollectionService
-from server.app.services.library_service import LibraryService
+from server.app.services.library_service import LibraryService, library_entity_id
 
 
 def run(coro):
@@ -338,3 +338,29 @@ def test_service_uses_repository_contract_and_not_sqlite(services):
     assert not hasattr(collections, "connection")
     assert not hasattr(library, "path")
     assert not hasattr(collections, "path")
+
+
+@pytest.mark.parametrize(
+    ("source_type", "kind", "name", "expected"),
+    [
+        ("ARTIST", "artists", "Artist A", ("song-2", "song-3")),
+        ("GENRE", "genres", "Rock", ("song-3", "song-1", "song-4")),
+        ("TAG", "tags", "Live", ("song-3", "song-1", "song-4")),
+    ],
+)
+def test_catalog_collection_accepts_stable_entity_ids(
+    services,
+    source_type: str,
+    kind: str,
+    name: str,
+    expected: tuple[str, ...],
+):
+    _, _, _, collections = services
+    result = run(
+        collections.get_collection(
+            source_type=source_type,
+            source_id=library_entity_id(kind, name),
+        )
+    )
+    assert result.source_id == library_entity_id(kind, name)
+    assert result.song_ids == expected
