@@ -282,7 +282,11 @@ def test_collection_route_supports_explicit_song_selection_as_read_contract(
 
     assert response.status_code == 200
     assert response.json()["source_type"] == "SONGS"
-    assert collection_service.calls[-1]["song_ids"] == ["song-1", "song-2"]
+    assert collection_service.calls[-1]["song_ids"] == [
+        "song-1",
+        "song-2",
+        "song-1",
+    ]
 
 
 def test_playlist_read_uses_playlist_and_collection_services(services):
