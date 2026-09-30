@@ -56,6 +56,18 @@ class QueueManager:
             )
         return context
 
+
+    async def replace_with_context(
+        self,
+        context: PlaybackContext,
+        *,
+        expected_revision: int | None = None,
+    ) -> list[QueueItem]:
+        return await self.queue_repository.replace_with_context(
+            context,
+            expected_revision=expected_revision,
+        )
+
     async def play_now(
         self,
         queue_item_id: str,
