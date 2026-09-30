@@ -23,8 +23,11 @@ async def validation_exception_handler(
     return JSONResponse(
         status_code=422,
         content={
-            "code": "VALIDATION_ERROR",
-            "message": "; ".join(messages) or "request validation failed",
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "; ".join(messages) or "request validation failed",
+                "details": None,
+            }
         },
     )
 
@@ -35,13 +38,21 @@ async def http_exception_handler(
     exc: HTTPException,
 ) -> JSONResponse:
     if isinstance(exc.detail, dict):
-        payload = exc.detail
+        error = {
+            "code": exc.detail.get("code", f"HTTP_{exc.status_code}"),
+            "message": exc.detail.get("message", str(exc.detail)),
+            "details": exc.detail.get("details"),
+        }
     else:
-        payload = {
+        error = {
             "code": f"HTTP_{exc.status_code}",
             "message": str(exc.detail),
+            "details": None,
         }
-    return JSONResponse(status_code=exc.status_code, content=payload)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": error},
+    )
 
 
 @app.get("/api/health")
