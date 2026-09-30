@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from fastapi.testclient import TestClient
+
 from server.app.main import app
 from server.app.models.playlist import Playlist
-from fastapi.testclient import TestClient
 
 
 class FakePlaylistReader:
@@ -22,6 +23,9 @@ class FakePlaylistReader:
 
     async def get_playlist(self, playlist_id: str):
         return self.playlist if playlist_id == "playlist-1" else None
+
+    async def list_song_ids(self, playlist_id: str):
+        return ["song-1"] if playlist_id == "playlist-1" else []
 
 
 class FakeCollectionReader:
