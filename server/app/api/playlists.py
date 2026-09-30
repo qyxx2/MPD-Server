@@ -147,7 +147,9 @@ async def list_playlist_songs(
 
 @router.get("/api/favorites", response_model=CollectionResponse)
 async def get_favorites(
-    collection_service: Annotated[CollectionService, Depends(resolve_collection_service)],
+    collection_service: Annotated[
+        CollectionService, Depends(resolve_collection_service)
+    ],
 ) -> CollectionResponse:
     return _collection_response(
         await collection_service.get_collection(source_type="FAVORITES")
