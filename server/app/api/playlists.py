@@ -5,14 +5,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.app.models.library import Song
-from server.app.repositories.playlist_repository import (
-    DuplicatePlaylistSongError,
-    PlaylistNotFoundError,
-    SystemPlaylistModificationError,
-)
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_service import LibraryService
-from server.app.services.playlist_service import PlaylistService
+from server.app.services.playlist_service import (
+    DuplicatePlaylistSongError,
+    PlaylistNotFoundError,
+    PlaylistService,
+    SystemPlaylistModificationError,
+)
 
 from .dependencies import (
     get_library_service,
