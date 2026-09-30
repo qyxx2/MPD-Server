@@ -18,6 +18,7 @@ from .dependencies import (
     get_collection_service,
     get_library_scanner,
     get_library_service,
+    resolve_collection_service,
 )
 from .schemas import (
     AlbumListResponse,
@@ -47,7 +48,7 @@ def _song_response(song: Song) -> SongResponse:
 
 
 def _collection_response(collection) -> CollectionResponse:
-    return CollectionResponse.model_validate(collection)
+    return CollectionResponse.model_validate(collection.model_dump())
 
 
 def _validation_error(message: str) -> HTTPException:
@@ -224,8 +225,7 @@ async def list_years(
         counts.setdefault(song.year, set()).add(song.song_id)
     return YearListResponse(
         items=[
-            __import__("server.app.api.schemas", fromlist=["YearSummaryResponse"])
-            .YearSummaryResponse(value=year, song_count=len(song_ids))
+            YearSummaryResponse(value=year, song_count=len(song_ids))
             for year, song_ids in sorted(counts.items())
         ]
     )
@@ -246,11 +246,12 @@ async def list_tags(
 
 @router.get("/search", response_model=CollectionResponse)
 async def search(
+    request,
     q: str | None = Query(default=None),
-    collection_service: CollectionService = Depends(get_collection_service),
 ) -> CollectionResponse:
     if q is None:
         raise _validation_error("query.q: Field required")
+    collection_service = await resolve_collection_service(request)
     return _collection_response(
         await collection_service.get_collection(
             source_type="SEARCH",
@@ -261,13 +262,13 @@ async def search(
 
 @router.get("/collections/{source_type}", response_model=CollectionResponse)
 async def get_collection(
+    request,
     source_type: str,
     source_id: str | None = Query(default=None),
     song_id: list[str] | None = Query(default=None),
     randomize: bool = Query(default=False),
     random_seed: int | None = Query(default=None, ge=0),
     query: str | None = Query(default=None),
-    collection_service: CollectionService = Depends(get_collection_service),
 ) -> CollectionResponse:
     source_type = source_type.upper()
     if source_type not in {
@@ -292,6 +293,7 @@ async def get_collection(
     if source_type == "SONGS":
         song_id = song_id or []
 
+    collection_service = await resolve_collection_service(request)
     try:
         collection = await collection_service.get_collection(
             source_type=source_type,
