@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
+from server.app.models.queue import PlaybackState, QueueItem
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.repositories.queue_repository import (
     CurrentTrackDeletionError,
