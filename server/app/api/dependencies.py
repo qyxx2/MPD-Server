@@ -17,7 +17,7 @@ def _database_path() -> str:
     return os.environ.get("DATABASE_PATH", "music-server.db")
 
 
-async def get_library_service(request: Request) -> LibraryService:
+async def resolve_library_service(request: Request) -> LibraryService:
     service = getattr(request.app.state, "library_service", None)
     if service is not None:
         return service
@@ -29,7 +29,11 @@ async def get_library_service(request: Request) -> LibraryService:
     return service
 
 
-async def get_playlist_service(request: Request) -> PlaylistService:
+async def get_library_service(request: Request) -> LibraryService:
+    return await resolve_library_service(request)
+
+
+async def resolve_playlist_service(request: Request) -> PlaylistService:
     service = getattr(request.app.state, "playlist_service", None)
     if service is not None:
         return service
@@ -41,21 +45,27 @@ async def get_playlist_service(request: Request) -> PlaylistService:
     return service
 
 
-async def get_collection_service(
-    request: Request,
-    library_service: LibraryService,
-    playlist_service: PlaylistService,
-) -> CollectionService:
+async def get_playlist_service(request: Request) -> PlaylistService:
+    return await resolve_playlist_service(request)
+
+
+async def resolve_collection_service(request: Request) -> CollectionService:
     service = getattr(request.app.state, "collection_service", None)
     if service is not None:
         return service
 
+    library_service = await resolve_library_service(request)
+    playlist_service = await resolve_playlist_service(request)
     service = CollectionService(library_service, playlist_service)
     request.app.state.collection_service = service
     return service
 
 
-async def get_library_scanner(request: Request) -> LibraryScanner:
+async def get_collection_service(request: Request) -> CollectionService:
+    return await resolve_collection_service(request)
+
+
+async def resolve_library_scanner(request: Request) -> LibraryScanner:
     service = getattr(request.app.state, "library_scanner", None)
     if service is not None:
         return service
@@ -65,3 +75,7 @@ async def get_library_scanner(request: Request) -> LibraryScanner:
     service = LibraryScanner(LibraryRepository(path))
     request.app.state.library_scanner = service
     return service
+
+
+async def get_library_scanner(request: Request) -> LibraryScanner:
+    return await resolve_library_scanner(request)
