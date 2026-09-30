@@ -25,6 +25,7 @@ from .dependencies import (
 from .schemas import (
     CollectionRequest,
     CollectionResponse,
+    PlaybackContextResponse,
     PlaybackStateResponse,
     PlaylistResponse,
     QueueItemResponse,
@@ -156,25 +157,24 @@ async def get_queue(
 
 @router.post(
     "/tracks/{song_id}/play",
-    response_model=CollectionResponse,
+    response_model=PlaybackContextResponse,
 )
 async def play_track(
     song_id: str,
     service: Annotated[PlaybackService, Depends(get_playback_service)],
-) -> CollectionResponse:
+) -> PlaybackContextResponse:
     try:
         context = await service.start_track(song_id)
     except Exception as exc:
         _raise_playback_http_error(exc)
         raise
-    collection = {
-        "source_type": context.source_type,
-        "source_id": context.source_id,
-        "song_ids": list(context.ordered_song_ids),
-        "unavailable_song_ids": [],
-        "random_seed": context.random_seed,
-    }
-    return CollectionResponse.model_validate(collection)
+    return PlaybackContextResponse(
+        context_id=context.context_id,
+        source_type=context.source_type,
+        source_id=context.source_id,
+        ordered_song_ids=list(context.ordered_song_ids),
+        random_seed=context.random_seed,
+    )
 
 
 @router.post(
@@ -304,19 +304,12 @@ async def reorder_queue_item(
     queue_item_id: str,
     request: QueueReorderRequest,
     service: Annotated[QueueManager, Depends(get_queue_manager)],
-    playback_service: Annotated[
-        PlaybackService, Depends(get_playback_service)
-    ],
 ) -> QueueListResponse:
     try:
         items = await service.reorder(
             queue_item_id,
             request.before_queue_item_id,
         )
-        if playback_service is not None:
-            # PlaybackService remains the orchestration boundary; QueueManager
-            # owns the persistent queue mutation itself.
-            return _queue_response(items)
         return _queue_response(items)
     except Exception as exc:
         _raise_playback_http_error(exc)
