@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from server.app.main import app
-from server.app.models.playlist import Playlist
 
 
 class EmptyLibrary:
