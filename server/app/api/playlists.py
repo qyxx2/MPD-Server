@@ -196,7 +196,10 @@ async def create_playlist(
     request: PlaylistCreateRequest,
     service: Annotated[PlaylistService, Depends(get_playlist_service)],
 ) -> PlaylistResponse:
-    playlist = await service.create_playlist(request.name)
+    created = await service.create_playlist(request.name)
+    playlist = await service.get_playlist(created.playlist_id)
+    if playlist is None:
+        raise PlaylistNotFoundError(created.playlist_id)
     return _playlist_response(
         playlist,
         await service.list_song_ids(playlist.playlist_id),
@@ -210,7 +213,10 @@ async def update_playlist(
     service: Annotated[PlaylistService, Depends(get_playlist_service)],
 ) -> PlaylistResponse:
     try:
-        playlist = await service.update_playlist(playlist_id, request.name)
+        await service.update_playlist(playlist_id, request.name)
+        playlist = await service.get_playlist(playlist_id)
+        if playlist is None:
+            raise PlaylistNotFoundError(playlist_id)
         return _playlist_response(
             playlist,
             await service.list_song_ids(playlist_id),

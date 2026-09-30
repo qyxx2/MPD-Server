@@ -43,11 +43,11 @@ def _playback_state_response(
 ) -> PlaybackStateResponse | None:
     if state is None:
         return None
-    return PlaybackStateResponse.model_validate(state)
+    return PlaybackStateResponse.model_validate(state.model_dump())
 
 
 def _queue_item_response(item: QueueItem) -> QueueItemResponse:
-    return QueueItemResponse.model_validate(item)
+    return QueueItemResponse.model_validate(item.model_dump())
 
 
 def _queue_response(items: list[QueueItem]) -> QueueListResponse:
