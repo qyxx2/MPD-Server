@@ -20,6 +20,7 @@ from server.app.repositories.database import initialize_database
 from server.app.services.autoplay import AutoPlay
 from server.app.services.collection_service import CollectionService
 from server.app.services.history_service import HistoryService
+from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     history_repository = HistoryRepository(database_path)
 
     library_service = LibraryService(library_repository)
+    library_scanner = LibraryScanner(library_repository)
     playlist_service = PlaylistService(playlist_repository)
     collection_service = CollectionService(library_service, playlist_service)
     queue_manager = QueueManager(
@@ -65,6 +67,7 @@ async def lifespan(app: FastAPI):
     )
 
     app.state.library_service = library_service
+    app.state.library_scanner = library_scanner
     app.state.playlist_service = playlist_service
     app.state.collection_service = collection_service
     app.state.queue_manager = queue_manager
