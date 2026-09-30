@@ -5,11 +5,18 @@ import os
 from fastapi import Request
 
 from server.app.repositories.library_repository import LibraryRepository
+from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
+from server.app.repositories.playback_state_repository import PlaybackStateRepository
+from server.app.repositories.queue_repository import QueueRepository
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_scanner import LibraryScanner
+from server.app.services.autoplay import AutoPlay
+from server.app.services.history_service import HistoryService
 from server.app.services.library_service import LibraryService
+from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
+from server.app.player.mpd_adapter import MPDAdapter
 
 
 def _database_path() -> str:
