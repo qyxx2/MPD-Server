@@ -62,6 +62,61 @@ async def get_collection_service(request: Request) -> CollectionService:
     return await resolve_collection_service(request)
 
 
+async def resolve_queue_manager(request: Request):
+    manager = getattr(request.app.state, "queue_manager", None)
+    if manager is not None:
+        return manager
+
+    path = _database_path()
+    manager = QueueManager(
+        QueueRepository(path),
+        PlaybackStateRepository(path),
+        PlaylistRepository(path),
+    )
+    request.app.state.queue_manager = manager
+    return manager
+
+
+async def get_queue_manager(request: Request):
+    return await resolve_queue_manager(request)
+
+
+async def resolve_playback_service(request: Request):
+    service = getattr(request.app.state, "playback_service", None)
+    if service is not None:
+        return service
+
+    path = _database_path()
+    queue_manager = await resolve_queue_manager(request)
+    history_service = HistoryService(
+        QueueRepository(path),
+        HistoryRepository(path),
+    )
+    autoplay = AutoPlay(
+        QueueRepository(path),
+        LibraryRepository(path),
+        PlaybackStateRepository(path),
+    )
+    player = MPDAdapter(
+        os.environ.get("MPD_HOST", "127.0.0.1"),
+        port=int(os.environ.get("MPD_PORT", "6600")),
+        password=os.environ.get("MPD_PASSWORD"),
+    )
+    service = PlaybackService(
+        queue_manager=queue_manager,
+        history_service=history_service,
+        autoplay=autoplay,
+        player=player,
+        library_repository=LibraryRepository(path),
+    )
+    request.app.state.playback_service = service
+    return service
+
+
+async def get_playback_service(request: Request):
+    return await resolve_playback_service(request)
+
+
 async def resolve_library_scanner(request: Request) -> LibraryScanner:
     service = getattr(request.app.state, "library_scanner", None)
     if service is not None:
