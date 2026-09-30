@@ -38,7 +38,9 @@ from .schemas import (
 router = APIRouter(prefix="/api/playback", tags=["playback"])
 
 
-def _playback_state_response(state: PlaybackState | None) -> PlaybackStateResponse | None:
+def _playback_state_response(
+    state: PlaybackState | None,
+) -> PlaybackStateResponse | None:
     if state is None:
         return None
     return PlaybackStateResponse.model_validate(state)
