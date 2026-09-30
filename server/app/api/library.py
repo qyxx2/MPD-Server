@@ -6,26 +6,28 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from server.app.models.library import ScanResult, Song
+from server.app.repositories.playlist_repository import PlaylistNotFoundError
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_scanner import LibraryScanError, LibraryScanner
 from server.app.services.library_service import (
     ArtworkNotFoundError,
     ArtworkReadError,
     LibraryService,
+    library_entity_id,
 )
-from server.app.repositories.playlist_repository import PlaylistNotFoundError
 
 from .dependencies import (
-    get_collection_service,
     get_library_scanner,
     get_library_service,
     resolve_collection_service,
+    resolve_library_service,
 )
 from .schemas import (
     AlbumListResponse,
     AlbumSummaryResponse,
     ArtistListResponse,
     ArtistSummaryResponse,
+    CollectionRequest,
     CollectionResponse,
     GenreListResponse,
     GenreSummaryResponse,
@@ -55,26 +57,28 @@ def _collection_response(collection) -> CollectionResponse:
 def _validation_error(message: str) -> HTTPException:
     return HTTPException(
         status_code=422,
-        detail={"code": "VALIDATION_ERROR", "message": message},
+        detail={"code": "VALIDATION_ERROR", "message": message, "details": None},
     )
 
 
-@router.get("", response_model=CollectionResponse)
-async def library_collection(
-    collection_service: CollectionService = Depends(get_collection_service),
-) -> CollectionResponse:
-    return _collection_response(
-        await collection_service.get_collection(source_type="LIBRARY")
-    )
+async def _songs_from_collection(
+    collection,
+    library_service: LibraryService,
+) -> SongListResponse:
+    songs: list[SongResponse] = []
+    for song_id in collection.song_ids:
+        song = await library_service.get_song(song_id)
+        if song is not None and song.availability_status == "AVAILABLE":
+            songs.append(_song_response(song))
+    return SongListResponse(items=songs, count=len(songs))
 
 
 @router.get("/songs", response_model=SongListResponse)
 async def list_songs(
     service: LibraryService = Depends(get_library_service),
 ) -> SongListResponse:
-    return SongListResponse(
-        items=[_song_response(song) for song in await service.list_songs()]
-    )
+    items = [_song_response(song) for song in await service.list_songs()]
+    return SongListResponse(items=items, count=len(items))
 
 
 @router.get("/songs/{song_id}/artwork")
@@ -87,7 +91,11 @@ async def get_song_artwork(
     except KeyError as exc:
         raise HTTPException(
             status_code=404,
-            detail={"code": "SONG_NOT_FOUND", "message": f"song not found: {song_id}"},
+            detail={
+                "code": "SONG_NOT_FOUND",
+                "message": f"song not found: {song_id}",
+                "details": None,
+            },
         ) from exc
     except ArtworkNotFoundError as exc:
         raise HTTPException(
@@ -95,12 +103,17 @@ async def get_song_artwork(
             detail={
                 "code": "ARTWORK_NOT_FOUND",
                 "message": f"artwork not found: {song_id}",
+                "details": None,
             },
         ) from exc
     except (ArtworkReadError, RuntimeError) as exc:
         raise HTTPException(
             status_code=500,
-            detail={"code": "ARTWORK_READ_ERROR", "message": str(exc)},
+            detail={
+                "code": "ARTWORK_READ_ERROR",
+                "message": str(exc),
+                "details": None,
+            },
         ) from exc
 
     return Response(content=data, media_type=mime_type)
@@ -118,6 +131,7 @@ async def get_song(
             detail={
                 "code": "SONG_NOT_FOUND",
                 "message": f"song not found: {song_id}",
+                "details": None,
             },
         )
     return _song_response(song)
@@ -161,14 +175,24 @@ async def list_albums(
                 year=representative.year,
                 date=representative.date,
                 song_count=len({song.song_id for song in members if song.song_id}),
-                artwork=(
-                    representative.artwork.model_dump(mode="json")
-                    if representative.artwork
-                    else None
-                ),
+                artwork=representative.artwork,
             )
         )
-    return AlbumListResponse(items=items)
+    return AlbumListResponse(items=items, count=len(items))
+
+
+@router.get("/albums/{album_id}/songs", response_model=SongListResponse)
+async def list_album_songs(
+    album_id: str,
+    request: Request,
+    library_service: LibraryService = Depends(get_library_service),
+) -> SongListResponse:
+    collection_service = await resolve_collection_service(request)
+    collection = await collection_service.get_collection(
+        source_type="ALBUM",
+        source_id=album_id,
+    )
+    return await _songs_from_collection(collection, library_service)
 
 
 @router.get("/artists", response_model=ArtistListResponse)
@@ -191,25 +215,57 @@ async def list_artists(
             else:
                 current[1].add(song.song_id)
     items = [
-        ArtistSummaryResponse(name=name, song_count=len(song_ids))
+        ArtistSummaryResponse(
+            artist_id=library_entity_id("artists", name),
+            name=name,
+            song_count=len(song_ids),
+        )
         for name, song_ids in sorted(
             groups.values(), key=lambda value: value[0].casefold()
         )
     ]
-    return ArtistListResponse(items=items)
+    return ArtistListResponse(items=items, count=len(items))
+
+
+@router.get("/artists/{artist_id}/songs", response_model=SongListResponse)
+async def list_artist_songs(
+    artist_id: str,
+    request: Request,
+    library_service: LibraryService = Depends(get_library_service),
+) -> SongListResponse:
+    collection_service = await resolve_collection_service(request)
+    collection = await collection_service.get_collection(
+        source_type="ARTIST",
+        source_id=artist_id,
+    )
+    return await _songs_from_collection(collection, library_service)
 
 
 @router.get("/genres", response_model=GenreListResponse)
 async def list_genres(
     service: LibraryService = Depends(get_library_service),
 ) -> GenreListResponse:
-    return GenreListResponse(
-        items=_name_summary(
-            await service.list_available_songs(),
-            lambda song: song.genres,
-            GenreSummaryResponse,
-        )
+    items = _name_summary(
+        await service.list_available_songs(),
+        lambda song: song.genres,
+        GenreSummaryResponse,
+        "genres",
     )
+    return GenreListResponse(items=items, count=len(items))
+
+
+@router.get("/genres/{genre_id}/songs", response_model=SongListResponse)
+async def list_genre_songs(
+    genre_id: str,
+    request: Request,
+    library_service: LibraryService = Depends(get_library_service),
+) -> SongListResponse:
+    collection_service = await resolve_collection_service(request)
+    collection = await collection_service.get_collection(
+        source_type="GENRE",
+        source_id=genre_id,
+    )
+    return await _songs_from_collection(collection, library_service)
 
 
 @router.get("/years", response_model=YearListResponse)
@@ -222,25 +278,52 @@ async def list_years(
         if song.year is None or song.song_id is None:
             continue
         counts.setdefault(song.year, set()).add(song.song_id)
-    return YearListResponse(
-        items=[
-            YearSummaryResponse(value=year, song_count=len(song_ids))
-            for year, song_ids in sorted(counts.items())
-        ]
+    items = [
+        YearSummaryResponse(value=year, song_count=len(song_ids))
+        for year, song_ids in sorted(counts.items())
+    ]
+    return YearListResponse(items=items, count=len(items))
+
+
+@router.get("/years/{year}/songs", response_model=SongListResponse)
+async def list_year_songs(
+    year: str,
+    request: Request,
+    library_service: LibraryService = Depends(get_library_service),
+) -> SongListResponse:
+    collection_service = await resolve_collection_service(request)
+    collection = await collection_service.get_collection(
+        source_type="YEAR",
+        source_id=year,
     )
+    return await _songs_from_collection(collection, library_service)
 
 
 @router.get("/tags", response_model=TagListResponse)
 async def list_tags(
     service: LibraryService = Depends(get_library_service),
 ) -> TagListResponse:
-    return TagListResponse(
-        items=_name_summary(
-            await service.list_available_songs(),
-            lambda song: song.tag_names,
-            TagSummaryResponse,
-        )
+    items = _name_summary(
+        await service.list_available_songs(),
+        lambda song: song.tag_names,
+        TagSummaryResponse,
+        "tags",
     )
+    return TagListResponse(items=items, count=len(items))
+
+
+@router.get("/tags/{tag_id}/songs", response_model=SongListResponse)
+async def list_tag_songs(
+    tag_id: str,
+    request: Request,
+    library_service: LibraryService = Depends(get_library_service),
+) -> SongListResponse:
+    collection_service = await resolve_collection_service(request)
+    collection = await collection_service.get_collection(
+        source_type="TAG",
+        source_id=tag_id,
+    )
+    return await _songs_from_collection(collection, library_service)
 
 
 @router.get("/search", response_model=CollectionResponse)
@@ -259,48 +342,20 @@ async def search(
     )
 
 
-@router.get("/collections/{source_type}", response_model=CollectionResponse)
-async def get_collection(
-    request,
-    source_type: str,
-    source_id: str | None = Query(default=None),
-    song_id: list[str] | None = Query(default=None),
-    randomize: bool = Query(default=False),
-    random_seed: int | None = Query(default=None, ge=0),
-    query: str | None = Query(default=None),
+@router.post("/collections", response_model=CollectionResponse)
+async def create_collection(
+    body: CollectionRequest,
+    request: Request,
 ) -> CollectionResponse:
-    source_type = source_type.upper()
-    if source_type not in {
-        "ALBUM",
-        "ARTIST",
-        "GENRE",
-        "YEAR",
-        "TAG",
-        "SEARCH",
-        "PLAYLIST",
-        "FAVORITES",
-        "LIBRARY",
-        "SONGS",
-    }:
-        raise _validation_error(f"unsupported collection source_type: {source_type}")
-    if source_type in _REQUIRED_SOURCE_ID and not source_id:
-        raise _validation_error(
-            f"source_id is required for {source_type}"
-        )
-    if source_type == "SEARCH" and query is None and not source_id:
-        raise _validation_error("query is required for SEARCH")
-    if source_type == "SONGS":
-        song_id = song_id or []
-
     collection_service = await resolve_collection_service(request)
     try:
         collection = await collection_service.get_collection(
-            source_type=source_type,
-            source_id=source_id,
-            query=query,
-            song_ids=song_id,
-            randomize=randomize,
-            random_seed=random_seed,
+            source_type=body.source_type,
+            source_id=body.source_id,
+            query=body.query,
+            song_ids=body.song_ids,
+            randomize=body.randomize,
+            random_seed=body.random_seed,
         )
     except PlaylistNotFoundError as exc:
         raise HTTPException(
@@ -308,12 +363,17 @@ async def get_collection(
             detail={
                 "code": "PLAYLIST_NOT_FOUND",
                 "message": f"playlist not found: {exc.args[0]}",
+                "details": None,
             },
         ) from exc
     except ValueError as exc:
         raise HTTPException(
-            status_code=422,
-            detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            status_code=400,
+            detail={
+                "code": "INVALID_COLLECTION",
+                "message": str(exc),
+                "details": None,
+            },
         ) from exc
     return _collection_response(collection)
 
@@ -328,12 +388,16 @@ async def scan_library(
     except LibraryScanError as exc:
         raise HTTPException(
             status_code=400,
-            detail={"code": "LIBRARY_SCAN_ERROR", "message": str(exc)},
+            detail={
+                "code": "LIBRARY_SCAN_ERROR",
+                "message": str(exc),
+                "details": None,
+            },
         ) from exc
     return ScanResultResponse.model_validate(result.model_dump())
 
 
-def _name_summary(songs, getter, model):
+def _name_summary(songs, getter, model, entity_kind):
     groups: dict[str, tuple[str, set[str]]] = {}
     for song in songs:
         if song.song_id is None:
@@ -346,7 +410,14 @@ def _name_summary(songs, getter, model):
             else:
                 current[1].add(song.song_id)
     return [
-        model(name=name, song_count=len(song_ids))
+        model(
+            **(
+                {"name": name}
+                if entity_kind is None
+                else {f"{entity_kind[:-1]}_id": library_entity_id(entity_kind, name), "name": name}
+            ),
+            song_count=len(song_ids),
+        )
         for name, song_ids in sorted(
             groups.values(), key=lambda value: value[0].casefold()
         )
