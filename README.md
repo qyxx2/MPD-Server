@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 
-当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R、Task 3（含 corrective follow-up）以及 **Task 4**。Task 4 已完成全部 15 个 Plan Steps，覆盖 Queue、Playback Context、Played / History、AutoPlay、Queue revision/CAS 与 Playback Service；最终验收在真实 ARM64 Python virtualenv 中完成。
+当前 `main` 已合入 Task 0、Task 1、Task 1R、Task 2、Task 2R、Task 3（含 corrective follow-up）以及 **Task 4**。Task 4 已完成全部 15 个 Plan Steps，覆盖 Queue、Playback Context、Played / History、AutoPlay、Queue revision/CAS 与 Playback Service；随后完成 PlaybackService corrective follow-up，补齐 `seek()` 与有序 `PlaybackContext` collection handoff；最终验收在真实 ARM64 Python virtualenv 中完成。
 
 ## 当前实现状态
 
@@ -14,7 +14,7 @@ Music Server：`Web/PWA → FastAPI → Services → MPD Adapter → MPD`。
 | Task 2 | 已完成 | SQLite 数据库、Library / Playlist / Favorites / History Repository，以及事务和关键写入串行化。 |
 | Task 2R | 已完成 | Schema v2、Song 文件签名与可用性状态、嵌入式 Artwork 引用、Song 候选匹配和 atomic scan-batch persistence；Missing / Unreadable 不删除 Song 行，也不破坏 Playlist / Favorites / History 引用。 |
 | Task 3 | 已完成 corrective follow-up | 媒体元数据、歌词、扫描器、watcher、scheduler、domain event，以及歌词持久化、LRC 增量扫描、Available Songs contract、move matching、Artwork reference lifecycle 修复均已完成最终验收。 |
-| Task 4 | 已完成 | Queue、Playback Context、Played / History、AutoPlay、Queue transaction/revision-CAS、Playback Service 与 MPD/PlayerPort 一致性均已完成最终验收。 |
+| Task 4 | 已完成 | Queue、Playback Context、Played / History、AutoPlay、Queue transaction/revision-CAS、Playback Service、seek、有序 PlaybackContext collection handoff 与 MPD/PlayerPort 一致性均已完成最终验收。 |
 | Task 5 | 未开始 | Collection、Library/Playlist Service、REST API 尚未实现。 |
 | Task 6 | 未开始 | WebSocket 与完整状态恢复尚未实现。 |
 | Task 7 | 未开始 | Output Manager 与 MPD About 尚未实现。 |
@@ -76,6 +76,38 @@ Batch 6 required commit：
 
 `cb02824273881fcb328f20391ec99fe144ac84d9`  
 `feat: implement authoritative playback model`
+
+### Task 4 PlaybackService corrective follow-up
+
+在 Task 5 Contract Audit 中发现的 Task 4 PlaybackService contract gaps 已通过独立 corrective follow-up 完成并合入 `main`。
+
+补齐内容：
+
+- `PlaybackService.seek()`，通过现有 `PlayerPort.seek()` 并回读确认播放器状态。
+- `PlaybackService.play_context(PlaybackContext)`，按已提供的有序 `ordered_song_ids` 执行 collection playback，不在 PlaybackService 内重新排序或随机化。
+- `QueueManager.replace_with_context()` / `QueueRepository.replace_with_context()`，以单事务方式替换 Up Next 并保留 Played 区域及 PlaybackContext。
+
+Corrective acceptance：
+
+`docs/superpowers/plans/2026-09-30-task-4-playback-service-corrective-acceptance.md`
+
+最终 ARM64 Python virtualenv 验证：
+
+- seek focused：**5 passed**
+- Queue replacement：**2 passed**
+- PlaybackContext / collection playback：**10 passed**
+- PlaybackService regression：**26 passed**
+- Queue + AutoPlay + History regression：**37 passed**
+- Task 2 → Task 3 → Task 4 integration：**9 passed**
+- Corrective core regression：**72 passed**
+- 全局 `server/tests`：**199 passed**
+- compileall：通过
+- Ruff：通过
+- `git diff --check`：通过
+
+Corrective 已通过 **PR #13** 合并至 `main`，merge commit：
+
+`ca9074453719a843ae4e33832a2652dbf6c7ba3a`
 
 真实 MPD 环境：已在 Synology DS920 / DSM 7.1.1 的 MPD 0.23.5 上完成能力探针，并记录于 `docs/mpd-0.23.5-capabilities.md`。
 
