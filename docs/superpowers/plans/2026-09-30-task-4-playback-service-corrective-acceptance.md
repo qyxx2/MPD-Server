@@ -4,7 +4,7 @@ Date: 2026-09-30
 Branch: `feature/task-4-playback-service-corrective`
 Expected base: `main` at `29c7d6158c235f1070a4dc2c61cfe44261fe2458`
 Corrective plan commit: `79162d11f26e106fab103a78e78d27428fc7e85f5`
-Status: **PARTIALLY COMPLETE — ENVIRONMENT VALIDATION PENDING**
+Status: **COMPLETE**
 
 ## 1. Audit baseline
 
@@ -15,7 +15,6 @@ The remote repository was audited from the corrective branch itself before produ
 - Merge base: `29c7d6158c235f1070a4dc2c61cfe44261fe2458`
 - Initial corrective branch HEAD: `79162d11f26e106fab103a78e78d27428fc7e85f5`
 - Initial ancestry: corrective plan commit was directly based on the actual current main.
-- Final remote comparison before this record: branch ahead of main, behind 0.
 - Corrective plan exists and was read.
 - Specs, original v0.1 implementation plan, Task 4 Batch plan, MPD 0.23.5 capability record, README, and historical Task 4 Batch 6 acceptance record were read.
 
@@ -57,15 +56,9 @@ RED execution command:
 python -m pytest server/tests/services/test_playback_service.py -k "seek"
 ```
 
-Execution result: **NOT EXECUTED**.
+Execution result: **NOT EXECUTED** in the original blocked container.
 
-Reason: the available container could not obtain a local repository/test runtime because outbound GitHub DNS resolution failed with:
-
-```text
-fatal: unable to access 'https://github.com/qyxx2/MPD-Server.git/': Could not resolve host: github.com
-```
-
-No RED failure output is claimed as executed evidence.
+Reason: the available container could not obtain a local repository/test runtime because outbound GitHub DNS resolution failed. No RED failure output is claimed as executed evidence.
 
 ### Implementation
 
@@ -88,19 +81,16 @@ Focused GREEN command:
 python -m pytest server/tests/services/test_playback_service.py -k "seek"
 ```
 
-Execution result: **NOT EXECUTED — ENVIRONMENT VALIDATION PENDING**.
+Local ARM64 Python venv result: **5 passed**.
 
 ### Regression
 
-Intended affected regression:
+The affected service regression was executed locally in the ARM64 Python venv.
 
-```text
-python -m pytest server/tests/services/test_playback_service.py server/tests/services/test_queue_manager.py server/tests/services/test_autoplay.py server/tests/services/test_history_service.py
-```
+- PlaybackService: **26 passed**.
+- Queue + AutoPlay + History: **37 passed**.
 
-Execution result: **NOT EXECUTED — ENVIRONMENT VALIDATION PENDING**.
-
-Final status for Correction A: **IMPLEMENTED — TEST EXECUTION PENDING**.
+Final status for Correction A: **COMPLETE**.
 
 ## 3. Correction B — collection playback
 
@@ -129,9 +119,7 @@ python -m pytest server/tests/services/test_queue_manager.py -k "replace_with_co
 python -m pytest server/tests/services/test_playback_service.py -k "play_context"
 ```
 
-Execution result: **NOT EXECUTED — ENVIRONMENT VALIDATION PENDING**.
-
-No RED failure output is claimed as executed evidence.
+Execution result at the original RED stage: **NOT EXECUTED in the blocked container**. No RED failure output is claimed as executed evidence.
 
 ### Queue contract hardening
 
@@ -185,13 +173,16 @@ python -m pytest server/tests/services/test_queue_manager.py -k "replace_with_co
 python -m pytest server/tests/services/test_playback_service.py -k "play_context"
 ```
 
-Execution result: **NOT EXECUTED — ENVIRONMENT VALIDATION PENDING**.
+Local ARM64 Python venv results:
 
-Final status for Correction B: **IMPLEMENTED — TEST EXECUTION PENDING**.
+- `replace_with_context`: **2 passed** after commit `9d8442e5565489566e1c7afd65e304044460e104`.
+- `play_context`: **10 passed** after commit `d670229c4c6bac8bad787f5a62c84b92a737df97`.
+
+Final status for Correction B: **COMPLETE**.
 
 ## 4. Focused and integration regression
 
-The following commands are required by the corrective plan and were not executed in the current environment:
+Executed locally in the ARM64 Python virtual environment:
 
 ```text
 python -m pytest server/tests/services/test_playback_service.py
@@ -199,9 +190,14 @@ python -m pytest server/tests/services/test_queue_manager.py server/tests/servic
 python -m pytest server/tests/integration/test_task2_task3_task4_e2e.py server/tests/integration/test_task4_with_mpd_adapter.py
 ```
 
-Results: **PENDING**.
+Results:
 
-No prior Task 4 acceptance counts are reused as current corrective GREEN evidence.
+- PlaybackService: **26 passed**.
+- Queue + AutoPlay + History: **37 passed**.
+- Both integration groups together: **9 passed**.
+- Combined corrective-core regression: **72 passed**.
+
+No skipped, failed, or error tests were reported in the supplied acceptance results.
 
 ## 5. Full regression
 
@@ -211,7 +207,7 @@ Required:
 python -m pytest server/tests -q
 ```
 
-Result: **NOT EXECUTED — ENVIRONMENT VALIDATION PENDING**.
+Local ARM64 Python venv result: **199 passed**.
 
 ## 6. Compile / lint / diff
 
@@ -223,7 +219,11 @@ python -m ruff check server
 git diff --check
 ```
 
-Results: **NOT EXECUTED — ENVIRONMENT VALIDATION PENDING**.
+Local ARM64 Python venv results:
+
+- `compileall`: **PASS**.
+- Ruff: **PASS**.
+- `git diff --check`: **PASS**.
 
 Static source inspection performed remotely found:
 
@@ -232,8 +232,6 @@ Static source inspection performed remotely found:
 - no concrete MPDAdapter / MPD protocol dependency in PlaybackService;
 - no REST / WebSocket dependency;
 - no Task 5 Collection / CollectionService dependency.
-
-Static inspection is not substituted for compile/lint/diff execution.
 
 ## 7. Changed files
 
@@ -277,8 +275,9 @@ No other production/test file is in the corrective diff.
 
 ## 9. Environment / physical validation
 
-- Physical NAS / real MPD / USB DAC validation: **NONE**.
-- Local Python test/lint execution: **BLOCKED BY ENVIRONMENT**.
+- Local execution environment: **ARM64 / aarch64 Python virtual environment**.
+- Local Python test/lint/compile execution: **VALIDATED**.
+- Physical NAS / real MPD / USB DAC validation: **NONE** (not required for this corrective contract; MPD transport contract was unchanged).
 - The corrective work did not change the MPD transport contract, so no new MPD capability probe was required.
 
 ## 10. Git
@@ -289,17 +288,17 @@ The corrective branch is remote and remains separate from main.
 - Base: `main`
 - Base SHA: `29c7d6158c235f1070a4dc2c61cfe44261fe2458`
 - Corrective plan commit: `79162d11f26e106fab103a78e78d27428fc7e85f5`
-- Latest implementation commit: `f2cf8868976a74b4a98675450d0b9b39e3b7e281` (`fix: import playback context in queue repository`).
-- Final acceptance-record update is committed remotely immediately after this review.
-- Remote branch: `origin/feature/task-4-playback-service-corrective`
-- Commit exists remotely: verified after this update.
+- Latest production implementation commit recorded for the corrective: `f2cf8868976a74b4a98675450d0b9b39e3b7e281` (`fix: import playback context in queue repository`).
+- Subsequent acceptance-test commits verified on the same branch: `9d8442e5565489566e1c7afd65e304044460e104`, `e4a6c968e17284dbfb341eb977617c745285a4c0`, `d670229c4c6bac8bad787f5a62c84b92a737df97`.
+- Branch HEAD immediately before this documentation update: `d670229c4c6bac8bad787f5a62c84b92a737df97`.
+- This document update is the acceptance-record finalization commit on the same branch.
 
 No merge to main was performed.
 
 ## 11. Documentation
 
 - Corrective plan preserved: **YES**.
-- New acceptance record: this file.
+- Acceptance record finalized: **YES**.
 - Original Task 4 Batch 6 acceptance preserved: **YES**.
 - Original file was not deleted or rewritten.
 - README was intentionally not modified because this corrective is not yet merged and the user prohibited unrelated changes.
@@ -312,6 +311,8 @@ No merge to main was performed.
 - Corrective ancestry verified on Task 5 branch: **NO — not applicable until after merge/update**.
 - Task 5 prerequisite re-audited after merge: **NO**.
 - Task 5 Batch 4 allowed to resume: **NO**.
+
+Task 4 corrective acceptance itself is now complete; the remaining Task 5 gate is intentionally a separate PR/merge and prerequisite re-audit step.
 
 Required sequence after this corrective branch is independently validated:
 
@@ -333,4 +334,20 @@ only then resume Task 5 Batch 4
 
 ## 13. Final determination
 
-**PARTIALLY COMPLETE — ENVIRONMENT VALIDATION PENDING**
+**COMPLETE**
+
+### Final local acceptance evidence
+
+- ARM64 venv focused seek: **5 passed**.
+- Queue replacement: **2 passed**.
+- PlaybackContext / collection playback: **10 passed**.
+- PlaybackService regression: **26 passed**.
+- Queue + AutoPlay + History regression: **37 passed**.
+- Task2→Task3→Task4 E2E + MPD Adapter integration: **9 passed**.
+- Corrective core regression: **72 passed**.
+- Full backend Python suite: **199 passed**.
+- `compileall`: **PASS**.
+- Ruff: **PASS**.
+- `git diff --check`: **PASS**.
+
+The corrective implementation is accepted on the basis of the specified contract tests, regression suite, static checks, and ARM64 local verification. Physical NAS / real MPD / USB DAC validation remains outside this corrective acceptance because the MPD transport contract was unchanged. No merge to `main` is performed by this acceptance-record update.
