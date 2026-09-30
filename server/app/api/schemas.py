@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 CollectionSourceType = Literal[
     "ALBUM",
@@ -19,9 +19,14 @@ CollectionSourceType = Literal[
 ]
 
 
-class ErrorResponse(BaseModel):
+class ErrorBody(BaseModel):
     code: str
     message: str
+    details: object | None = None
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorBody
 
 
 class ArtworkResponse(BaseModel):
@@ -71,6 +76,34 @@ class SongResponse(BaseModel):
 
 class SongListResponse(BaseModel):
     items: list[SongResponse] = Field(default_factory=list)
+    count: int = 0
+
+
+class CollectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_type: CollectionSourceType
+    source_id: str | None = None
+    query: str | None = None
+    song_ids: list[str] = Field(default_factory=list)
+    randomize: bool = False
+    random_seed: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_source_contract(self) -> "CollectionRequest":
+        id_sources = {"ALBUM", "ARTIST", "GENRE", "YEAR", "TAG", "PLAYLIST"}
+        if self.source_type in id_sources and not self.source_id:
+            raise ValueError(f"source_id is required for {self.source_type}")
+        if self.source_type not in id_sources and self.source_id is not None:
+            raise ValueError(f"source_id is not allowed for {self.source_type}")
+        if self.source_type == "SEARCH":
+            if self.query is None:
+                raise ValueError("query is required for SEARCH")
+        elif self.query is not None:
+            raise ValueError(f"query is only allowed for SEARCH")
+        if self.source_type != "SONGS" and self.song_ids:
+            raise ValueError(f"song_ids are only allowed for SONGS")
+        return self
 
 
 class CollectionResponse(BaseModel):
@@ -92,11 +125,13 @@ class AlbumSummaryResponse(BaseModel):
 
 
 class ArtistSummaryResponse(BaseModel):
+    artist_id: str
     name: str
     song_count: int
 
 
 class GenreSummaryResponse(BaseModel):
+    genre_id: str
     name: str
     song_count: int
 
@@ -107,28 +142,34 @@ class YearSummaryResponse(BaseModel):
 
 
 class TagSummaryResponse(BaseModel):
+    tag_id: str
     name: str
     song_count: int
 
 
 class AlbumListResponse(BaseModel):
     items: list[AlbumSummaryResponse] = Field(default_factory=list)
+    count: int = 0
 
 
 class ArtistListResponse(BaseModel):
     items: list[ArtistSummaryResponse] = Field(default_factory=list)
+    count: int = 0
 
 
 class GenreListResponse(BaseModel):
     items: list[GenreSummaryResponse] = Field(default_factory=list)
+    count: int = 0
 
 
 class YearListResponse(BaseModel):
     items: list[YearSummaryResponse] = Field(default_factory=list)
+    count: int = 0
 
 
 class TagListResponse(BaseModel):
     items: list[TagSummaryResponse] = Field(default_factory=list)
+    count: int = 0
 
 
 class PlaylistResponse(BaseModel):
@@ -142,6 +183,7 @@ class PlaylistResponse(BaseModel):
 
 class PlaylistListResponse(BaseModel):
     items: list[PlaylistResponse] = Field(default_factory=list)
+    count: int = 0
 
 
 class ScanResultResponse(BaseModel):
