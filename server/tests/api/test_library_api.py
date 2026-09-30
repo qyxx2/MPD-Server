@@ -10,6 +10,7 @@ from server.app.main import app
 from server.app.models.library import ArtworkRef, ScanResult, Song
 from server.app.models.playlist import Playlist
 from server.app.services.collection_service import Collection
+from server.app.services.library_service import library_entity_id
 
 
 def song(
@@ -423,3 +424,21 @@ def test_playlist_list_response_has_only_playlist_resource_shape(services):
     }
     assert response.json()["count"] == 1
     assert response.json()["items"][0]["song_ids"] == ["song-1", "song-2"]
+
+
+def test_catalog_summary_ids_are_stable_entity_ids(services):
+    client, _, _, _, _ = services
+
+    artists = client.get("/api/library/artists")
+    genres = client.get("/api/library/genres")
+    tags = client.get("/api/library/tags")
+
+    assert artists.json()["items"][0]["artist_id"] == library_entity_id(
+        "artists", "Artist One"
+    )
+    assert genres.json()["items"][0]["genre_id"] == library_entity_id(
+        "genres", "Rock"
+    )
+    assert tags.json()["items"][0]["tag_id"] == library_entity_id(
+        "tags", "Live"
+    )
