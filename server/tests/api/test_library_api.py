@@ -313,6 +313,23 @@ def test_favorites_read_is_a_collection_and_not_a_queue(services):
     assert collection_service.calls[-1]["source_type"] == "FAVORITES"
 
 
+def test_album_artwork_read_failure_is_observable(services):
+    client, library, _, _, _ = services
+
+    async def failing_read_artwork(song_id: str):
+        library.calls.append(("read_artwork", song_id))
+        raise RuntimeError("artwork source read failed")
+
+    library.read_artwork = failing_read_artwork
+    response = client.get("/api/library/songs/song-1/artwork")
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "code": "ARTWORK_READ_ERROR",
+        "message": "artwork source read failed",
+    }
+
+
 def test_album_artwork_is_raw_read_only_bytes_with_mime_type(services):
     artwork = ArtworkRef(
         artwork_id="art-1",
