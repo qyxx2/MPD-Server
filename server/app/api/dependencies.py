@@ -4,19 +4,20 @@ import os
 
 from fastapi import Request
 
-from server.app.repositories.library_repository import LibraryRepository
+from server.app.player.mpd_adapter import MPDAdapter
 from server.app.repositories.history_repository import HistoryRepository
-from server.app.repositories.playlist_repository import PlaylistRepository
+from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
+from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import QueueRepository
-from server.app.services.collection_service import CollectionService
-from server.app.services.library_scanner import LibraryScanner
 from server.app.services.autoplay import AutoPlay
+from server.app.services.collection_service import CollectionService
 from server.app.services.history_service import HistoryService
+from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
-from server.app.player.mpd_adapter import MPDAdapter
+from server.app.services.queue_manager import QueueManager
 
 
 def _database_path() -> str:
@@ -69,7 +70,7 @@ async def get_collection_service(request: Request) -> CollectionService:
     return await resolve_collection_service(request)
 
 
-async def resolve_queue_manager(request: Request):
+async def resolve_queue_manager(request: Request) -> QueueManager:
     manager = getattr(request.app.state, "queue_manager", None)
     if manager is not None:
         return manager
@@ -84,11 +85,11 @@ async def resolve_queue_manager(request: Request):
     return manager
 
 
-async def get_queue_manager(request: Request):
+async def get_queue_manager(request: Request) -> QueueManager:
     return await resolve_queue_manager(request)
 
 
-async def resolve_playback_service(request: Request):
+async def resolve_playback_service(request: Request) -> PlaybackService:
     service = getattr(request.app.state, "playback_service", None)
     if service is not None:
         return service
@@ -120,7 +121,7 @@ async def resolve_playback_service(request: Request):
     return service
 
 
-async def get_playback_service(request: Request):
+async def get_playback_service(request: Request) -> PlaybackService:
     return await resolve_playback_service(request)
 
 
