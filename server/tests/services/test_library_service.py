@@ -21,6 +21,10 @@ class FakeLibraryRepository:
         self.calls.append(f"get_song:{song_id}")
         return self.songs.get(song_id)
 
+    async def list_songs(self) -> list[Song]:
+        self.calls.append("list_songs")
+        return list(self.songs.values())
+
     async def list_available_songs(self) -> list[Song]:
         self.calls.append("list_available_songs")
         return [
