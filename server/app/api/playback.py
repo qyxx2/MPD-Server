@@ -6,15 +6,15 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from server.app.models.queue import PlaybackState, QueueItem
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
+from server.app.repositories.queue_repository import (
+    CurrentTrackDeletionError,
+    QueueItemNotFoundError,
+    QueueRevisionConflictError,
+)
 from server.app.services.collection_service import CollectionService
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
-from server.app.services.queue_manager import (
-    CurrentTrackDeletionError,
-    QueueItemNotFoundError,
-    QueueManager,
-    QueueRevisionConflictError,
-)
+from server.app.services.queue_manager import QueueManager
 
 from .dependencies import (
     get_collection_service,
@@ -67,7 +67,6 @@ def _playlist_response(playlist, song_ids: list[str] | None = None) -> PlaylistR
         song_ids=song_ids or [],
     )
 
-undefined
 
 def _raise_playback_http_error(exc: Exception) -> None:
     if isinstance(exc, PlayerUnavailable):
