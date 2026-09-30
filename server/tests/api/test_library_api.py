@@ -433,12 +433,16 @@ def test_catalog_summary_ids_are_stable_entity_ids(services):
     genres = client.get("/api/library/genres")
     tags = client.get("/api/library/tags")
 
-    assert artists.json()["items"][0]["artist_id"] == library_entity_id(
-        "artists", "Artist One"
+    artist = next(
+        item for item in artists.json()["items"] if item["name"] == "Artist One"
     )
-    assert genres.json()["items"][0]["genre_id"] == library_entity_id(
-        "genres", "Rock"
+    genre = next(
+        item for item in genres.json()["items"] if item["name"] == "Rock"
     )
-    assert tags.json()["items"][0]["tag_id"] == library_entity_id(
-        "tags", "Live"
+    tag = next(
+        item for item in tags.json()["items"] if item["name"] == "Live"
     )
+
+    assert artist["artist_id"] == library_entity_id("artists", "Artist One")
+    assert genre["genre_id"] == library_entity_id("genres", "Rock")
+    assert tag["tag_id"] == library_entity_id("tags", "Live")
