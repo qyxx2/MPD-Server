@@ -475,14 +475,31 @@ def test_play_context_replaces_queue_and_keeps_supplied_order(
     ]
     assert [item.song_id for item in items[:3]] == ["a", "b", "c"]
     assert items[0].position == 0
-    assert [item.playback_context_id for item in items] == [
-        context.context_id
-    ] * len(items)
     assert run(components["player"].status()).song_uri == "music/a.mp3"
 
     up_next = [item.song_id for item in items if item.position > 0]
     assert up_next[:2] == ["b", "c"]
     assert any(item.source == "AUTOPLAY" for item in items[3:])
+
+
+def test_play_context_assigns_same_playback_context_id_to_all_queue_items(
+    components,
+):
+    seed_songs(components["library"], *"abcdefgh")
+    service = components["service"]
+
+    context = make_playback_context("a", "b", "c")
+    run(service.play_context(context))
+
+    items = [
+        item
+        for item in run(components["queue"].list_items())
+        if item.position >= 0
+    ]
+
+    assert [item.playback_context_id for item in items] == [
+        context.context_id
+    ] * len(items)
 
 
 def test_play_context_replaces_old_queue_without_retaining_old_pending_items(
