@@ -24,7 +24,6 @@ from .dependencies import (
 )
 from .schemas import (
     CollectionRequest,
-    CollectionResponse,
     PlaybackContextResponse,
     PlaybackStateResponse,
     PlaylistResponse,
@@ -66,10 +65,7 @@ def _playlist_response(playlist, song_ids: list[str] | None = None) -> PlaylistR
         song_ids=song_ids or [],
     )
 
-
-def _collection_response(collection) -> CollectionResponse:
-    return CollectionResponse.model_validate(collection.model_dump())
-
+undefined
 
 def _raise_playback_http_error(exc: Exception) -> None:
     if isinstance(exc, PlayerUnavailable):
