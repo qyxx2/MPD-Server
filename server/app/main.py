@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -7,8 +9,17 @@ from fastapi.staticfiles import StaticFiles
 
 from server.app.api.library import router as library_router
 from server.app.api.playlists import router as playlists_router
+from server.app.repositories.database import initialize_database
 
-app = FastAPI(title="MPD-Server")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    database_path = os.environ.get("DATABASE_PATH", "music-server.db")
+    await initialize_database(database_path)
+    yield
+
+
+app = FastAPI(title="MPD-Server", lifespan=lifespan)
 
 
 @app.exception_handler(RequestValidationError)
