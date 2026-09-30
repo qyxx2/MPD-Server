@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 
 from server.app.models.library import ScanResult, Song
 from server.app.services.collection_service import CollectionService
@@ -101,8 +102,6 @@ async def get_song_artwork(
             status_code=500,
             detail={"code": "ARTWORK_READ_ERROR", "message": str(exc)},
         ) from exc
-
-    from fastapi.responses import Response
 
     return Response(content=data, media_type=mime_type)
 
@@ -246,7 +245,7 @@ async def list_tags(
 
 @router.get("/search", response_model=CollectionResponse)
 async def search(
-    request,
+    request: Request,
     q: str | None = Query(default=None),
 ) -> CollectionResponse:
     if q is None:
@@ -331,7 +330,7 @@ async def scan_library(
             status_code=400,
             detail={"code": "LIBRARY_SCAN_ERROR", "message": str(exc)},
         ) from exc
-    return ScanResultResponse.model_validate(result)
+    return ScanResultResponse.model_validate(result.model_dump())
 
 
 def _name_summary(songs, getter, model):
