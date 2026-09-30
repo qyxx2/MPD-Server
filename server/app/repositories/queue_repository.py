@@ -218,7 +218,6 @@ class QueueRepository:
 
         return await run_transaction(self.path, operation)
 
-
     async def replace_with_context(
         self,
         playback_context: PlaybackContext,
