@@ -38,7 +38,7 @@ def components(tmp_path):
     history_service = HistoryService(queue, history)
     autoplay = AutoPlay(queue, library, state)
     player = MockMPD(
-        [f"music/{song_id}.mp3" for song_id in "abcdefghij"],
+        [f"music/{song_id}.mp3" for song_id in "abcdefghijxyz"],
     )
     service = PlaybackService(
         queue_manager=queue_manager,
