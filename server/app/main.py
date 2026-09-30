@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from server.app.api.library import router as library_router
 from server.app.api.playlists import router as playlists_router
+from server.app.api.playback import router as playback_router
 from server.app.repositories.database import initialize_database
 
 
@@ -73,6 +74,7 @@ async def health() -> dict[str, str]:
 
 app.include_router(library_router)
 app.include_router(playlists_router)
+app.include_router(playback_router)
 
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
