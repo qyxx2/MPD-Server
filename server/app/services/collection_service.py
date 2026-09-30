@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext
-from server.app.services.library_service import LibraryService
+from server.app.services.library_service import LibraryService, library_entity_id
 
 CollectionSourceType = Literal[
     "ALBUM",
@@ -150,6 +150,7 @@ class CollectionService:
                     for song in songs
                     if any(
                         value.casefold() == normalized
+                        or library_entity_id("artists", value) == source_id
                         for value in (*song.artists, *song.album_artists)
                     )
                 ]
@@ -161,7 +162,11 @@ class CollectionService:
                 songs = [
                     song
                     for song in songs
-                    if any(value.casefold() == normalized for value in song.genres)
+                    if any(
+                        value.casefold() == normalized
+                        or library_entity_id("genres", value) == source_id
+                        for value in song.genres
+                    )
                 ]
                 songs = _sort_standard(songs)
             elif source_type == "YEAR":
@@ -178,7 +183,9 @@ class CollectionService:
                     song
                     for song in songs
                     if any(
-                        value.casefold() == normalized for value in song.tag_names
+                        value.casefold() == normalized
+                        or library_entity_id("tags", value) == source_id
+                        for value in song.tag_names
                     )
                 ]
                 songs = _sort_standard(songs)
