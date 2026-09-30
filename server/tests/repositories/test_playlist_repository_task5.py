@@ -39,13 +39,14 @@ def test_playlist_crud_and_list_order_preserve_songs(tmp_path):
 
     first = run(playlists.create_playlist("First"))
     second = run(playlists.create_playlist("Second"))
-    run(playlists.add_song(first.playlist_id, "song-a"))
-    run(playlists.add_song(first.playlist_id, "song-b"))
 
     listed = run(playlists.list_playlists())
     assert [item.name for item in listed] == ["First", "Second"]
     fetched = run(playlists.get_playlist(first.playlist_id))
     assert fetched == first
+
+    run(playlists.add_song(first.playlist_id, "song-a"))
+    run(playlists.add_song(first.playlist_id, "song-b"))
 
     updated = run(playlists.update_playlist(first.playlist_id, "Renamed"))
     assert updated.name == "Renamed"
