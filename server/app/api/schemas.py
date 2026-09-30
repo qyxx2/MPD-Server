@@ -198,6 +198,14 @@ class ScanRequest(BaseModel):
     root: str = Field(min_length=1)
 
 
+class PlaybackContextResponse(BaseModel):
+    context_id: str
+    source_type: str
+    source_id: str | None = None
+    ordered_song_ids: list[str] = Field(default_factory=list)
+    random_seed: int | None = None
+
+
 class QueueItemResponse(BaseModel):
     queue_item_id: str
     song_id: str
