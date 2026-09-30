@@ -48,27 +48,27 @@ def test_playlists_and_favorites_are_exposed_as_read_resources():
     playlist_service = FakePlaylistReader()
     collection_service = FakeCollectionReader()
     library_service = FakeLibraryReader()
-    previous = {
-        "playlist_service": getattr(app.state, "playlist_service", None),
-        "collection_service": getattr(app.state, "collection_service", None),
-        "library_service": getattr(app.state, "library_service", None),
-    }
-    app.state.playlist_service = playlist_service
-    app.state.collection_service = collection_service
-    app.state.library_service = library_service
-    try:
-        with TestClient(app) as client:
+    with TestClient(app) as client:
+        previous = {
+            "playlist_service": getattr(app.state, "playlist_service", None),
+            "collection_service": getattr(app.state, "collection_service", None),
+            "library_service": getattr(app.state, "library_service", None),
+        }
+        app.state.playlist_service = playlist_service
+        app.state.collection_service = collection_service
+        app.state.library_service = library_service
+        try:
             playlists = client.get("/api/playlists")
             favorite = client.get("/api/favorites")
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                try:
-                    delattr(app.state, name)
-                except AttributeError:
-                    pass
-            else:
-                setattr(app.state, name, value)
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    try:
+                        delattr(app.state, name)
+                    except AttributeError:
+                        pass
+                else:
+                    setattr(app.state, name, value)
 
     assert playlists.status_code == 200
     assert playlists.json()["items"][0]["playlist_id"] == "playlist-1"
@@ -93,26 +93,26 @@ def test_playlist_songs_read_has_stable_song_list_shape():
     playlist_service = FakePlaylistReader()
     collection_service = FakeCollectionReader()
     library_service = Library()
-    previous = {
-        "playlist_service": getattr(app.state, "playlist_service", None),
-        "collection_service": getattr(app.state, "collection_service", None),
-        "library_service": getattr(app.state, "library_service", None),
-    }
-    app.state.playlist_service = playlist_service
-    app.state.collection_service = collection_service
-    app.state.library_service = library_service
-    try:
-        with TestClient(app) as client:
+    with TestClient(app) as client:
+        previous = {
+            "playlist_service": getattr(app.state, "playlist_service", None),
+            "collection_service": getattr(app.state, "collection_service", None),
+            "library_service": getattr(app.state, "library_service", None),
+        }
+        app.state.playlist_service = playlist_service
+        app.state.collection_service = collection_service
+        app.state.library_service = library_service
+        try:
             response = client.get("/api/playlists/playlist-1/songs")
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                try:
-                    delattr(app.state, name)
-                except AttributeError:
-                    pass
-            else:
-                setattr(app.state, name, value)
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    try:
+                        delattr(app.state, name)
+                    except AttributeError:
+                        pass
+                else:
+                    setattr(app.state, name, value)
 
     assert response.status_code == 200
     assert response.json()["count"] == 1

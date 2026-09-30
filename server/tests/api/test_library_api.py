@@ -162,28 +162,28 @@ def services():
     playlists = FakePlaylistService()
     scanner = FakeScanner()
 
-    previous = {}
-    for name, value in {
-        "library_service": library,
-        "collection_service": collections,
-        "playlist_service": playlists,
-        "library_scanner": scanner,
-    }.items():
-        previous[name] = getattr(app.state, name, None)
-        setattr(app.state, name, value)
+    with TestClient(app) as client:
+        previous = {}
+        for name, value in {
+            "library_service": library,
+            "collection_service": collections,
+            "playlist_service": playlists,
+            "library_scanner": scanner,
+        }.items():
+            previous[name] = getattr(app.state, name, None)
+            setattr(app.state, name, value)
 
-    try:
-        with TestClient(app) as client:
+        try:
             yield client, library, collections, playlists, scanner
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                try:
-                    delattr(app.state, name)
-                except AttributeError:
-                    pass
-            else:
-                setattr(app.state, name, value)
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    try:
+                        delattr(app.state, name)
+                    except AttributeError:
+                        pass
+                else:
+                    setattr(app.state, name, value)
 
 
 def test_list_songs_returns_stable_song_schema(services):
