@@ -129,7 +129,6 @@ async def get_song(
             detail={
                 "code": "SONG_NOT_FOUND",
                 "message": f"song not found: {song_id}",
-                "details": None,
             },
         )
     return _song_response(song)
@@ -378,11 +377,12 @@ async def create_collection(
 
 @router.post("/scan", response_model=ScanResultResponse)
 async def scan_library(
-    request: ScanRequest,
+    body: ScanRequest,
+    request: Request,
 ) -> ScanResultResponse:
     scanner = await resolve_library_scanner(request)
     try:
-        result: ScanResult = await scanner.scan_full(Path(request.root))
+        result: ScanResult = await scanner.scan_full(Path(body.root))
     except LibraryScanError as exc:
         raise HTTPException(
             status_code=400,

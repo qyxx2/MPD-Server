@@ -60,6 +60,7 @@ async def list_playlists(
 @router.get("/api/playlists/{playlist_id}", response_model=PlaylistResponse)
 async def get_playlist(
     playlist_id: str,
+    request: Request,
     service: PlaylistService = Depends(get_playlist_service),
 ) -> PlaylistResponse:
     playlist = await service.get_playlist(playlist_id)
@@ -72,8 +73,13 @@ async def get_playlist(
                 "details": None,
             },
         )
+
+    collection_service = await resolve_collection_service(request)
     try:
-        song_ids = await service.list_song_ids(playlist_id)
+        collection = await collection_service.get_collection(
+            source_type="PLAYLIST",
+            source_id=playlist_id,
+        )
     except PlaylistNotFoundError as exc:
         raise HTTPException(
             status_code=404,
@@ -83,7 +89,7 @@ async def get_playlist(
                 "details": None,
             },
         ) from exc
-    return _playlist_response(playlist, song_ids)
+    return _playlist_response(playlist, list(collection.song_ids))
 
 
 @router.get("/api/playlists/{playlist_id}/songs", response_model=SongListResponse)
