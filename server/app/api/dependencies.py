@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+import os
+
+from fastapi import Request
+
+from server.app.repositories.database import initialize_database
+from server.app.repositories.library_repository import LibraryRepository
+from server.app.repositories.playlist_repository import PlaylistRepository
+from server.app.services.collection_service import CollectionService
+from server.app.services.library_scanner import LibraryScanner
+from server.app.services.library_service import LibraryService
+from server.app.services.playlist_service import PlaylistService
+
+
+def _database_path() -> str:
+    return os.environ.get("DATABASE_PATH", "music-server.db")
+
+
+async def get_library_service(request: Request) -> LibraryService:
+    service = getattr(request.app.state, "library_service", None)
+    if service is not None:
+        return service
+
+    path = _database_path()
+    await initialize_database(path)
+    service = LibraryService(LibraryRepository(path))
+    request.app.state.library_service = service
+    return service
+
+
+async def get_playlist_service(request: Request) -> PlaylistService:
+    service = getattr(request.app.state, "playlist_service", None)
+    if service is not None:
+        return service
+
+    path = _database_path()
+    await initialize_database(path)
+    service = PlaylistService(PlaylistRepository(path))
+    request.app.state.playlist_service = service
+    return service
+
+
+async def get_collection_service(
+    request: Request,
+    library_service: LibraryService,
+    playlist_service: PlaylistService,
+) -> CollectionService:
+    service = getattr(request.app.state, "collection_service", None)
+    if service is not None:
+        return service
+
+    service = CollectionService(library_service, playlist_service)
+    request.app.state.collection_service = service
+    return service
+
+
+async def get_library_scanner(request: Request) -> LibraryScanner:
+    service = getattr(request.app.state, "library_scanner", None)
+    if service is not None:
+        return service
+
+    path = _database_path()
+    await initialize_database(path)
+    service = LibraryScanner(LibraryRepository(path))
+    request.app.state.library_scanner = service
+    return service

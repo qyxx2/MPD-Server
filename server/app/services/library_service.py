@@ -1,9 +1,23 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Protocol
 
+from mutagen.flac import FLAC
+from mutagen.id3 import APIC
+from mutagen.mp3 import MP3
+
 from server.app.models.library import Song
+
+
+class ArtworkReadError(RuntimeError):
+    """Raised when a persisted artwork reference cannot be read safely."""
+
+
+class ArtworkNotFoundError(LookupError):
+    """Raised when a song or album has no persisted artwork reference."""
 
 
 class LibraryRepositoryReader(Protocol):
@@ -11,6 +25,10 @@ class LibraryRepositoryReader(Protocol):
 
     async def list_songs(self) -> list[Song]: ...
     async def list_available_songs(self) -> list[Song]: ...
+
+    async def get_album_artwork_source_song_id(
+        self, song_id: str
+    ) -> str | None: ...
 
 
 class LibraryService:
@@ -86,6 +104,78 @@ class LibraryService:
             if any(value.casefold() == normalized for value in song.tag_names)
         ]
         return _sort_standard(matched)
+
+    async def read_artwork(self, song_id: str) -> tuple[bytes, str]:
+        song = await self._repository.get_song(song_id)
+        if song is None:
+            raise KeyError(song_id)
+
+        artwork = song.artwork
+        if artwork is None:
+            raise ArtworkNotFoundError(song_id)
+
+        if song.availability_status != "AVAILABLE":
+            raise ArtworkReadError(
+                f"artwork source song is not available: {song_id}"
+            )
+
+        source_song_id = await self._repository.get_album_artwork_source_song_id(
+            song_id
+        )
+        if source_song_id is None:
+            raise ArtworkReadError(
+                f"artwork source song is missing: {song_id}"
+            )
+
+        source_song = await self._repository.get_song(source_song_id)
+        if source_song is None:
+            raise ArtworkReadError(
+                f"artwork source song not found: {source_song_id}"
+            )
+        if source_song.availability_status != "AVAILABLE":
+            raise ArtworkReadError(
+                f"artwork source song is not available: {source_song_id}"
+            )
+
+        path = Path(source_song.file_uri)
+        try:
+            if path.suffix.casefold() == ".flac":
+                audio = FLAC(path)
+                pictures = list(audio.pictures)
+            elif path.suffix.casefold() == ".mp3":
+                audio = MP3(path)
+                pictures = [
+                    frame
+                    for frame in (audio.tags.values() if audio.tags else ())
+                    if isinstance(frame, APIC)
+                ]
+            else:
+                raise ArtworkReadError(
+                    f"unsupported artwork source format: {path.suffix or '<none>'}"
+                )
+        except (OSError, ValueError) as exc:
+            raise ArtworkReadError(
+                f"artwork source read failed: {exc}"
+            ) from exc
+
+        index = artwork.picture_index
+        if index >= len(pictures):
+            raise ArtworkReadError(
+                f"artwork picture index is unavailable: {index}"
+            )
+
+        data = bytes(pictures[index].data)
+        if artwork.content_sha256 is not None:
+            digest = hashlib.sha256(data).hexdigest()
+            if digest != artwork.content_sha256:
+                raise ArtworkReadError(
+                    "artwork content does not match persisted reference"
+                )
+
+        mime_type = artwork.mime_type or getattr(pictures[index], "mime", None)
+        if not mime_type:
+            mime_type = "application/octet-stream"
+        return data, mime_type
 
 
 def _search_rank(song: Song, query: str) -> int | None:
