@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from server.app.models.library import Song
+from server.app.models.queue import PlaybackContext
 from server.app.repositories.database import initialize_database
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
