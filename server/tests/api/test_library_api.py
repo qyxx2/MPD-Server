@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,7 +10,6 @@ from server.app.main import app
 from server.app.models.library import ArtworkRef, ScanResult, Song
 from server.app.models.playlist import Playlist
 from server.app.services.collection_service import Collection
-from server.app.services.library_service import LibraryService
 
 
 def song(
@@ -138,6 +136,10 @@ class FakePlaylistService:
     async def get_playlist(self, playlist_id: str) -> Playlist | None:
         self.calls.append(("get_playlist", playlist_id))
         return self.playlist if playlist_id == self.playlist.playlist_id else None
+
+    async def list_song_ids(self, playlist_id: str) -> list[str]:
+        self.calls.append(("list_song_ids", playlist_id))
+        return ["song-1", "song-2"] if playlist_id == self.playlist.playlist_id else []
 
 
 class FakeScanner:
@@ -388,4 +390,6 @@ def test_playlist_list_response_has_only_playlist_resource_shape(services):
         "created_at",
         "updated_at",
         "is_system",
+        "song_ids",
     }
+    assert response.json()["items"][0]["song_ids"] == ["song-1", "song-2"]
