@@ -30,6 +30,10 @@
 >
 > This revision adds a distinct test class for relationships between modules and authorities. Passing each module's unit tests is no longer sufficient when a Task/Batch changes a boundary, state transition, transaction, representation, or synchronization contract. Completed historical Tasks are not reopened solely by this revision; their rows in the Relationship-Test Matrix become regression obligations whenever later work touches those contracts.
 
+> Plan Revision 4 (2026-10-01): Contract Matrix execution gate
+>
+> This revision operationalizes the architecture Spec's Cross-Authority Contract Matrix. A Task/Batch that changes or relies on state transitions, representations, propagation, transactions or lifecycle sequencing must perform Contract Matrix Impact Analysis before implementation and preserve Matrix → implementation → invariant-test traceability.
+
 ## Global Constraints
 
 - MPD 固定按目标环境 0.23.5 实测，不假定新版本能力。
@@ -132,6 +136,53 @@ Required mechanics:
 | Task 12 | Full system chain across Web/API/Services/Repositories/PlayerPort/MPD/persistence/restart/reverse-proxy; all applicable relationship suites plus physical acceptance. |
 
 For already accepted historical Tasks, this matrix is a regression map, not a retroactive completion reset. A later Batch that touches one of these relationships must run the corresponding invariant tests even when the owning Task is already complete.
+
+## Contract Matrix Gate
+
+The architecture Spec defines the long-term Cross-Authority Contract Matrix model. This Plan defines how every Task/Batch must use it.
+
+The Contract Matrix does **not** replace the Relationship-Test Matrix:
+- Relationship-Test Matrix answers **which cross-module relationships a Task must protect**.
+- Task-specific Contract Matrix answers **how a concrete operation may change those authorities, what must remain unchanged, how success is confirmed, and what failure/retry means**.
+
+A Task-specific Contract Matrix lives in the current Task active plan. Do not create a second project-wide matrix that duplicates Specs or this Plan.
+
+### Applicability
+
+Contract Matrix is REQUIRED when a Task/Batch/corrective changes or relies on at least one:
+- cross-authority state transition;
+- shared resource representation;
+- authoritative-state propagation/recovery;
+- persisted + runtime/external transaction or retry boundary;
+- multi-stage lifecycle whose failed stage must not be reported as successful.
+
+Otherwise record N/A + concrete reason.
+
+Future Tasks establish their own rows during Contract Audit / the first implementing Batch. Do not pre-author future business semantics merely to fill the matrix.
+
+### Contract Matrix Impact Analysis
+
+Before implementation, record:
+1. **Affected existing Contract IDs**.
+2. **New rows** required by already-authoritative Spec semantics.
+3. **Modified rows**, if the authoritative Spec intentionally changed.
+4. **Relied-upon unchanged rows** whose guarantees this Batch consumes.
+5. N/A + reason where no Contract row applies.
+
+For every affected row, verify the architecture-Spec fields: Preconditions, Authorities, Expected State Delta, Must Remain Unchanged, External Confirmation, History/Event, Transaction Boundary, Failure/Rollback, Retry/Idempotency, Observable Result and Executable Invariant Proof.
+
+If a required business semantic is missing or ambiguous, implementation stops at the contract boundary: update the unique authoritative Spec first, then the active Contract row, then create the smallest RED executable invariant proof, then implement. Existing production behavior is not itself authority.
+
+### Implementation and acceptance mechanics
+
+1. TDD for cross-authority behavior is performed against the Contract row, not only a function return or HTTP status.
+2. A required Must Remain Unchanged relation must be asserted mechanically where practical; success-path delta alone is insufficient.
+3. Existing affected Contract rows are regression obligations even if owned by an earlier accepted Task.
+4. Unit/API/full-suite GREEN does not substitute for a REQUIRED Contract Matrix / relationship gate.
+5. A confirmed contract defect cannot close with production code only; it leaves an executable invariant regression and, when the rule is general, a reusable assertion/property/state-machine test.
+6. Before Batch/Task acceptance, perform traceability review:
+   Contract ID → authoritative Spec section → implementation owner → executable invariant test → fresh GREEN evidence.
+7. Architecture-only dependency directions remain in architecture relationship checks; do not duplicate them as state-transition rows unless an operation also has runtime contract semantics.
 
 ---
 
@@ -1071,35 +1122,40 @@ The release gate must additionally execute the complete backend invariant suite 
 
 Before starting any Task:
 0. Read the Relationship-Test Matrix and classify the Task relationship gate as REQUIRED or N/A with a concrete reason.
-1. Confirm every listed dependency is complete and its commit is reachable.
-2. Confirm every imported contract exists on the current branch.
-3. Confirm required schema version/features exist.
-4. Confirm RED tests cover newly introduced behavior.
-5. Confirm the Task does not import a later Task.
-6. Confirm intended files are within the Task's allowed file list.
-7. Run the smallest relevant existing regression suite before modifications.
+1. Classify Contract Matrix applicability as REQUIRED or N/A. If REQUIRED, confirm the active Task plan has the necessary Task-specific Contract rows before implementation.
+2. Confirm every listed dependency is complete and its commit is reachable.
+3. Confirm every imported contract exists on the current branch.
+4. Confirm required schema version/features exist.
+5. Confirm RED tests cover newly introduced behavior.
+6. Confirm the Task does not import a later Task.
+7. Confirm intended files are within the Task's allowed file list.
+8. Run the smallest relevant existing regression suite before modifications.
 
 Before starting each Batch/corrective inside a Task:
 1. Classify its relationship gate as REQUIRED or N/A.
-2. If REQUIRED, name the exact matrix relationship/invariant(s) and the test file/command that will prove them.
-3. If the needed invariant test does not exist, creating the smallest reusable relationship test is part of that Batch; do not defer it to final audit.
-4. A Batch cannot be accepted from module-local focused tests alone when its relationship gate is REQUIRED.
+2. Perform **Contract Matrix Impact Analysis**: affected existing IDs, new/modified rows, relied-upon unchanged rows, or N/A + reason.
+3. If REQUIRED, name the exact relationship/invariant(s), Contract IDs, and test file/command that will prove them.
+4. If a required Contract row lacks authoritative semantics, correct the Spec/active matrix before production implementation; do not infer the rule from current code.
+5. If the needed invariant test does not exist, creating the smallest reusable relationship test is part of that Batch; do not defer it to final audit.
+6. A Batch cannot be accepted from module-local focused tests alone when its relationship or Contract Matrix gate is REQUIRED.
 
 After each Step:
 1. Run focused verification.
 2. Record RED/GREEN outcome when the Step is TDD implementation.
-3. Inspect git diff --check and changed-file list.
-4. Do not proceed if a dependency or boundary is violated.
+3. Re-run directly affected Contract-row invariant tests when the Step changes their implementation.
+4. Inspect git diff --check and changed-file list.
+5. Do not proceed if a dependency, Contract row or architecture boundary is violated.
 
 Before Task completion:
 1. Run Task-focused tests.
 2. Run every REQUIRED relationship/invariant test for this Task and every affected earlier matrix row.
-3. Run relevant prior-Task regression tests.
-4. Run applicable global tests/lint/typecheck/build.
-5. Review diff for unrelated changes.
-6. Verify branch name.
-7. Verify the commit exists on the remote ref after the write.
-8. Only then check the Task in the plan.
+3. Perform Contract ID → Spec → implementation → invariant test → fresh evidence traceability review for every affected Task-specific row.
+4. Run relevant prior-Task regression tests.
+5. Run applicable global tests/lint/typecheck/build.
+6. Review diff for unrelated changes.
+7. Verify branch name.
+8. Verify the commit exists on the remote ref after the write.
+9. Only then check the Task in the plan.
 
 ## Five Highest-Risk Tests
 

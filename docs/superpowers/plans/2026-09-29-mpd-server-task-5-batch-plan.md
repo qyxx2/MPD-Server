@@ -152,6 +152,36 @@ API 使用 `/api` 前缀，覆盖：
 - unavailable pending 的推进语义遵循 playback spec §8.3：跳过无效项并继续可用 successor；无可用项再进入 AutoPlay/终止语义；
 - 任何 History transition 必须与最终成功事务一致，失败/retry 不得制造丢失或 phantom event。
 
+
+### 3.7 Task 5 Cross-Authority Contract Matrix
+
+本矩阵只索引 Task 5 已由 §3 frozen contracts、Playback/Library Specs 和当前 I1–I5 foundation 确立的跨权威语义；不新增业务规则，也不复制纯局部 Search/sort/schema 规则。架构依赖方向继续由 test_architecture_relationships.py 机械检查，不另造状态转换 row。
+
+| Contract ID | Type / Operation | Authorities & Preconditions | Expected State Delta | Must Remain Unchanged | Confirmation / Failure / Retry | Executable Proof |
+|---|---|---|---|---|---|---|
+| **PB-STOP-001** | STATE_TRANSITION — Stop | PlaybackService / PlaybackState / PlayerPort / History；前态 PLAYING 或 PAUSED | PlayerPort 实际确认 STOPPED；PlaybackState→STOPPED；AutoPlay disabled；active History exactly-once 结束为 STOP | Queue membership/order；Playlist/Collection | 未确认或 transport/status failure 不得提交 STOPPED、History 或 terminal idempotency success；persisted + runtime state 回滚；retry 可重试，replay 不重复 transition | I2/I3/I4；test_stop_confirmation.py；test_transition_history_matches_confirmed_current |
+| **PB-INSERT-001** | STATE_TRANSITION — Play Next / Add to Queue | active 或 stopped Queue；QueueRepository / PlaybackState / PlayerPort | 插入新的 execution occurrence 并同步 PlayerPort Queue | current song/occurrence、Playback state、History active/session、PlaybackContext 不因插入被改变 | 同步后必须确认实际 current/state 未漂移；divergence→reconciliation failure；事务失败无 terminal success，可 retry | I1/I2/I4；test_insertion_rejects_actual_playback_divergence_and_can_retry |
+| **PB-REORDER-001** | STATE_TRANSITION — pending reorder | QueueRepository / PlayerPort；目标是 pending occurrence | authoritative execution order 与 PlayerPort order 同步；retained pending occurrence identity 保持 | current occurrence/state、History、PlaybackContext | revision conflict 在 player side effect 前失败；sync/current confirmation 失败则 rollback/retry | I1/I2；test_duplicate_execution_occurrences_survive_mutation；test_pending_duplicate_mutation_preserves_retained_occurrence_ids |
+| **PB-DELETE-PENDING-001** | STATE_TRANSITION — delete pending | QueueRepository / PlayerPort；目标 position>0 | 精确删除目标 occurrence；必要时 AutoPlay refill；最终 execution Queue 与 PlayerPort 一致 | current occurrence/state、History active/session | Player unavailable/divergence/terminal failure 不得留下部分成功或 terminal record | I1/I2/I4；test_queue_mutations_sync_real_player_and_history；pending duplicate invariant cases |
+| **PB-DELETE-CURRENT-001** | STATE_TRANSITION — delete current | current occurrence + PlaybackState + available successor/AutoPlay/STOP 分支 | 有可用 successor 时实际播放并确认 successor 后更新 state/history；无 successor 时遵循 AutoPlay 后 confirmed STOP；原态 STOPPED 时不得因删除而重新开始播放 | 不制造 unavailable current、phantom/lost History；Playlist/Favorites 独立 | successor/current occurrence 必须由 PlayerPort 确认；失败回滚 server/history；external player side effect 需 reconciliation 后 retry | I1/I2/I3/I4；test_delete_current_without_pending_uses_autoplay_or_confirmed_stop；test_current_delete_skips_unavailable_successor；test_current_deletion_after_explicit_stop_does_not_restart |
+| **PB-NEXT-UNAVAILABLE-001** | STATE_TRANSITION — Next across unavailable pending | active playback；Library availability + Queue + PlayerPort + History | MISSING/UNREADABLE/absent pending 被跳过；第一个可用 successor 才成为 current；无可用项时尝试 AutoPlay/既定终止语义 | invalid item 不得成为 authoritative current；仅跳过 invalid 不产生虚假 active History | actual successor 必须确认；skip/sync failure 回滚；same-key retry 不丢失/重复 transition | I2/I3/I4；test_next_skips_unavailable_pending；test_next_skips_unavailable_later_pending；test_next_unavailable_exhaustion_attempts_autoplay |
+| **PB-HISTORY-001** | STATE_TRANSITION — confirmed playback transition ↔ History | switch / skip / stop；PlaybackService + PlayerPort + History | 每次已确认的实际离开 current 只产生一次对应 History transition；新的 confirmed current 建立正确 active event | 未确认 transition、failed retry、idempotent replay 不得产生 lost/phantom/duplicate event | History finalize 必须晚于所需 PlayerPort confirmation，并与 owning transaction 一致 | I3/I4；test_transition_history_matches_confirmed_current；stop/transaction invariant suites |
+| **TX-ROLLBACK-001** | TRANSACTION — business + runtime rollback | SQLite authoritative state + History active/session + idempotency terminal；可能已有外部 PlayerPort side effect | 成功时业务 mutation 与 terminal record 同一 unit-of-work；outer failure/cancel 时 persisted 与 runtime session 恢复 | rollback 后不得残留 terminal record、phantom History 或半提交 server state | SQLite 不能撤销外部 PlayerPort side effect；retry 前按既定 reconciliation 恢复外部状态关系 | I4；test_transaction_restores_persisted_and_session_state_and_retry |
+| **TX-IDEMP-001** | TRANSACTION — retry/replay | method + canonical path + canonical payload + Idempotency-Key | 首次成功提交业务 + terminal result；同 scope replay 原 status/body | replay 不重复 Queue/History/Playlist mutation | scope/payload 不同→409；业务/player/schema failure 未提交时不保存 terminal success；retry 重新执行业务 | I4 + API idempotency regressions；test_transaction_relationships.py；server/tests/api/test_idempotency.py |
+| **PL-REP-001** | REPRESENTATION — Playlist resource | persisted Playlist membership/order；Repository / Service / REST list/detail/mutation/songs | AVAILABLE/MISSING/UNREADABLE 均保持 resource membership/order；songs surface 暴露 availability | endpoint 不得各自过滤成不同成员集合；rename/reorder 等 mutation 不丢 unavailable member | mutation response 必须返回 mutation 后 authoritative resource；失败不得伪造成功 representation | I5；test_persisted_membership_matches_every_representation_and_collection_split |
+| **PL-COLLECTION-001** | REPRESENTATION — Playlist → Collection | persisted Playlist resource + current song availability | 仅转换到 Collection 时：AVAILABLE→song_ids，unavailable→unavailable_song_ids，并保持来源顺序语义 | 转换不得修改 Playlist persisted membership/order，也不得用 playable filter 替代 resource semantics | empty/all-unavailable 仍是合法已知来源语义；不得伪造随机 playable item | I5；同一 playlist relationship invariant + Task 5 Collection focused regressions |
+
+#### Batch 6 Contract Matrix ruling
+
+Batch 6 不新增业务语义。其 Contract Matrix gate 为 **REQUIRED**，上述 Task 5 rows 全部作为 final acceptance regression obligations：
+
+- 若 Batch 6 只做验收，New rows = none、Modified rows = none；
+- Affected/relied-upon rows = PB-STOP-001、PB-INSERT-001、PB-REORDER-001、PB-DELETE-PENDING-001、PB-DELETE-CURRENT-001、PB-NEXT-UNAVAILABLE-001、PB-HISTORY-001、TX-ROLLBACK-001、TX-IDEMP-001、PL-REP-001、PL-COLLECTION-001；
+- 必须执行完整 server/tests/invariants/，以及这些 rows 指向的 Task 5 focused/API regressions；
+- 结束前逐 row 完成 Contract ID → authoritative Spec/frozen contract → implementation owner → executable proof → fresh GREEN evidence traceability review；
+- 如果验收发现现有 row 与 Spec/实现不一致，按 contract/invariant gap 处理，不允许通过修改 Matrix 文案来迎合现有代码。
+
+
 ## 4. Batch map
 
 | 阶段 | 原 Plan | 状态 | 长期输出 |
