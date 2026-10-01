@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from server.app.main import app
+
+
+API_DIR = Path(__file__).resolve().parents[2] / "app" / "api"
 
 
 class EmptyLibrary:
@@ -79,3 +85,20 @@ def test_validation_error_schema_is_stable():
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert response.json()["error"]["details"] is None
     assert response.json()["error"]["message"]
+
+
+def test_api_does_not_import_repositories():
+    forbidden = []
+    for path in sorted(API_DIR.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module and node.module.startswith("server.app.repositories."):
+                    forbidden.append(f"{path.name}:{node.lineno}")
+            elif isinstance(node, ast.Import):
+                if any(
+                    alias.name.startswith("server.app.repositories.")
+                    for alias in node.names
+                ):
+                    forbidden.append(f"{path.name}:{node.lineno}")
+    assert not forbidden, "API imports repository modules: " + ", ".join(forbidden)
