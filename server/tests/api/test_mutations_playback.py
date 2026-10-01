@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -7,8 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.app.main import app
+from server.app.models.library import Song
 from server.app.models.playlist import Playlist
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
+from server.app.repositories.library_repository import LibraryRepository
 from server.app.services.collection_service import Collection
 
 
@@ -591,3 +594,108 @@ def test_queue_revision_conflict_maps_to_409(client):
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "QUEUE_REVISION_CONFLICT"
+
+
+@pytest.mark.parametrize("ordered_song_ids", [[], ["other-song"]])
+def test_playlist_reorder_member_mismatch_maps_to_409(
+    client, tmp_path, ordered_song_ids
+):
+    asyncio.run(
+        LibraryRepository(str(tmp_path / "api.db")).upsert_song(
+            Song(song_id="song-1", title="First", file_uri="first.flac")
+        )
+    )
+    created = client.post(
+        "/api/playlists",
+        json={"name": "Reorder"},
+        headers=idempotency_headers("create-reorder"),
+    )
+    playlist_id = created.json()["playlist_id"]
+    added = client.post(
+        f"/api/playlists/{playlist_id}/songs",
+        json={"song_id": "song-1"},
+        headers=idempotency_headers("seed-reorder"),
+    )
+    assert added.status_code == 200
+
+    response = client.put(
+        f"/api/playlists/{playlist_id}/songs/order",
+        json={"ordered_song_ids": ordered_song_ids},
+        headers=idempotency_headers("mismatch-reorder"),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PLAYLIST_REORDER_MEMBER_MISMATCH"
+    assert response.json()["error"]["details"] is None
+    assert client.get(f"/api/playlists/{playlist_id}").json()["song_ids"] == [
+        "song-1"
+    ]
+
+
+@pytest.mark.parametrize("mutation", ["playlist", "favorite"])
+def test_missing_song_mutation_maps_to_404(tmp_path, monkeypatch, mutation):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "missing-song.db"))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        created = client.post(
+            "/api/playlists",
+            json={"name": "Missing song"},
+            headers=idempotency_headers("create-missing-song"),
+        )
+        playlist_id = created.json()["playlist_id"]
+        if mutation == "playlist":
+            response = client.post(
+                f"/api/playlists/{playlist_id}/songs",
+                json={"song_id": "missing-song"},
+                headers=idempotency_headers("add-missing-song"),
+            )
+        else:
+            response = client.put(
+                "/api/favorites/missing-song",
+                headers=idempotency_headers("favorite-missing-song"),
+            )
+
+        assert response.status_code == 404
+        assert response.json() == {
+            "error": {
+                "code": "SONG_NOT_FOUND",
+                "message": "song not found: missing-song",
+                "details": None,
+            }
+        }
+        assert client.get(f"/api/playlists/{playlist_id}").json()["song_ids"] == []
+        assert client.get("/api/favorites").json()["song_ids"] == []
+
+
+@pytest.mark.parametrize("error_code, command_list_index", [(5, 0), (None, None)])
+def test_player_command_failure_maps_to_502_with_stable_details(
+    client, error_code, command_list_index
+):
+    from server.app.player.ports import PlayerCommandError
+
+    class CommandFailure(FakePlaybackService):
+        async def pause(self):
+            raise PlayerCommandError(
+                "pause",
+                "command rejected",
+                error_code=error_code,
+                command_list_index=command_list_index,
+            )
+
+    with app_services(playback_service=CommandFailure()):
+        response = client.post(
+            "/api/playback/pause",
+            headers=idempotency_headers("command-failure"),
+        )
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "error": {
+            "code": "PLAYER_COMMAND_FAILED",
+            "message": "command rejected",
+            "details": {
+                "command": "pause",
+                "error_code": error_code,
+                "command_list_index": command_list_index,
+            },
+        }
+    }

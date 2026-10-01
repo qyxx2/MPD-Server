@@ -10,7 +10,9 @@ from server.app.services.library_service import LibraryService
 from server.app.services.playlist_service import (
     DuplicatePlaylistSongError,
     PlaylistNotFoundError,
+    PlaylistReorderMemberMismatchError,
     PlaylistService,
+    SongNotFoundError,
     SystemPlaylistModificationError,
 )
 
@@ -168,6 +170,24 @@ async def get_favorites(
 
 
 def _raise_playlist_http_error(exc: Exception) -> None:
+    if isinstance(exc, SongNotFoundError):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "SONG_NOT_FOUND",
+                "message": f"song not found: {exc.args[0]}",
+                "details": None,
+            },
+        ) from exc
+    if isinstance(exc, PlaylistReorderMemberMismatchError):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "PLAYLIST_REORDER_MEMBER_MISMATCH",
+                "message": str(exc),
+                "details": None,
+            },
+        ) from exc
     if isinstance(exc, PlaylistNotFoundError):
         raise HTTPException(
             status_code=404,
@@ -323,7 +343,11 @@ async def favorite_song(
         CollectionService, Depends(resolve_collection_service)
     ],
 ) -> CollectionResponse:
-    await service.set_favorite(song_id, True)
+    try:
+        await service.set_favorite(song_id, True)
+    except Exception as exc:
+        _raise_playlist_http_error(exc)
+        raise
     return _collection_response(
         await collection_service.get_collection(source_type="FAVORITES")
     )

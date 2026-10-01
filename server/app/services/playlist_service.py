@@ -7,14 +7,18 @@ from server.app.models.playlist import Playlist
 from server.app.repositories.playlist_repository import (
     DuplicatePlaylistSongError,
     PlaylistNotFoundError,
+    PlaylistReorderMemberMismatchError,
+    SongNotFoundError,
     SystemPlaylistModificationError,
 )
 
 __all__ = [
     "DuplicatePlaylistSongError",
     "PlaylistNotFoundError",
+    "PlaylistReorderMemberMismatchError",
     "PlaylistRepositoryPort",
     "PlaylistService",
+    "SongNotFoundError",
     "SystemPlaylistModificationError",
 ]
 

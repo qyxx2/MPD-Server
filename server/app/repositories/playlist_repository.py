@@ -12,8 +12,16 @@ class DuplicatePlaylistSongError(ValueError):
     """Raised when a song already exists in the target playlist."""
 
 
+class PlaylistReorderMemberMismatchError(ValueError):
+    """Raised when a reorder does not contain the current playlist members."""
+
+
 class PlaylistNotFoundError(ValueError):
     """Raised when a requested Playlist does not exist."""
+
+
+class SongNotFoundError(ValueError):
+    """Raised when a playlist or favorite mutation references a missing Song."""
 
 
 class SystemPlaylistModificationError(ValueError):
@@ -47,6 +55,14 @@ class PlaylistRepository:
         if row is None:
             raise PlaylistNotFoundError(playlist_id)
         return PlaylistRepository._playlist_from_row(row)
+
+    @staticmethod
+    def _require_song(connection, song_id: str) -> None:
+        row = connection.execute(
+            "SELECT 1 FROM songs WHERE song_id = ?", (song_id,)
+        ).fetchone()
+        if row is None:
+            raise SongNotFoundError(song_id)
 
     async def create_playlist(self, name: str) -> Playlist:
         async def operation(connection):
@@ -139,6 +155,7 @@ class PlaylistRepository:
     ) -> None:
         async def operation(connection):
             self._require_playlist(connection, playlist_id)
+            self._require_song(connection, song_id)
             duplicate = connection.execute(
                 """
                 SELECT 1
@@ -241,7 +258,9 @@ class PlaylistRepository:
             if len(ordered_song_ids) != len(set(ordered_song_ids)):
                 raise ValueError("ordered_song_ids contains duplicates")
             if set(ordered_song_ids) != set(current_song_ids):
-                raise ValueError("ordered_song_ids must match playlist members")
+                raise PlaylistReorderMemberMismatchError(
+                    "ordered_song_ids must match playlist members"
+                )
 
             connection.execute(
                 """
@@ -271,6 +290,7 @@ class PlaylistRepository:
     async def set_favorite(self, song_id: str, is_favorite: bool) -> None:
         async def operation(connection):
             if is_favorite:
+                self._require_song(connection, song_id)
                 connection.execute(
                     """
                     INSERT OR IGNORE INTO favorites(song_id, created_at)
