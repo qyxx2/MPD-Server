@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from server.app.models.library import ScanResult, Song
-from server.app.repositories.playlist_repository import PlaylistNotFoundError
 from server.app.services.library_scanner import LibraryScanError
 from server.app.services.library_service import (
     ArtworkNotFoundError,
@@ -15,6 +14,7 @@ from server.app.services.library_service import (
     LibraryService,
     library_entity_id,
 )
+from server.app.services.playlist_service import PlaylistNotFoundError
 
 from .dependencies import (
     get_library_service,
