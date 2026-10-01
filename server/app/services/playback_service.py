@@ -6,7 +6,9 @@ from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
 from server.app.player.models import PlayerState, PlayerStatus
 from server.app.player.ports import PlayerPort
+from server.app.repositories.database import run_transaction
 from server.app.repositories.library_repository import LibraryRepository
+from server.app.repositories.queue_repository import QueueRevisionConflictError
 from server.app.services.autoplay import AutoPlay
 from server.app.services.history_service import HistoryService
 from server.app.services.queue_manager import QueueItemNotFoundError, QueueManager
@@ -131,6 +133,155 @@ class PlaybackService:
         item = await self.queue_manager.add_to_queue(song.song_id)
         await self._sync_player_queue()
         return item
+
+    async def reorder(
+        self,
+        queue_item_id: str,
+        before_queue_item_id: str | None = None,
+        *,
+        expected_revision: int | None = None,
+    ) -> list[QueueItem]:
+        async def operation(_connection):
+            items = await self.queue_manager.reorder(
+                queue_item_id,
+                before_queue_item_id,
+                expected_revision=expected_revision,
+            )
+            await self._sync_player_queue()
+            await self._confirm_preserved_state()
+            return items
+
+        return await run_transaction(
+            self.queue_manager.queue_repository.path, operation,
+        )
+
+    async def clear(self, *, expected_revision: int | None = None) -> None:
+        async def operation(_connection):
+            await self.queue_manager.clear(expected_revision=expected_revision)
+            await self._refill_empty_pending()
+            await self._sync_player_queue()
+            await self._confirm_preserved_state()
+
+        await run_transaction(self.queue_manager.queue_repository.path, operation)
+
+    async def delete(
+        self,
+        queue_item_id: str,
+        *,
+        expected_revision: int | None = None,
+    ) -> QueueItem | None:
+        async def operation(_connection):
+            snapshot = await self.queue_manager.queue_repository.get_snapshot()
+            if expected_revision is not None and snapshot.revision != expected_revision:
+                raise QueueRevisionConflictError(expected_revision, snapshot.revision)
+            selected = await self.queue_manager.get_item(queue_item_id)
+            if selected is None:
+                raise QueueItemNotFoundError(queue_item_id)
+            state = await self.queue_manager.get_playback_state()
+            self.history_service.preserve_active_on_rollback()
+            if selected.position != 0:
+                await self.queue_manager.delete(
+                    queue_item_id,
+                    expected_revision=expected_revision,
+                    persist_state=False,
+                )
+                await self._refill_empty_pending()
+                await self._sync_player_queue()
+                await self._confirm_preserved_state()
+                return None
+
+            # Resolve availability before promoting a successor. Played is independent.
+            for item in snapshot.items:
+                if item.position > 0:
+                    song = await self.library_repository.get_song(item.song_id)
+                    if song is None or song.availability_status != "AVAILABLE":
+                        await self.queue_manager.delete(
+                            item.queue_item_id, persist_state=False,
+                        )
+            await self._refill_empty_pending()
+            promoted = await self.queue_manager.delete(
+                queue_item_id,
+                persist_state=False,
+                allow_no_successor=True,
+            )
+            context_id = (
+                state.playback_context_id if state else selected.playback_context_id
+            )
+            if promoted is None:
+                await self.player.stop()
+                status = await self.player.status()
+                if status.state != PlayerState.STOPPED:
+                    raise PlaybackReconciliationError("MPD did not confirm stopped state")
+                await self._sync_player_queue()
+                status = await self.player.status()
+                if status.state != PlayerState.STOPPED:
+                    raise PlaybackReconciliationError("MPD did not remain stopped")
+                await self._save_confirmed_status(status, context_id=context_id)
+                await self.history_service.stop()
+            elif state is not None and state.state == "STOPPED":
+                await self._sync_player_queue()
+                await self._confirm_preserved_state()
+                await self._save_confirmed_status(
+                    await self.player.status(), context_id=context_id,
+                    autoplay_enabled=False,
+                )
+            else:
+                song = await self._require_available_song(promoted.song_id)
+                await self._prepare_play(song)
+                await self._sync_player_queue()
+                status = await self.player.status()
+                if (
+                    status.state != PlayerState.PLAYING
+                    or status.song_uri != song.file_uri
+                ):
+                    raise PlaybackReconciliationError("MPD did not retain the successor")
+                await self._confirm_current_occurrence(status)
+                await self._save_confirmed_playing(
+                    promoted.song_id,
+                    context_id=promoted.playback_context_id or context_id,
+                    status=status,
+                    autoplay_enabled=state.autoplay_enabled if state else True,
+                )
+                await self.history_service.start_track(promoted.song_id)
+            return promoted
+
+        return await run_transaction(
+            self.queue_manager.queue_repository.path, operation,
+        )
+
+    async def _confirm_preserved_state(self) -> None:
+        state = await self.queue_manager.get_playback_state()
+        status = await self.player.status()
+        if state is None:
+            return
+        expected = PlayerState(state.state.lower())
+        song = (
+            await self.library_repository.get_song(state.song_id) if state.song_id else None
+        )
+        if status.state != expected or (
+            expected != PlayerState.STOPPED
+            and (song is None or status.song_uri != song.file_uri)
+        ):
+            raise PlaybackReconciliationError("Queue mutation changed actual playback state")
+        if expected != PlayerState.STOPPED:
+            await self._confirm_current_occurrence(status)
+
+    async def _confirm_current_occurrence(self, status: PlayerStatus) -> None:
+        entries = await self.player.queue_entries()
+        if (
+            not entries
+            or status.song_position != 0
+            or status.song_id != entries[0].mpd_song_id
+        ):
+            raise PlaybackReconciliationError("MPD current occurrence differs from Server Queue")
+
+    async def _refill_empty_pending(self) -> None:
+        state = await self.queue_manager.get_playback_state()
+        if state is None or state.state == "STOPPED" or not state.autoplay_enabled:
+            return
+        if any(item.position > 0 for item in await self.queue_manager.list_items()):
+            return
+        await self.autoplay.refill(await self._queue_playback_context(state))
 
     async def next(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
@@ -306,9 +457,6 @@ class PlaybackService:
 
     async def _sync_player_queue(self) -> None:
         desired = await self._desired_song_uris()
-        if not desired:
-            return
-
         current = await self.player.queue_entries()
         for position, song_uri in enumerate(desired):
             if position < len(current) and current[position].song_uri == song_uri:
@@ -339,6 +487,8 @@ class PlaybackService:
         current = await self.player.queue_entries()
         for entry in reversed(current[len(desired):]):
             await self.player.queue_delete(entry.mpd_song_id)
+        if [entry.song_uri for entry in await self.player.queue_entries()] != desired:
+            raise PlaybackReconciliationError("MPD did not confirm the Server Queue")
 
     async def _desired_song_uris(self) -> list[str]:
         items = await self.queue_manager.list_items()

@@ -103,6 +103,18 @@ class FakePlaybackService:
         self.calls.append(("seek", seconds))
         return self.state.model_copy(update={"position_seconds": seconds})
 
+    async def reorder(
+        self, queue_item_id, before_queue_item_id=None, *, expected_revision=None,
+    ):
+        self.calls.append(("reorder", (queue_item_id, before_queue_item_id)))
+        return self.queue_manager.items
+
+    async def delete(self, queue_item_id, *, expected_revision=None):
+        self.calls.append(("delete", queue_item_id))
+
+    async def clear(self, *, expected_revision=None):
+        self.calls.append(("clear", None))
+
 
 class FakeQueueManager:
     def __init__(self) -> None:
@@ -332,6 +344,7 @@ def test_collection_play_creates_context_before_playback(client):
 def test_queue_mutations_and_save_as_playlist(client):
     playback = FakePlaybackService()
     queue = FakeQueueManager()
+    playback.queue_manager = queue
     playlists = FakePlaylistService()
     with app_services(
         playback_service=playback,
@@ -368,11 +381,9 @@ def test_queue_mutations_and_save_as_playlist(client):
     assert saved.json()["playlist_id"] == "playlist-1"
     assert [call[0] for call in queue.calls] == [
         "list_items",
-        "reorder",
-        "delete",
-        "clear",
         "save_as_playlist",
     ]
+    assert [call[0] for call in playback.calls] == ["reorder", "delete", "clear"]
 
 
 def test_playlist_and_favorite_mutations_delegate_to_playlist_service(client):
@@ -575,7 +586,7 @@ def test_failed_playback_mutation_does_not_consume_idempotency_key(client):
 def test_queue_revision_conflict_maps_to_409(client):
     from server.app.repositories.queue_repository import QueueRevisionConflictError
 
-    class ConflictingQueue(FakeQueueManager):
+    class ConflictingPlayback(FakePlaybackService):
         async def reorder(
             self,
             queue_item_id: str,
@@ -585,7 +596,7 @@ def test_queue_revision_conflict_maps_to_409(client):
         ):
             raise QueueRevisionConflictError(4, 5)
 
-    with app_services(queue_manager=ConflictingQueue()):
+    with app_services(playback_service=ConflictingPlayback()):
         response = client.put(
             "/api/playback/queue/items/up-next",
             json={"before_queue_item_id": "current"},

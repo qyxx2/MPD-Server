@@ -23,6 +23,19 @@ _active_transactions: ContextVar[dict[str, sqlite3.Connection] | None] = Context
     default=None,
 )
 
+_transaction_rollbacks: ContextVar[dict[str, list[Callable[[], None]]] | None] = ContextVar(
+    "database_transaction_rollbacks", default=None,
+)
+
+
+def on_transaction_rollback(path: str, callback: Callable[[], None]) -> None:
+    """Restore application state if the owning (possibly outer) transaction fails."""
+    callbacks = _transaction_rollbacks.get()
+    key = _database_key(path)
+    if callbacks is None or key not in callbacks:
+        raise RuntimeError("rollback callback requires an active transaction")
+    callbacks[key].append(callback)
+
 
 def _database_key(path: str) -> str:
     return str(Path(path).resolve())
@@ -89,6 +102,9 @@ async def run_transaction(
         nested_transactions = dict(active_transactions or {})
         nested_transactions[key] = connection
         token = _active_transactions.set(nested_transactions)
+        rollbacks = dict(_transaction_rollbacks.get() or {})
+        rollbacks[key] = []
+        rollback_token = _transaction_rollbacks.set(rollbacks)
         try:
             connection.execute("BEGIN")
             result = operation(connection)
@@ -98,7 +114,10 @@ async def run_transaction(
             return result
         except Exception:
             connection.rollback()
+            for callback in reversed(rollbacks[key]):
+                callback()
             raise
         finally:
+            _transaction_rollbacks.reset(rollback_token)
             _active_transactions.reset(token)
             connection.close()

@@ -159,6 +159,8 @@ class QueueManager:
         queue_item_id: str,
         *,
         expected_revision: int | None = None,
+        persist_state: bool = True,
+        allow_no_successor: bool = False,
     ) -> QueueItem | None:
         state = await self.playback_state_repository.get_state()
         selected = await self.queue_repository.get_item(queue_item_id)
@@ -168,8 +170,9 @@ class QueueManager:
         promoted = await self.queue_repository.delete_item(
             queue_item_id,
             expected_revision=expected_revision,
+            allow_no_successor=allow_no_successor,
         )
-        if selected.position == 0 and promoted is not None:
+        if persist_state and selected.position == 0 and promoted is not None:
             await self.playback_state_repository.save(
                 PlaybackState(
                     song_id=promoted.song_id,

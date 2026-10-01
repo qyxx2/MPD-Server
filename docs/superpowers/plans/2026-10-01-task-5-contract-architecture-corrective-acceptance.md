@@ -2,6 +2,11 @@
 
 Date: 2026-10-01. Branch: `feature/task-5-library-api`.
 
+**Latest local handoff:** A/B CLOSED; newly reproduced independent C/D OPEN.
+**Batch 6 readiness remains BLOCKED.** See “Current Pre-Batch-6 A/B corrective
+handoff” below. Publication was subsequently explicitly authorized by the user;
+readiness remains blocked. Earlier published SHAs/results below are historical.
+
 **Corrective implementation and local automated validation: COMPLETE.**
 **Overall Task 5 / readiness to enter Batch 6: PARTIALLY COMPLETE — BLOCKED.**
 Batch 6 was not executed; original Plan Steps 9–10 were not edited or checked. No main merge or PR.
@@ -116,3 +121,192 @@ Publication verification is recorded after the push below; this document's final
 Next stage: resolve independent blockers A/B under a separately authorized scope before Batch 6. This repair does not close overall Task 5, original Steps 9–10, the Batch 6 final commit, or main integration. Required local environment validation for this corrective scope is complete; overall acceptance remains blocked by the reproduced contracts/architecture, not by the environment.
 
 Repair publication actually verified: `git push origin HEAD:refs/heads/feature/task-5-library-api` succeeded; fresh `git fetch origin` / `git ls-remote` and `git show --format=fuller --stat origin/feature/task-5-library-api` confirmed repair SHA `a3fc1b1fe548652c81573204d7c214049ba921b7` exists remotely. At this repair publication checkpoint HEAD = remote feature ref; remote main remained `43fa8999cee72c2ca7c88e2f8e3147b956d2525c`. Workspace was clean before this documentation-only update.
+
+## Current Pre-Batch-6 A/B corrective handoff (2026-10-01)
+
+This section supersedes the earlier A/B **OPEN** handoff above. Earlier evidence and
+published SHAs remain historical records, not the current readiness determination.
+
+- **A — Queue mutation orchestration: CLOSED in current local implementation.**
+- **B — Playlist persisted membership: CLOSED in current local implementation.**
+- **Readiness to enter Batch 6: PARTIALLY COMPLETE — BLOCKED.**
+- Two newly confirmed independent blockers remain; neither was implemented here.
+- No Batch 6 Step 9/10, Task 5 completion checkbox, PR or main merge was performed.
+
+### Actual baseline, reproduction and changes
+
+Current branch was `feature/task-5-library-api`, clean at start, HEAD `86aedd6`
+(`docs(task-5): record corrective verification and acceptance blockers`). All four
+specs, original Task 5 Steps 1–8, Batch Plan Contract Audit/Batches 3–5, existing
+corrective acceptance, actual Task 4 Playback/Queue/History/AutoPlay contracts,
+Repository and PlayerPort implementations were inspected. The [A/B corrective plan](2026-10-01-task-5-pre-batch6-ab-corrective-plan.md)
+was written before production edits. No assumption of historical test completion was
+substituted for reproduction.
+
+A/B were reproduced through actual API → Service → SQLite and MockMPD: reorder,
+pending/current deletion, clear execution queues differed; Playlist detail and song
+resources hid MISSING/UNREADABLE persisted members. Initial six original mismatches
+and ten additional failure/contract cases were RED (16 failed). After first GREEN,
+further RED→GREEN cases verified final status, explicit STOP preservation, outer
+idempotency failure rollback of in-memory History, and duplicate URI occurrence.
+Fixture corrections are recorded in the plan ledger; none weakened a business assertion.
+
+Changes and why they belong to this correction:
+
+- `api/playback.py`: reorder/delete/clear enter PlaybackService. Typed confirmation
+  failure gets 502/PLAYBACK_RECONCILIATION_FAILED/details=null; existing command,
+  availability, revision and unexpected-error mappings remain.
+- `services/playback_service.py`: new serialized mutations coordinate QueueManager,
+  AutoPlay, PlayerPort and History. Execution queue excludes Played. Current deletion
+  skips unavailable successors, attempts existing AutoPlay when empty, switches and
+  confirms actual URI/state/MPD occurrence before saving state/History; no candidates
+  confirms STOPPED and closes History. Explicit Stop never restarts. Sync handles empty
+  desired execution queues and checks actual results. Partial external MPD effects are
+  observable failures, not falsely reported database success, and can be retried.
+- `services/queue_manager.py` / `repositories/queue_repository.py`: opt out of speculative
+  state persistence and opt in to moving current to Played without a successor after
+  application resolution. Defaults retain existing Task 4 QueueManager/Repository
+  contracts; neither becomes a PlayerPort orchestrator.
+- `repositories/database.py` / `services/history_service.py`: minimal outer-transaction
+  rollback callback and History active/session checkpoint. Only new delete registers;
+  real SQLite terminal-record triggers prove both successor and STOP rollback/retry.
+  The unchanged playback paths are explicitly left as blocker C below.
+- `player/mock_mpd.py`: queue-backed status reports MPD occurrence identity/position
+  rather than library index; removing the active queue entry stops it. Required to
+  make duplicate/current cross-layer tests observe actual execution behavior. Existing
+  standalone controls and injection tests pass.
+- `api/playlists.py`: list/detail/mutation PlaylistResponse always represents persisted
+  ordered members. `/playlists/{id}/songs` reads every member in persisted order and
+  exposes AVAILABLE/MISSING/UNREADABLE via existing SongResponse.availability_status.
+  Impossible dangling relations report failure rather than silently omitting a member.
+  Collection continues to expose playable song_ids and unavailable_song_ids separately.
+- `tests/api/test_pre_batch6_corrective.py`: 32 actual SQLite/Services/MockMPD cases,
+  including replay, failure rollback/retry, revision, availability, session controls,
+  History transitions, execution identity and all requested Playlist response paths.
+- `tests/api/test_mutations_playback.py` / `tests/api/test_library_api.py`: only directly
+  affected service doubles/delegation assertions. Original response/error assertions
+  retained; persisted membership read additionally asserts no Collection call.
+- Corrective plan, this handoff and linked Batch Plan note only. No dependency/schema,
+  environment, music-file, unrelated feature, runtime artifact or future Task change.
+
+### Fresh mandatory re-audit
+
+Independent reviewer inspected the actual code/diff, and root repeated reproductions.
+Automated PASS does not override the independent failures below.
+
+| Required contract | Actual result |
+|---|---|
+| Original Task 5 Steps 1–5 | All Collection sources, stable Song IDs/dedup/default order, fixed seeded PlaybackContext, empty handling, Library/Playlist/Collection Service boundaries retained. |
+| Original Steps 6–8 / Batch 3–5 | Required REST resources and stable schema envelopes present; A/B repaired. Step 7–8 playback idempotency/History has blocker C; unavailable playback has blocker D. |
+| API → Service → Repository/PlayerPort | API imports no Repository/SQLite/concrete MPD. Queue mutation orchestration is in PlaybackService; composition root still wires resources. |
+| Sole playback authority | PlaybackService owns player commands, confirmation, History and AutoPlay. QueueManager owns business mutation only; no second orchestrator added. |
+| Queue/History/Playlist/Collection/Context independence | Played is excluded from execution queue and default Queue-save Playlist. Persistent History survives Queue mutation; Playlist persisted order differs intentionally from Collection playable split. C remains in unrelated playback transitions. |
+| Unavailable membership | Playlist resource includes MISSING/UNREADABLE; Collection playable split unchanged. Current deletion skips unavailable successors. Existing Next does not: blocker D. |
+| Idempotency/errors/transactions/revision | Canonical persisted replay/conflict and validation/command/unavailable mappings retained. New A operations serialize inside original SQLite/idempotency transaction; stale revision precedes player commands; new delete restores History memory after outer rollback. Existing playback operations lack that safeguard: C. |
+| Artwork read-only | LibraryService still reads persisted ArtworkRef/source without writes; prior artwork/source/error/read-only regression passes. No Artwork or scanner production edits. |
+| Future Task isolation | No WebSocket/StateService, Output Manager, Web/PWA, config, backup/deployment or physical acceptance implementation. Original Task 5 checkboxes untouched. |
+| Search for independent blockers | Two Important findings C/D below. No other confirmed blocker from this audit; no Critical or deferred Minor finding. |
+
+### New independent blocker C — playback History memory survives failed transaction
+
+Code evidence: existing `PlaybackService.start_track`, `play_now`, `next` call
+`HistoryService.start_track()` inside the API's outer idempotency transaction without
+registering History rollback; `HistoryService.start_track()` changes `_active`, while
+`IdempotencyService.execute()` creates its terminal record only after the route returns
+(`services/idempotency_service.py:46–66`). These playback method bodies are unchanged
+from baseline `86aedd6`; new delete's checkpoint does not conceal the broader defect.
+
+Root repeated `.venv` audit using temporary SQLite, real Services and MockMPD:
+
+```text
+next HTTP 500 Queue rollback True DB song a History active b History persisted []
+retry 200 History persisted [('b', 'SWITCH_AWAY')]
+play_now HTTP 500 Queue rollback True DB song a History active b History persisted []
+retry 200 History persisted [('b', 'SWITCH_AWAY')]
+start_track HTTP 500 Queue rollback True DB song a History active b History persisted []
+retry 200 History persisted [('b', 'SWITCH_AWAY')]
+```
+
+Deterministic reproduction: seed AVAILABLE a/b/c and play SONGS [a,b,c]. In the
+same temporary database install:
+
+```sql
+CREATE TRIGGER fail_terminal BEFORE INSERT ON idempotency_records
+WHEN NEW.idempotency_key='failure'
+BEGIN SELECT RAISE(ABORT, 'forced terminal failure'); END;
+```
+
+POST `/api/playback/next`, `/api/playback/queue/items/{b_queue_item_id}/play`, or
+`/api/playback/tracks/b/play` with `Idempotency-Key: failure` (separate fixture per route).
+Read Queue snapshot/PlaybackState/persisted History/HistoryService.active_event.
+DROP only that temporary trigger, retry the identical request/key, then read History.
+The failed request loses a's actual transition and retry records a phantom b transition.
+
+Contract: original Task 5 Steps 7–8; Batch Plan §4.7.7 / Batch 5 business+terminal atomic
+boundary; playback spec §2.2 and §7 distinct actual History events. Minimal next scope:
+make existing History-changing playback paths preserve active/session through their
+own/outer transaction failures, with real SQLite trigger rollback and same-key retry
+regression for start/play-now/next and affected previous/stop/context/reconciliation.
+Do not add realtime/state/config features or attempt to treat SQLite as MPD rollback.
+
+### New independent blocker D — Next aborts instead of skipping unavailable pending
+
+Code evidence: unchanged `PlaybackService.next()` selects `up_next[0]` and immediately
+calls `_require_available_song(target.song_id)` (`services/playback_service.py:308–309`).
+A pending b marked MISSING with later c AVAILABLE causes 404/PLAYBACK_REQUEST_INVALID,
+leaves a playing and never reaches c. Root's fresh reproduction:
+
+```text
+unavailable_next HTTP 404 Queue rollback True DB song a History active a History persisted []
+```
+
+Setup: fresh temporary SQLite fixture, AVAILABLE a/b/c, play SONGS [a,b,c], persist b
+as MISSING, POST `/api/playback/next` with a fresh idempotency key. No external service.
+
+Contract: playback spec §8.3 (skip invalid items, record cause, continue valid successor,
+otherwise AutoPlay) and library spec §9. Minimal next scope: existing Next successor
+resolution/observable unavailable reason/AutoPlay fallback and confirmed transition,
+with MISSING/UNREADABLE, all-unavailable and failure/revision/idempotency regressions.
+This is distinct from A current deletion and was not silently implemented.
+
+### Verification and Git ruling
+
+Environment verified: Python 3.14.4, pytest 9.1.1, Ruff 0.16.9 in existing `.venv`;
+`server/requirements.txt` inspected. No environment failure, dependency change, system
+Python, Docker or live MPD. Tests report only existing TestClient/httpx deprecation.
+
+Final command results are listed below. Earlier full run found the directly affected
+old Playlist-detail delegation expectation; replaced it with explicit persisted-service
+calls and no Collection call, then exact test/file/regressions reran GREEN. No test was
+deleted, skipped, xfailed or weakened.
+
+The initial conditional publication gate was unmet because C/D remain. The user
+subsequently explicitly instructed “先执行push”, authorizing commit and publication
+of this reviewed correction while retaining both blockers. Commit/push does not close
+C/D or authorize Batch 6. The correction SHA is obtained from Git history, and fresh
+remote ref/commit equality is verified and reported after push. No PR, Batch 6 final
+acceptance/commit, Task 5 checkbox or main merge is authorized or performed.
+
+Final executed commands (repository root, existing venv):
+
+| Command | Result |
+|---|---|
+| `.venv/bin/python -m pytest -q server/tests/api/test_pre_batch6_corrective.py` | 32 passed |
+| `.venv/bin/python -m pytest -q server/tests/api/test_library_api.py::test_playlist_read_uses_persisted_membership_service` | 1 passed |
+| `.venv/bin/python -m pytest -q server/tests/api/test_library_api.py` | 21 passed |
+| `.venv/bin/python -m pytest -q server/tests/player/test_mock_mpd.py server/tests/player/test_mock_mpd_injection.py` | 4 passed |
+| `.venv/bin/python -m pytest -q server/tests/api/test_pre_batch6_corrective.py server/tests/services/test_playback_service.py server/tests/services/test_queue_manager.py server/tests/services/test_autoplay.py server/tests/services/test_history_service.py server/tests/api/test_mutations_playback.py server/tests/api/test_playlist_reads.py server/tests/api/test_idempotency.py server/tests/api/test_library_api.py server/tests/services/test_collection_service.py server/tests/services/test_playlist_service.py server/tests/repositories/test_playlist_repository_task5.py server/tests/integration server/tests/player/test_mock_mpd.py server/tests/player/test_mock_mpd_injection.py` | 198 passed |
+| `.venv/bin/python -m pytest -q server/tests` | Final fresh run: 386 passed |
+| `.venv/bin/python -m compileall -q server` | exit 0 |
+| `.venv/bin/python -m ruff check server` | All checks passed |
+| `git diff --check` | exit 0 |
+| `PYTHONPATH=. .venv/bin/python /tmp/prebatch6-independent-audit.py` | Root reproduced C on next/play_now/start_track and D on Next; exact fixture/trigger/routes/output above |
+| `git diff`, `git diff --stat`, `git status --short`, direct inspection of two untracked files | 14 intended files only (12 tracked changes plus new plan/test); no runtime/environment/dependency/artwork/future Task files |
+| `git diff -- docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md` | empty; original Task 5 checkboxes untouched |
+| `git branch --show-current` / `git rev-parse HEAD` | feature/task-5-library-api / 86aedd646a2355363978f34f68741400aa6fce24 |
+
+Local automated/environment validation and A/B implementation are complete. Overall
+contract acceptance remains blocked by reproduced C/D. Real MPD/NAS/DAC/manual future
+acceptance remains outside this scope and has not been claimed PASS. Next action is a
+separately scoped C/D corrective with RED and the minimum ranges above, followed by
+another full contract re-audit; it is not Batch 6 authorization.

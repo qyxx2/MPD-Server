@@ -6,6 +6,7 @@ from typing import Literal
 
 from server.app.models.history import HistoryEvent
 from server.app.models.queue import QueueItem
+from server.app.repositories.database import on_transaction_rollback
 from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.queue_repository import QueueRepository
 
@@ -34,6 +35,15 @@ class HistoryService:
         self.history_repository = history_repository
         self._active: HistoryEvent | None = None
         self._session_id: str | None = None
+
+    def preserve_active_on_rollback(self) -> None:
+        """Keep the active event/session consistent with persisted History on failure."""
+        active, session_id = self._active, self._session_id
+
+        def restore() -> None:
+            self._active, self._session_id = active, session_id
+
+        on_transaction_rollback(self.history_repository.path, restore)
 
     async def list_played(self) -> list[QueueItem]:
         items = await self.queue_repository.list_items()

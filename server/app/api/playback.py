@@ -9,6 +9,7 @@ from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_service import CollectionSourceNotFoundError
 from server.app.services.playback_service import (
+    PlaybackReconciliationError,
     PlaybackService,
     PlaybackSongNotFoundError,
     PlaybackSongUnavailableError,
@@ -104,6 +105,15 @@ def _raise_playback_http_error(exc: Exception) -> None:
                     "error_code": exc.error_code,
                     "command_list_index": exc.command_list_index,
                 },
+            },
+        ) from exc
+    if isinstance(exc, PlaybackReconciliationError):
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "PLAYBACK_RECONCILIATION_FAILED",
+                "message": str(exc),
+                "details": None,
             },
         ) from exc
     if isinstance(exc, QueueRevisionConflictError):
@@ -316,7 +326,7 @@ async def play_collection(
 async def reorder_queue_item(
     queue_item_id: str,
     request: QueueReorderRequest,
-    service: Annotated[QueueManager, Depends(get_queue_manager)],
+    service: Annotated[PlaybackService, Depends(get_playback_service)],
 ) -> QueueListResponse:
     try:
         items = await service.reorder(
@@ -332,7 +342,7 @@ async def reorder_queue_item(
 @router.delete("/queue/items/{queue_item_id}", status_code=204)
 async def delete_queue_item(
     queue_item_id: str,
-    service: Annotated[QueueManager, Depends(get_queue_manager)],
+    service: Annotated[PlaybackService, Depends(get_playback_service)],
 ) -> None:
     try:
         await service.delete(queue_item_id)
@@ -343,7 +353,7 @@ async def delete_queue_item(
 
 @router.delete("/queue", status_code=204)
 async def clear_queue(
-    service: Annotated[QueueManager, Depends(get_queue_manager)],
+    service: Annotated[PlaybackService, Depends(get_playback_service)],
 ) -> None:
     try:
         await service.clear()

@@ -306,7 +306,7 @@ def test_collection_route_supports_explicit_song_selection_as_read_contract(
     ]
 
 
-def test_playlist_read_uses_playlist_and_collection_services(services):
+def test_playlist_read_uses_persisted_membership_service(services):
     client, _, collection_service, playlist_service, _ = services
 
     response = client.get("/api/playlists/playlist-1")
@@ -315,8 +315,11 @@ def test_playlist_read_uses_playlist_and_collection_services(services):
     body = response.json()
     assert body["playlist_id"] == "playlist-1"
     assert body["song_ids"] == ["song-1", "song-2"]
-    assert playlist_service.calls[-1] == ("get_playlist", "playlist-1")
-    assert collection_service.calls[-1]["source_type"] == "PLAYLIST"
+    assert playlist_service.calls == [
+        ("get_playlist", "playlist-1"),
+        ("list_song_ids", "playlist-1"),
+    ]
+    assert collection_service.calls == []
 
 
 def test_missing_playlist_is_404(services):

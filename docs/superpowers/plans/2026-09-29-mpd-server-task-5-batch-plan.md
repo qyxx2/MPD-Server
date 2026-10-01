@@ -1685,3 +1685,20 @@ Batch 5 最终状态：**COMPLETE**（四项 corrective 有自动化覆盖，全
 - [Corrective acceptance and full Task 5 audit/handoff](2026-10-01-task-5-contract-architecture-corrective-acceptance.md) records the exact commands and two **independent blockers** reproduced with actual Services/SQLite/MockMPD: Queue reorder/delete/clear do not synchronize PlayerPort/History; PlaylistResponse membership differs between list/mutations and detail when members are unavailable.
 - Corrective scope/local automated validation: **COMPLETE**. Entire Task 5 readiness: **PARTIALLY COMPLETE — BLOCKED**. The earlier Batch 5 completion record is historical scoped evidence, not permission to bypass these current findings.
 - Original Task 5 Step 9–10 checkboxes remain untouched. Batch 6 final acceptance/commit was not executed. No main merge, PR or future Task implementation. Resolve the independent blockers in separately authorized corrective scope before entering Batch 6.
+
+## Pre-Batch-6 A/B corrective continuation (2026-10-01)
+
+- [Scoped corrective plan and execution ledger](2026-10-01-task-5-pre-batch6-ab-corrective-plan.md)
+  records actual baseline `86aedd6`, reproduced RED, minimal implementation and GREEN.
+- A Queue mutation orchestration and B persisted Playlist resource membership are
+  **CLOSED locally**; 32 real SQLite/Services/MockMPD focused cases passed.
+- [Updated corrective acceptance/handoff](2026-10-01-task-5-contract-architecture-corrective-acceptance.md)
+  records the fresh mandatory ten-area re-audit and two newly confirmed independent
+  blockers: existing playback History memory is not restored after terminal-record
+  transaction failure; Next aborts on an unavailable pending member instead of skipping.
+- Overall readiness remains **PARTIALLY COMPLETE — BLOCKED**. New independent defects
+  were reported with code/spec evidence and minimum next scope, not silently fixed.
+- Initial conditional commit/push gate was unmet. The user subsequently explicitly
+  authorized publication (“先执行push”); commit/push the reviewed correction and verify
+  fresh remote ref/commit, retaining C/D blockers. Original Task 5 Steps 9/10 and
+  completion checkboxes remain untouched; no Batch 6, PR, main merge or future Task.

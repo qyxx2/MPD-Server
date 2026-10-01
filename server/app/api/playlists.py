@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
 from server.app.models.library import Song
 from server.app.services.collection_service import CollectionService
@@ -84,7 +84,6 @@ async def list_playlists(
 @router.get("/api/playlists/{playlist_id}", response_model=PlaylistResponse)
 async def get_playlist(
     playlist_id: str,
-    request: Request,
     service: Annotated[PlaylistService, Depends(get_playlist_service)],
 ) -> PlaylistResponse:
     playlist = await service.get_playlist(playlist_id)
@@ -98,28 +97,12 @@ async def get_playlist(
             },
         )
 
-    collection_service = await resolve_collection_service(request)
-    try:
-        collection = await collection_service.get_collection(
-            source_type="PLAYLIST",
-            source_id=playlist_id,
-        )
-    except PlaylistNotFoundError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "code": "PLAYLIST_NOT_FOUND",
-                "message": f"playlist not found: {exc.args[0]}",
-                "details": None,
-            },
-        ) from exc
-    return _playlist_response(playlist, list(collection.song_ids))
+    return _playlist_response(playlist, await service.list_song_ids(playlist_id))
 
 
 @router.get("/api/playlists/{playlist_id}/songs", response_model=SongListResponse)
 async def list_playlist_songs(
     playlist_id: str,
-    request: Request,
     playlist_service: Annotated[PlaylistService, Depends(get_playlist_service)],
     library_service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> SongListResponse:
@@ -134,27 +117,12 @@ async def list_playlist_songs(
             },
         )
 
-    collection_service = await resolve_collection_service(request)
-    try:
-        collection = await collection_service.get_collection(
-            source_type="PLAYLIST",
-            source_id=playlist_id,
-        )
-    except PlaylistNotFoundError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "code": "PLAYLIST_NOT_FOUND",
-                "message": f"playlist not found: {exc.args[0]}",
-                "details": None,
-            },
-        ) from exc
-
     items: list[SongResponse] = []
-    for song_id in collection.song_ids:
+    for song_id in await playlist_service.list_song_ids(playlist_id):
         song = await library_service.get_song(song_id)
-        if song is not None and song.availability_status == "AVAILABLE":
-            items.append(_song_response(song))
+        if song is None:
+            raise RuntimeError("persisted Playlist member has no Song resource")
+        items.append(_song_response(song))
     return SongListResponse(items=items, count=len(items))
 
 
