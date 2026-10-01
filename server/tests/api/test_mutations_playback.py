@@ -237,6 +237,10 @@ class FakePlaylistService:
         return ["song-1"]
 
 
+def idempotency_headers(operation: str) -> dict[str, str]:
+    return {"Idempotency-Key": operation}
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "api.db"))
@@ -251,23 +255,42 @@ def test_playback_mutation_endpoints_delegate_to_services(client):
         playback_service=playback,
         queue_manager=queue,
     ):
-        assert client.post("/api/playback/tracks/song-1/play").status_code == 200
         assert client.post(
-            "/api/playback/queue/items/queue-1/play"
+            "/api/playback/tracks/song-1/play",
+            headers=idempotency_headers("start-track"),
         ).status_code == 200
         assert client.post(
-            "/api/playback/songs/song-2/play-next"
+            "/api/playback/queue/items/queue-1/play",
+            headers=idempotency_headers("play-queue-item"),
         ).status_code == 200
         assert client.post(
-            "/api/playback/songs/song-2/queue"
+            "/api/playback/songs/song-2/play-next",
+            headers=idempotency_headers("play-next"),
         ).status_code == 200
-        assert client.post("/api/playback/pause").status_code == 200
-        assert client.post("/api/playback/stop").status_code == 200
-        assert client.post("/api/playback/next").status_code == 200
-        assert client.post("/api/playback/previous").status_code == 200
+        assert client.post(
+            "/api/playback/songs/song-2/queue",
+            headers=idempotency_headers("add-to-queue"),
+        ).status_code == 200
+        assert client.post(
+            "/api/playback/pause",
+            headers=idempotency_headers("pause"),
+        ).status_code == 200
+        assert client.post(
+            "/api/playback/stop",
+            headers=idempotency_headers("stop"),
+        ).status_code == 200
+        assert client.post(
+            "/api/playback/next",
+            headers=idempotency_headers("next"),
+        ).status_code == 200
+        assert client.post(
+            "/api/playback/previous",
+            headers=idempotency_headers("previous"),
+        ).status_code == 200
         assert client.post(
             "/api/playback/seek",
             json={"seconds": 30.0},
+            headers=idempotency_headers("seek"),
         ).status_code == 200
         assert [call[0] for call in playback.calls] == [
             "start_track",
@@ -293,6 +316,7 @@ def test_collection_play_creates_context_before_playback(client):
         response = client.post(
             "/api/playback/collections/play",
             json={"source_type": "LIBRARY"},
+            headers=idempotency_headers("play-collection"),
         )
 
     assert response.status_code == 200
@@ -315,12 +339,20 @@ def test_queue_mutations_and_save_as_playlist(client):
         reorder = client.put(
             "/api/playback/queue/items/up-next",
             json={"before_queue_item_id": "current"},
+            headers=idempotency_headers("reorder-queue"),
         )
-        delete = client.delete("/api/playback/queue/items/up-next")
-        clear = client.delete("/api/playback/queue")
+        delete = client.delete(
+            "/api/playback/queue/items/up-next",
+            headers=idempotency_headers("delete-queue-item"),
+        )
+        clear = client.delete(
+            "/api/playback/queue",
+            headers=idempotency_headers("clear-queue"),
+        )
         saved = client.post(
             "/api/playback/queue/save-as-playlist",
             json={"name": "Saved Queue"},
+            headers=idempotency_headers("save-queue"),
         )
 
     assert queue_response.status_code == 200
@@ -350,25 +382,39 @@ def test_playlist_and_favorite_mutations_delegate_to_playlist_service(client):
         created = client.post(
             "/api/playlists",
             json={"name": "New"},
+            headers=idempotency_headers("create-playlist"),
         )
         updated = client.patch(
             "/api/playlists/playlist-1",
             json={"name": "Renamed"},
+            headers=idempotency_headers("update-playlist"),
         )
         added = client.post(
             "/api/playlists/playlist-1/songs",
             json={"song_id": "song-3"},
+            headers=idempotency_headers("add-playlist-song"),
         )
         reordered = client.put(
             "/api/playlists/playlist-1/songs/order",
             json={"ordered_song_ids": ["song-2", "song-1"]},
+            headers=idempotency_headers("reorder-playlist"),
         )
         removed = client.delete(
             "/api/playlists/playlist-1/songs/song-1",
+            headers=idempotency_headers("remove-playlist-song"),
         )
-        deleted = client.delete("/api/playlists/playlist-1")
-        favorited = client.put("/api/favorites/song-1")
-        unfavorited = client.delete("/api/favorites/song-1")
+        deleted = client.delete(
+            "/api/playlists/playlist-1",
+            headers=idempotency_headers("delete-playlist"),
+        )
+        favorited = client.put(
+            "/api/favorites/song-1",
+            headers=idempotency_headers("favorite-song"),
+        )
+        unfavorited = client.delete(
+            "/api/favorites/song-1",
+            headers=idempotency_headers("unfavorite-song"),
+        )
 
     assert created.status_code == 201
     assert updated.status_code == 200
@@ -406,10 +452,121 @@ def test_playback_player_unavailable_maps_to_503(client):
             raise PlayerUnavailable("player unavailable")
 
     with app_services(playback_service=Unavailable()):
-        response = client.post("/api/playback/pause")
+        response = client.post(
+            "/api/playback/pause",
+            headers=idempotency_headers("unavailable-pause"),
+        )
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "PLAYER_UNAVAILABLE"
+
+
+def test_playback_mutation_requires_idempotency_key_before_service(client):
+    playback = FakePlaybackService()
+
+    with app_services(playback_service=playback):
+        response = client.post("/api/playback/pause")
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "IDEMPOTENCY_KEY_REQUIRED",
+            "message": "Idempotency-Key header is required for mutations",
+            "details": None,
+        }
+    }
+    assert playback.calls == []
+
+
+def test_playlist_create_replays_success_without_recalling_service(client):
+    service = FakePlaylistService()
+    headers = {"Idempotency-Key": "create-playlist-1"}
+
+    with app_services(playlist_service=service):
+        first = client.post("/api/playlists", json={"name": "New"}, headers=headers)
+        replay = client.post("/api/playlists", json={"name": "New"}, headers=headers)
+
+    assert first.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json() == first.json()
+    assert [call[0] for call in service.calls] == [
+        "create_playlist",
+        "get_playlist",
+        "list_song_ids",
+    ]
+
+
+def test_idempotency_key_rejects_a_different_payload(client):
+    service = FakePlaylistService()
+    headers = {"Idempotency-Key": "create-playlist-conflict"}
+
+    with app_services(playlist_service=service):
+        first = client.post("/api/playlists", json={"name": "First"}, headers=headers)
+        conflict = client.post(
+            "/api/playlists",
+            json={"name": "Second"},
+            headers=headers,
+        )
+
+    assert first.status_code == 201
+    assert conflict.status_code == 409
+    assert conflict.json() == {
+        "error": {
+            "code": "IDEMPOTENCY_KEY_CONFLICT",
+            "message": "Idempotency-Key was already used for a different request",
+            "details": None,
+        }
+    }
+    assert [call[0] for call in service.calls] == [
+        "create_playlist",
+        "get_playlist",
+        "list_song_ids",
+    ]
+
+
+def test_idempotency_key_rejects_reuse_for_a_different_endpoint(client):
+    service = FakePlaylistService()
+    collection = FakeCollectionService()
+    headers = {"Idempotency-Key": "cross-endpoint-conflict"}
+
+    with app_services(playlist_service=service, collection_service=collection):
+        first = client.post("/api/playlists", json={"name": "First"}, headers=headers)
+        conflict = client.put("/api/favorites/song-1", headers=headers)
+
+    assert first.status_code == 201
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    assert [call[0] for call in service.calls] == [
+        "create_playlist",
+        "get_playlist",
+        "list_song_ids",
+    ]
+
+
+def test_failed_playback_mutation_does_not_consume_idempotency_key(client):
+    from server.app.player.ports import PlayerUnavailable
+
+    class UnavailableOnce(FakePlaybackService):
+        def __init__(self) -> None:
+            super().__init__()
+            self.attempts = 0
+
+        async def pause(self) -> PlaybackState:
+            self.attempts += 1
+            if self.attempts == 1:
+                raise PlayerUnavailable("player unavailable")
+            return await super().pause()
+
+    playback = UnavailableOnce()
+    headers = {"Idempotency-Key": "retry-after-player-failure"}
+
+    with app_services(playback_service=playback):
+        failed = client.post("/api/playback/pause", headers=headers)
+        retried = client.post("/api/playback/pause", headers=headers)
+
+    assert failed.status_code == 503
+    assert retried.status_code == 200
+    assert playback.attempts == 2
 
 
 def test_queue_revision_conflict_maps_to_409(client):
@@ -429,6 +586,7 @@ def test_queue_revision_conflict_maps_to_409(client):
         response = client.put(
             "/api/playback/queue/items/up-next",
             json={"before_queue_item_id": "current"},
+            headers=idempotency_headers("queue-conflict"),
         )
 
     assert response.status_code == 409

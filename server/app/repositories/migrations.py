@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS albums (
@@ -143,6 +143,15 @@ CREATE TABLE IF NOT EXISTS album_art_refs (
     FOREIGN KEY(album_id) REFERENCES albums(album_id) ON DELETE CASCADE,
     FOREIGN KEY(song_id) REFERENCES songs(song_id) ON DELETE RESTRICT
 );
+CREATE TABLE IF NOT EXISTS idempotency_records (
+    operation_scope TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    response_status INTEGER NOT NULL,
+    response_body TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(operation_scope, idempotency_key)
+);
 CREATE INDEX IF NOT EXISTS idx_songs_file_uri ON songs(file_uri);
 CREATE INDEX IF NOT EXISTS idx_songs_identity_key ON songs(identity_key);
 CREATE INDEX IF NOT EXISTS idx_songs_content_hash ON songs(content_hash);
@@ -154,6 +163,7 @@ CREATE INDEX IF NOT EXISTS idx_song_tags_tag_id ON song_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_playlist_items_song_id ON playlist_items(song_id);
 CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist_position ON playlist_items(playlist_id, position);
 CREATE INDEX IF NOT EXISTS idx_history_song_started_at ON history(song_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_idempotency_records_key ON idempotency_records(idempotency_key);
 """
 
 
@@ -306,6 +316,33 @@ def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
         raise
 
 
+def _migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
+    connection.execute("BEGIN")
+    try:
+        connection.execute(
+            """
+            CREATE TABLE idempotency_records (
+                operation_scope TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL,
+                payload_hash TEXT NOT NULL,
+                response_status INTEGER NOT NULL,
+                response_body TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY(operation_scope, idempotency_key)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_idempotency_records_key "
+            "ON idempotency_records(idempotency_key)"
+        )
+        connection.execute("PRAGMA user_version = 4")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+
+
 def apply_migrations(connection: sqlite3.Connection) -> None:
     current = connection.execute("PRAGMA user_version").fetchone()[0]
     if current > SCHEMA_VERSION:
@@ -322,3 +359,6 @@ def apply_migrations(connection: sqlite3.Connection) -> None:
         current = 2
     if current == 2:
         _migrate_v2_to_v3(connection)
+        current = 3
+    if current == 3:
+        _migrate_v3_to_v4(connection)

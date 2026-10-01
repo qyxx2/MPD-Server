@@ -14,6 +14,7 @@ from server.app.api.playlists import router as playlists_router
 from server.app.player.mpd_adapter import MPDAdapter
 from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
+from server.app.repositories.idempotency_repository import IdempotencyRepository
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
@@ -21,6 +22,7 @@ from server.app.repositories.queue_repository import QueueRepository
 from server.app.services.autoplay import AutoPlay
 from server.app.services.collection_service import CollectionService
 from server.app.services.history_service import HistoryService
+from server.app.services.idempotency_service import IdempotencyService
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
 from server.app.services.playback_service import PlaybackService
@@ -38,6 +40,7 @@ async def lifespan(app: FastAPI):
     queue_repository = QueueRepository(database_path)
     playback_state_repository = PlaybackStateRepository(database_path)
     history_repository = HistoryRepository(database_path)
+    idempotency_repository = IdempotencyRepository(database_path)
 
     library_service = LibraryService(library_repository)
     library_scanner = LibraryScanner(library_repository)
@@ -74,11 +77,43 @@ async def lifespan(app: FastAPI):
     app.state.queue_manager = queue_manager
     app.state.playback_service = playback_service
     app.state.history_service = history_service
+    app.state.idempotency_service = IdempotencyService(idempotency_repository)
 
     yield
 
 
 app = FastAPI(title="MPD-Server", lifespan=lifespan)
+
+
+_IDEMPOTENCY_EXEMPT_PATHS = {"/api/library/collections"}
+
+
+@app.middleware("http")
+async def handle_idempotent_mutation(request: Request, call_next):
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path.startswith("/api/")
+        and request.url.path not in _IDEMPOTENCY_EXEMPT_PATHS
+        and not request.headers.get("Idempotency-Key")
+    ):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "code": "IDEMPOTENCY_KEY_REQUIRED",
+                    "message": "Idempotency-Key header is required for mutations",
+                    "details": None,
+                }
+            },
+        )
+    if (
+        request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        and request.url.path.startswith("/api/")
+        and request.url.path not in _IDEMPOTENCY_EXEMPT_PATHS
+    ):
+        service: IdempotencyService = request.app.state.idempotency_service
+        return await service.execute(request, call_next)
+    return await call_next(request)
 
 
 @app.exception_handler(RequestValidationError)
@@ -122,6 +157,23 @@ async def http_exception_handler(
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": error},
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(
+    request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "internal server error",
+                "details": None,
+            }
+        },
     )
 
 

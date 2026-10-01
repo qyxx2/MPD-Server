@@ -88,6 +88,29 @@ def test_validation_error_schema_is_stable():
     assert response.json()["error"]["message"]
 
 
+def test_unexpected_service_failure_uses_stable_error_envelope():
+    class FailingPlaylistService:
+        async def list_playlists(self):
+            raise RuntimeError("repository unavailable")
+
+    previous = getattr(app.state, "playlist_service", None)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        app.state.playlist_service = FailingPlaylistService()
+        try:
+            response = client.get("/api/playlists")
+        finally:
+            app.state.playlist_service = previous
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "error": {
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "internal server error",
+            "details": None,
+        }
+    }
+
+
 def test_api_does_not_import_repositories():
     forbidden = []
     for path in sorted(API_DIR.glob("*.py")):

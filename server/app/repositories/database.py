@@ -6,6 +6,7 @@ import sqlite3
 import threading
 import weakref
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TypeVar
 
@@ -17,6 +18,10 @@ _database_locks: weakref.WeakKeyDictionary[
     asyncio.AbstractEventLoop, dict[str, asyncio.Lock]
 ] = weakref.WeakKeyDictionary()
 _database_locks_guard = threading.Lock()
+_active_transactions: ContextVar[dict[str, sqlite3.Connection] | None] = ContextVar(
+    "active_database_transactions",
+    default=None,
+)
 
 
 def _database_key(path: str) -> str:
@@ -71,8 +76,19 @@ async def run_transaction(
     path: str,
     operation: Callable[[sqlite3.Connection], T | Awaitable[T]],
 ) -> T:
+    key = _database_key(path)
+    active_transactions = _active_transactions.get()
+    if active_transactions is not None and key in active_transactions:
+        result = operation(active_transactions[key])
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
     async with _lock_for(path):
         connection = _connect(path)
+        nested_transactions = dict(active_transactions or {})
+        nested_transactions[key] = connection
+        token = _active_transactions.set(nested_transactions)
         try:
             connection.execute("BEGIN")
             result = operation(connection)
@@ -84,4 +100,5 @@ async def run_transaction(
             connection.rollback()
             raise
         finally:
+            _active_transactions.reset(token)
             connection.close()

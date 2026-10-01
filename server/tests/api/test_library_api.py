@@ -156,7 +156,8 @@ class FakeScanner:
 
 
 @pytest.fixture
-def services():
+def services(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "library-api.db"))
     library = FakeLibraryService()
     collections = FakeCollectionService()
     playlists = FakePlaylistService()
@@ -365,7 +366,11 @@ def test_album_artwork_is_raw_read_only_bytes_with_mime_type(services):
 def test_manual_scan_delegates_to_existing_scanner_service(services):
     client, _, _, _, scanner = services
 
-    response = client.post("/api/library/scan", json={"root": "/music"})
+    response = client.post(
+        "/api/library/scan",
+        json={"root": "/music"},
+        headers={"Idempotency-Key": "manual-scan"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {
