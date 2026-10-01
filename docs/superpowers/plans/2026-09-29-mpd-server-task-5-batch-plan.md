@@ -99,22 +99,16 @@ main
   └── feature/task-5-library-api
         │
         ├── Contract Audit
-        │
         ├── Batch 1
         │   Collection + LibraryService
-        │
         ├── Batch 2
         │   PlaylistService + repository contract
-        │
         ├── Batch 3
         │   REST read API
-        │
         ├── Batch 4
         │   REST mutation / Playback API
-        │
         ├── Batch 5
         │   Idempotency + error contract
-        │
         └── Batch 6
             Task 5 final acceptance
 ```
@@ -322,8 +316,6 @@ Idempotency 必须处在 Service/API 所属边界，不得通过全局临时变�
 
 Contract Audit 本身不引入业务行为。
 
----
-
 ## 4.7 Contract Audit Record（2026-09-29）
 
 本记录以本分支当时的实际 HEAD
@@ -411,7 +403,7 @@ required by `Collection.unavailable_song_ids`.
 
 The minimum hardening is a read-only complete-song enumeration contract:
 
-```text
+```
 LibraryRepository.list_songs()
         ↓
 LibraryService.list_songs()
@@ -1146,7 +1138,61 @@ Repository / PlayerPort
 - API → Service → Repository/PlayerPort boundary 检查通过；
 - compile / Ruff / diff green。
 
----
+## 8.1 Batch 4 Corrective Completion Record（2026-10-01）
+
+本记录用于闭合 Batch 4 在 History API 缺失后进行的 corrective completion。
+
+### 实际完成内容
+
+- 补齐 GET /api/history；
+- 补齐 GET /api/history/played；
+- History API 通过 HistoryService 获取历史数据，不在 API 层重新解释 HistoryReason；
+- 新增 HistoryEventResponse / HistoryListResponse，统一使用 "items + count" list envelope；
+- /api/history/played 复用既有 QueueItemResponse / QueueListResponse；
+- 在 dependencies.py 和 main.py 完成 HistoryService 的 API 依赖注入与路由注册；
+- API contract test 保持 API 不直接导入 Repository 的边界约束。
+
+### TDD / 验证状态
+
+- RED：1862e28467ae7161667b35da01a640b5d667f27c 增加 Task 5 History API RED coverage。
+- GREEN：0828bc3e2a0a7e33be41991cc450e3b5481929e8 完成 History API 实现。
+- 后续仅为测试/contract-lint 修正：
+  - e60f8eb320241b474a0d5e8b551849e10ad6f19e；
+  - a514cc44e0c1541094e9e50ea15d6f6c38f8bbf9；
+  - 87e676df4dac5bb2ec425adbaeb9ed41f818fb24。
+- 当前远端 feature/task-5-library-api HEAD 为 87e676df4dac5bb2ec425adbaeb9ed41f818fb24。
+- 用户已在 ARM64 真实 Python virtualenv、FastAPI 0.141.1 环境完成本次要求的验证，结果均通过。
+
+### 范围审查
+
+本 corrective completion 仅补齐 Batch 4 已声明范围内的 History REST API 与其测试/contract 修正。
+
+未修改：
+
+- HistoryService；
+- HistoryRepository；
+- QueueManager；
+- PlaybackService；
+- WebSocket / StateService；
+- Output Manager；
+- config.py；
+- Web/PWA；
+- Task 6 及后续 Task 的生产实现。
+
+实际从 Batch 4 corrective 基线 82720475716a821245be06452eb4105a03a9d603 到当前 HEAD 的变更文件仅为：
+
+- server/app/api/dependencies.py
+- server/app/api/history.py
+- server/app/api/schemas.py
+- server/app/main.py
+- server/tests/api/test_api_contracts.py
+- server/tests/api/test_history_api.py
+
+### 最终状态
+
+- Batch 4 Corrective Completion：COMPLETE
+- Batch 5 前置的 Batch 4 功能依赖：已闭合
+- 本记录不改变 Batch 5 的既有范围；Batch 5 仍严格对应原 Plan Step 7–8。
 
 # 9. Batch 5：Idempotency + Error Contract + API Consistency
 
