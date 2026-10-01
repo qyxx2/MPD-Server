@@ -18,9 +18,9 @@ Branch: `feature/task-5-library-api`
 - Contract Audit：完成；
 - Batch 1–5：完成；
 - Pre-Batch-6 A/B corrective：完成；
-- Batch 6：**BLOCKED**；
-- Task 5 relationship/invariant foundation：**REQUIRED before Batch 6**；
-- 当前 blocker：E（Stop 未确认 Player STOPPED 就结束 History）；C/D corrective 已关闭；
+- Batch 6：**NOT EXECUTED**（E 与 invariant foundation 前置 Gate 已通过）；
+- Task 5 relationship/invariant foundation：**COMPLETE**；relationship gate 仍为 **REQUIRED**；
+- A/B/C/D/E corrective 已关闭；本轮 I2 insertion confirmation finding 已修复，无已知未关闭 blocking finding；
 - 原 Implementation Plan Task 5 Step 9–10 保持未完成，直到 blocker 关闭并通过 Batch 6。
 
 当前 blocker 的唯一 active handoff：
@@ -164,19 +164,19 @@ API 使用 `/api` 前缀，覆盖：
 | Batch 5 | Step 7–8 | COMPLETE | idempotency + error/schema |
 | A/B corrective | pre-Batch-6 | COMPLETE | Queue mutation orchestration + persisted Playlist membership |
 | C/D corrective | pre-Batch-6 | COMPLETE | History rollback + Next unavailable successor；证据见 archive/task-5/ |
-| E corrective | pre-Batch-6 | OPEN | Stop confirmation；relationship gate REQUIRED |
-| Invariant foundation | Step 9 prerequisite | REQUIRED | I1–I5 reusable cross-module tests under `server/tests/invariants/` |
-| Batch 6 | Step 9–10 | BLOCKED | final acceptance + full invariant gate + final Task 5 commit |
+| E corrective | pre-Batch-6 | CLOSED | Stop confirmation；relationship gate REQUIRED |
+| Invariant foundation | Step 9 prerequisite | COMPLETE | I1–I5 reusable cross-module tests under `server/tests/invariants/` |
+| Batch 6 | Step 9–10 | NOT EXECUTED | final acceptance + full invariant gate + final Task 5 commit |
 
 已完成 Batch 的逐步 RED/GREEN、commit、命令输出不再追加到本文件；需要追溯时读取 `archive/task-5/`。
 
 ## 5. 当前进入 Batch 6 的 Gate
 
-当前 handoff 的所有 blocking finding（现为 E）关闭前不得执行 Batch 6，也不得勾选 Task 5 Step 9/10。
+当前 handoff 的 blocking finding 已关闭，I1–I5 foundation Gate 已通过；具备进入 Batch 6 的前置证据。本轮只完成 corrective/foundation，不执行 Batch 6、不勾选 Task 5 Step 9/10。
 
 E corrective 的 relationship gate 为 **REQUIRED**：Stop 的成功不能只由 History/SQLite 局部结果证明，必须通过关系测试证明 PlayerPort 最终确认 STOPPED 后才允许关闭 active History；失败/未确认时 History 与 authoritative playback state 不得伪装成功。
 
-E 关闭后、进入 Batch 6 前，必须建立/扩展 `server/tests/invariants/` 并机械化以下 Task 5 基础 invariant：
+`server/tests/invariants/` 已机械化以下 Task 5 基础 invariant；Batch 6 必须重新执行该独立 Gate：
 
 - **I1 Queue ↔ PlayerPort execution consistency**：authoritative execution Queue 与 PlayerPort 实际 Queue/occurrence/order 一致；Played 不进入 execution queue。
 - **I2 PlaybackState/current ↔ PlayerPort current occurrence**：PLAYING/PAUSED/STOPPED 与实际 player status/current occurrence 相容，重复 Song/URI 不得只按 song_id 猜 identity。
@@ -184,7 +184,7 @@ E 关闭后、进入 Batch 6 前，必须建立/扩展 `server/tests/invariants/
 - **I4 Transaction rollback ↔ persisted + in-memory consistency**：outer idempotency/business transaction 失败或取消后，SQLite 权威状态及 History active/session 等进程内状态都恢复；retry 不得产生 lost/phantom transition。
 - **I5 Playlist persisted membership ↔ REST representations / Collection split**：Playlist list/detail/mutation/songs endpoint 保持同一 persisted membership/order/availability；Collection 只在播放集合层做 playable/unavailable split。
 
-这些不是五个孤立 endpoint regression，而是可复用关系断言。已有测试可以复用 fixture/helper，但只有明确跨越相应模块并断言上述关系的测试才能计入 Gate。
+这些不是五个孤立 endpoint regression，而是可复用关系断言。现有真实 SQLite/API fixture 已提取到 `server/tests/support/playback.py`；共享 execution/current 与 persisted/session assertions 位于 `server/tests/invariants/assertions.py`。当前执行结果和测试映射见唯一 corrective handoff。
 
 所有 blocker 关闭后，Batch 6 **禁止新增功能**，只做：
 - Task 5 focused/service/API aggregate；

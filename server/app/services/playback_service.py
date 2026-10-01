@@ -155,12 +155,14 @@ class PlaybackService:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.play_next(song.song_id)
         await self._sync_player_queue()
+        await self._confirm_preserved_state()
         return item
 
     async def add_to_queue(self, song_id: str) -> QueueItem:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.add_to_queue(song.song_id)
         await self._sync_player_queue()
+        await self._confirm_preserved_state()
         return item
 
     async def reorder(
@@ -430,6 +432,8 @@ class PlaybackService:
 
         await self.player.stop()
         status = await self.player.status()
+        if status.state != PlayerState.STOPPED:
+            raise PlaybackReconciliationError("MPD did not confirm stopped state")
         confirmed = await self._save_confirmed_status(
             status,
             context_id=state.playback_context_id if state else None,
