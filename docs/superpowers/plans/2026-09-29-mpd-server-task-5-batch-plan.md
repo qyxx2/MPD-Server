@@ -1,1299 +1,41 @@
-# MPD-Server Task 5 Batch Execution Plan
+# MPD-Server Task 5 Active Batch Plan
 
-> Task 5：Collection、Library/Playlist Service 与 REST API
->
-> 本文件用于 Task 5 的分批实施、TDD 验证、跨 AI 窗口交接与最终验收。
-> Task 5 不采用一次性实现；固定采用 **1 个 Contract Audit + 6 个 Batch**。
->
-> 本文件不是对原实施 Plan 的替代，不改变：
->
-> `docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md`
->
-> 中 Task 5 的业务目标、Dependency Matrix 和 Execution Order。
-> 原 Plan 与 `docs/superpowers/specs/` 仍是唯一的功能规格依据。
-> 本文件只规定 Task 5 的执行分批方式、边界、交接与验收方式。
+Branch: `feature/task-5-library-api`
 
----
+本文件是 Task 5 的**当前执行合同**。完整的历史 Batch 计划、Contract Audit 记录和旧 completion log 保存在：
+`docs/superpowers/archive/task-5/2026-09-29-mpd-server-task-5-batch-plan-full-history.md`。
 
-## 1. Task 5 前置条件
+## 1. Authority 与当前状态
 
-Task 5 依赖：
+权威顺序：
+1. `docs/superpowers/specs/` 中与 Library / Playlist / Playback / Architecture 相关的规格；
+2. `2026-09-25-mpd-server-v0-1-implementation-plan.md` 的 Task 5 与依赖规则；
+3. 本 active plan；
+4. 当前 corrective handoff；
+5. 实际代码、测试和 Git 用于确认上述实现状态。
 
-- Task 3 已完成 corrective follow-up；
-- Task 4 已完成最终验收；
-- 当前 `main` 已包含 Task 0–4 及 Task 0–4 integration gate；
-- Task 3 的 Available Songs contract、DomainEvent contract 已冻结；
-- Task 4 的 Queue、PlaybackContext、History、AutoPlay、Playback Service contract 已冻结。
+当前状态：
+- Contract Audit：完成；
+- Batch 1–5：完成；
+- Pre-Batch-6 A/B corrective：完成；
+- Batch 6：**BLOCKED**；
+- 当前 blocker：C（History 内存状态在外层事务失败后未恢复）、D（Next 不跳过 unavailable pending）；
+- 原 Implementation Plan Task 5 Step 9–10 保持未完成，直到 blocker 关闭并通过 Batch 6。
 
-Task 5 不依赖：
+当前 blocker 的唯一 active handoff：
+`2026-10-01-task-5-contract-architecture-corrective-acceptance.md`。
 
-- Task 6
-- Task 7
-- Task 8
-- Task 9
-- Task 10
-- Task 11
-- Task 12
+## 2. Dependency 与范围
 
-执行顺序保持：
+Task 5 依赖 Task 3 和 Task 4 已完成的合同：
+- Available Songs / DomainEvent；
+- Queue / PlaybackContext / History / AutoPlay / PlaybackService；
+- PlayerPort 与 SQLite Repository 边界。
 
-```text
-0
-→ 1
-→ 2
-→ 1R
-→ 2R
-→ 3
-→ 4
-→ 5
-→ 7
-→ 6
-→ 8
-→ 9
-→ 10
-→ 11
-→ 12
-```
+Task 5 不依赖、也不得提前实现 Task 6–12：
+WebSocket/StateService、Output Manager、Web/PWA 状态层与 UI、最终配置/备份/部署、物理环境验收。
 
-Task 5 不得提前实现 Task 6/7/8/9/10/11/12。
-
----
-
-## 2. 当前基线与分支
-
-Task 5 必须从当前 `main` 开始，不得从旧的 Task 4 feature branch 继续。
-
-本次建立的 Task 5 分支：
-
-```text
-feature/task-5-library-api
-```
-
-Task 5 分支基线：
-
-```text
-main
-  ↓
-feature/task-5-library-api
-```
-
-基线提交以建立分支时的真实远端 `main` 为准，不以旧窗口报告或旧分支状态为准。
-
----
-
-# 3. 固定执行方式
-
-## 3.1 一个 Batch = 一个全新 AI 窗口
-
-Task 5 固定使用：
-
-```text
-feature/task-5-library-api
-```
-
-执行结构：
-
-```text
-main
-  │
-  └── feature/task-5-library-api
-        │
-        ├── Contract Audit
-        ├── Batch 1
-        │   Collection + LibraryService
-        ├── Batch 2
-        │   PlaylistService + repository contract
-        ├── Batch 3
-        │   REST read API
-        ├── Batch 4
-        │   REST mutation / Playback API
-        ├── Batch 5
-        │   Idempotency + error contract
-        └── Batch 6
-            Task 5 final acceptance
-```
-
-每个 Batch 完成后：
-
-1. 只完成本 Batch 范围内的代码和测试；
-2. 检查 diff、changed files、依赖边界和架构边界；
-3. 提交本 Batch 的 commit；
-4. 提交后重新读取远端 branch/ref/commit，确认提交真实存在；
-5. 输出 Batch 结束交接摘要；
-6. 结束当前 AI 窗口。
-
-下一个 Batch 必须使用全新 AI 窗口。
-
----
-
-## 3.2 Git 是事实来源
-
-跨窗口事实来源优先级：
-
-1. 当前仓库实际代码；
-2. 当前 branch / HEAD；
-3. Git 提交历史和远端 branch ref；
-4. Tests 与实际测试输出；
-5. Specs；
-6. 原 Implementation Plan；
-7. 本文件；
-8. 上一窗口交接摘要。
-
-若发生冲突，以仓库实际状态 + Specs + 原 Plan 为准。
-
-不得因为上一窗口报告“完成”就跳过重新验证。
-
----
-
-# 4. Contract Audit：Task 5 开始前的强制审计
-
-Contract Audit **不是业务实现 Batch**。
-
-目标是先冻结 Task 5 将要使用的 Service、Repository 和 HTTP contracts，避免在实现过程中临时改变架构。
-
-## 4.1 必须核对的实际 Repository 能力
-
-### LibraryRepository
-
-当前已存在的能力至少包括：
-
-- get_song
-- list_songs_in_root
-- list_available_songs
-- candidate matching
-- artwork reference/source lookup
-- scan-batch persistence
-
-必须确认 Task 5 所需的：
-
-- Album
-- Artist
-- Genre
-- Year
-- Tag
-- Search
-- Collection
-
-究竟通过：
-
-- 已有 Available Songs contract + Service 聚合；
-- 或必要的最小 Repository 查询 contract；
-
-来实现。
-
-禁止在 API 层直接查询 SQLite。
-
-### PlaylistRepository
-
-必须核对当前实际能力是否完整覆盖：
-
-- create
-- list/get
-- rename/update
-- delete
-- add song
-- remove song
-- reorder
-- Favorites
-- list playlist songs
-
-若缺少 Task 5 所需的 CRUD contract，只允许进行**最小必要的 repository contract hardening**。
-
-不得在 Task 5 中顺手重构整个 Repository。
-
----
-
-## 4.2 Collection contract 必须先冻结
-
-必须明确并测试以下 Collection source：
-
-- Album
-- Artist
-- Genre
-- Year
-- Tag
-- Search
-- Playlist
-- Favorites
-- Entire Library
-- Explicitly selected songs
-
-必须明确：
-
-- source type
-- source id
-- song ids
-- 去重规则
-- 默认排序
-- random seed
-- PlaybackContext 固定随机顺序
-- empty collection 行为
-- unavailable song 行为
-
-不得让不同 API 自己解释 Collection 语义。
-
----
-
-## 4.3 Search contract
-
-规格书没有冻结完整的搜索算法，因此 Task 5 必须在实现前明确：
-
-- 支持字段；
-- 默认匹配规则；
-- 默认稳定排序；
-- 同一 Song ID 去重；
-- 空查询/空结果状态。
-
-Search 排序必须稳定。
-
-不得引入复杂搜索引擎。
-
-首期以 SQLite / 现有 Repository 能力完成。
-
----
-
-## 4.4 API contract
-
-在 REST 实现前必须冻结：
-
-- URL/path
-- HTTP method
-- request model
-- response model
-- validation behavior
-- error response shape
-- HTTP status mapping
-
-API 只负责：
-
-```text
-Request validation
-    ↓
-Service call
-    ↓
-Error mapping
-    ↓
-Response model
-```
-
-禁止：
-
-```text
-API → SQLite
-API → concrete MPD adapter
-API → complex business logic
-```
-
----
-
-## 4.5 Idempotency contract
-
-必须先确认：
-
-- request ID 的位置；
-- 哪些 mutation 必须支持 request ID；
-- 相同 request ID + 相同 payload；
-- 相同 request ID + 不同 payload；
-- 已成功 mutation 的重复请求；
-- 失败 mutation 的处理；
-- 幂等结果保存位置；
-- 与业务事务的关系。
-
-Idempotency 必须处在 Service/API 所属边界，不得通过全局临时变量实现。
-
----
-
-## 4.6 Contract Audit 的停止条件
-
-如果实际代码与 Task 5 所需 contract 存在不可绕过的缺口：
-
-- 不允许用临时绕架构代码继续；
-- 不允许 API 直接读取数据库；
-- 不允许 Service 访问 concrete MPD adapter；
-- 不允许把未来 Task 的实现提前搬入 Task 5；
-- 先在本计划对应章节明确最小 contract hardening；
-- 再进入相关 Batch。
-
-Contract Audit 本身不引入业务行为。
-
-## 4.7 Contract Audit Record（2026-09-29）
-
-本记录以本分支当时的实际 HEAD
-`ca9b25b970f7e332d776c985af9cabeaac0d3c17`
-为审计基线。GitHub 实际检查确认：
-
-- branch = `feature/task-5-library-api`
-- `feature/task-5-library-api` 相对 `main` 为 ahead 1、behind 0
-- 当前唯一分支新增提交为本 Task 5 Batch Plan
-- `main` 当前 HEAD = `29c7d6158c235f1070a4dc2c61cfe44261fe2458`
-- Task 0–4 integration gate 已在 main，Task 4 Batch 6 commit
-  `cb02824273881fcb328f20391ec99fe144ac84d9` 已被当前 main 基线包含
-- Task 0–4 永久回归文件均位于 `server/tests/`，本 Task 5 不建立对 Web build 的依赖
-
-### 4.7.1 Dependency / Architecture Gate
-
-当前代码实际具备：
-
-- `Song`：包含 song_id、title、file_uri、artist/album/album_artist、
-  genre/tag、year、disc/track、lyrics、音频规格、availability、
-  ArtworkRef 等字段；
-- `Playlist`：包含 playlist_id、name、created_at、updated_at、
-  is_system；
-- `PlaybackContext` / `QueueItem` / `PlaybackState`；
-- `LibraryRepository`；
-- `PlaylistRepository`；
-- `PlaybackService`、`QueueManager`、`HistoryService`、
-  `AutoPlay`；
-- `PlayerPort`，且 Task 4 服务层已经通过 PlayerPort 与播放引擎交互；
-- `DomainEvent` / `LibraryChangedEvent`。
-
-当前 Task 5 不需要引入 Task 6/7/8/9/10/11/12 任何实现或 contract。
-
-架构冻结为：
-
-```
-REST API
-    ↓
-Service
-    ↓
-Repository / PlayerPort
-```
-
-API 不访问 SQLite、QueueRepository、HistoryRepository 或 concrete
-MPD adapter；Service 不依赖 concrete MPD adapter；CollectionService
-不依赖 WebSocket。
-
-### 4.7.2 LibraryRepository Audit
-
-实际存在并核对的主要能力：
-
-- `get_song(song_id)`
-- `find_song_by_file_uri(file_uri)`
-- `list_songs_in_root(root_uri_prefix)`
-- `list_available_songs()`
-- identity/content-hash candidate lookup
-- artwork persisted-reference/source-song lookup
-- scan-batch transactional persistence
-
-结论：当前库规模和既有 contract 足以采用：
-
-```
-LibraryRepository.list_available_songs()
-        ↓
-LibraryService / CollectionService
-        ↓
-Album / Artist / Genre / Year / Tag / Search 聚合、过滤、排序
-```
-
-因此 Contract Audit **不新增 LibraryRepository 的通用 SQL 搜索/聚合接口**。
-这样避免把 Task 5 的业务排序规则泄漏到 Repository，并保持 API 永远不直接访问
-SQLite。
-
-必要的最小 Repository hardening 由 Batch 1 在出现不可避免的数据访问缺口时再补，
-且必须保持 `Song` / `availability_status` / 既有扫描事务语义不变。
-
-### 4.7.2.1 Corrective Audit: Collection availability enumeration (2026-09-29)
-
-Batch 1 implementation exposed a contract gap in the original audit conclusion.
-`list_available_songs()` intentionally returns only `AVAILABLE` rows, so it cannot
-enumerate source members that remain known in the library with
-`MISSING`/`UNREADABLE` availability. Using it as the sole input for Album,
-Artist, Genre, Year, Tag, or Library Collection construction loses the members
-required by `Collection.unavailable_song_ids`.
-
-The minimum hardening is a read-only complete-song enumeration contract:
-
-```
-LibraryRepository.list_songs()
-        ↓
-LibraryService.list_songs()
-        ↓
-CollectionService source filtering + stable ordering
-        ↓
-split AVAILABLE / unavailable members
-```
-
-`list_available_songs()` remains unchanged and continues to mean only currently
-playable `AVAILABLE` songs. `Search` continues to use the frozen
-available-only search contract. Playlist, Favorites, and explicit `SONGS`
-continue to resolve membership by song ID and existing availability status.
-
-This is a corrective audit limited to Batch 1 availability semantics. It does
-not change the Batch 1/Batch 2 boundary and does not introduce PlaylistService,
-REST API, idempotency, or other future Task functionality.
-
-### Artwork contract
-
-Artwork 继续使用：
-
-```
-Song.artwork: ArtworkRef
-        ↓
-Artwork source song
-        ↓
-read-only media file
-```
-
-Repository 只提供持久化引用和 source-song 信息；实际 artwork bytes 的读取由
-LibraryService 在既有只读文件边界内完成。不得生成、修改、重命名、删除或写回
-音乐文件。
-
-### 4.7.3 PlaylistRepository Audit
-
-实际存在：
-
-- `create_playlist`
-- `add_song`
-- `remove_song`
-- `reorder_playlist`
-- `set_favorite`
-- `list_favorite_song_ids`
-- `list_song_ids`
-
-实际缺口：
-
-- list/get playlist
-- rename/update playlist
-- delete playlist
-- 对不存在 playlist 的明确 not-found 语义
-- list playlist songs 的资源级读取 contract
-
-冻结的最小 hardening 分配如下：
-
-- Batch 2 增加 playlist list/get/update/delete contract；
-- 继续复用现有 SQLite transaction boundary；
-- 不修改已经稳定的 duplicate-song、remove、reorder 事务语义；
-- delete 依赖现有 `ON DELETE CASCADE` 删除 playlist_items，但不得删除 Song；
-- `is_system=true` 的系统 Playlist 不允许通过普通自定义 Playlist CRUD 删除或重命名。
-
-Favorites 不实现为 Queue，也不与 History 混用。当前 favorites relation
-继续由 `favorites(song_id, created_at)` 持久化，默认顺序冻结为
-`created_at DESC, song_id DESC`，与现有 Repository 实际行为一致。
-
-### 4.7.4 Collection Contract Freeze
-
-Collection 统一来源：
-
-```
-ALBUM
-ARTIST
-GENRE
-YEAR
-TAG
-SEARCH
-PLAYLIST
-FAVORITES
-LIBRARY
-SONGS
-```
-
-字段语义冻结：
-
-- `source_type`：以上固定枚举之一；
-- `source_id`：实体型来源使用稳定实体 ID；`YEAR` 使用规范化年份字符串；
-  `SEARCH`、`LIBRARY`、`SONGS` 无实体 source_id 时保持 null；
-- `song_ids`：按最终播放顺序排列、且只出现一次的 Song ID；
-- `unavailable_song_ids`：源集合中已知但当前不可用、因此未进入可播放
-  `song_ids` 的 Song ID；不得伪装成 AVAILABLE；
-- `random_seed`：随机播放时生成一次并固化；顺序播放为 null；
-- `playback_context_id`：真正开始播放后由 PlaybackContext 持有，Collection
-  本身不持有 Queue。
-
-默认排序冻结：
-
-- ALBUM：`disc_number ASC NULLS LAST` → `track_number ASC NULLS LAST`
-  → `file_uri ASC` → `song_id ASC`；
-- PLAYLIST：用户保存的 position；
-- FAVORITES：`created_at DESC` → `song_id DESC`；
-- ARTIST / GENRE / YEAR / TAG / LIBRARY：`title.casefold()` →
-  `album.casefold()` → `file_uri` → `song_id`；
-- SEARCH：按 Search contract 的稳定 score/rank，其后使用与 LIBRARY 相同的
-  稳定 fallback；
-- SONGS：用户提供的顺序，去重后保留第一次出现。
-
-去重规则：
-
-- 同一最终 `song_id` 只出现一次；
-- 对用户明确选中的 `SONGS`，first occurrence wins；
-- 不得把去重做成“发现重复即静默替换为其他歌曲”。
-
-Availability 规则：
-
-- Library、分类、Search、Playlist、Favorites 默认仅把
-  `availability_status == AVAILABLE` 放入 `song_ids`；
-- 不可用成员进入 `unavailable_song_ids`；
-- 若 source 本身为空，Collection 为空；
-- 空 Collection 不得用随机歌曲补齐；
-- Explicitly selected empty Collection 不得触发随机替代。
-
-Random / PlaybackContext：
-
-- random 只在创建本次播放集合或开始本次播放时生成一次；
-- 使用冻结的 `random_seed` 产生确定的 `ordered_song_ids`；
-- 同一 PlaybackContext 内刷新、重读或重新生成展示数据不得改变既有随机顺序；
-- 新的 PlaybackContext 才允许重新生成随机顺序。
-
-Collection 负责“哪些歌曲、什么顺序”，PlaybackService 负责真正替换 Queue、
-启动播放以及 AutoPlay 语义。
-
-### 4.7.5 Search Contract Freeze
-
-首期只搜索 Song 已存在且可由 `list_available_songs()` 获得的数据：
-
-- title
-- artists
-- album
-- album_artists
-- genres
-- tag_names
-- year
-
-默认匹配：
-
-- 去除首尾空白；
-- 使用 Unicode 文本的 `casefold()` 进行不区分大小写匹配；
-- 非空 query 对上述字段执行 substring match；
-- year 按规范化十进制字符串匹配；
-- 不引入 FTS、外部搜索引擎或复杂相关性基础设施。
-
-稳定排序：
-
-```
-exact field match
-→ prefix field match
-→ substring match
-→ title.casefold()
-→ album.casefold()
-→ file_uri
-→ song_id
-```
-
-如果同一 Song 同时命中多个字段，只返回一个 Song ID；排序 score 取该 Song
-的最佳匹配级别，再使用稳定 fallback。
-
-空 query：
-
-- 返回空结果，不解释为“整个音乐库”。
-
-无结果：
-
-- 返回合法空结果集合，不视为错误。
-
-Search 结果可直接作为 Collection；API 不得另行定义一套 Search 排序或去重规则。
-
-### 4.7.6 REST Contract Freeze
-
-Task 5 首期 API 路径统一使用 `/api` 前缀。
-
-### Library read
-
-- `GET /api/library/songs`
-- `GET /api/library/songs/{song_id}`
-- `GET /api/library/albums`
-- `GET /api/library/albums/{album_id}/songs`
-- `GET /api/library/artists`
-- `GET /api/library/artists/{artist_id}/songs`
-- `GET /api/library/genres`
-- `GET /api/library/genres/{genre_id}/songs`
-- `GET /api/library/years`
-- `GET /api/library/years/{year}/songs`
-- `GET /api/library/tags`
-- `GET /api/library/tags/{tag_id}/songs`
-- `GET /api/library/search?q={query}`
-- `POST /api/library/collections`（请求复杂、结果只读，故使用 POST）
-- `GET /api/library/songs/{song_id}/artwork`
-
-### Library mutation
-
-- `POST /api/library/scan`
-
-### Playlist / Favorites
-
-- `GET /api/playlists`
-- `POST /api/playlists`
-- `GET /api/playlists/{playlist_id}`
-- `PATCH /api/playlists/{playlist_id}`
-- `DELETE /api/playlists/{playlist_id}`
-- `GET /api/playlists/{playlist_id}/songs`
-- `POST /api/playlists/{playlist_id}/songs`
-- `DELETE /api/playlists/{playlist_id}/songs/{song_id}`
-- `PUT /api/playlists/{playlist_id}/songs/order`
-- `GET /api/favorites`
-- `PUT /api/favorites/{song_id}`
-- `DELETE /api/favorites/{song_id}`
-
-### Playback / Queue
-
-- `GET /api/playback/state`
-- `GET /api/playback/queue`
-- `POST /api/playback/tracks/{song_id}/play`
-- `POST /api/playback/queue/items/{queue_item_id}/play`
-- `POST /api/playback/songs/{song_id}/play-next`
-- `POST /api/playback/songs/{song_id}/queue`
-- `POST /api/playback/pause`
-- `POST /api/playback/stop`
-- `POST /api/playback/next`
-- `POST /api/playback/previous`
-- `POST /api/playback/seek`
-- `PUT /api/playback/queue/items/{queue_item_id}`（reorder）
-- `DELETE /api/playback/queue/items/{queue_item_id}`
-- `DELETE /api/playback/queue`
-- `POST /api/playback/queue/save-as-playlist`
-- `POST /api/playback/collections/play`
-
-### History
-
-- `GET /api/history`
-- `GET /api/history/played`
-
-Request body / response model 原则：
-
-- API schemas 与 domain models 分离；
-- 同一资源类型使用同一 response schema；
-- list endpoint 使用 `items` + `count` 的统一 envelope；
-- 单资源使用资源对象本身；
-- mutation 返回 mutation 后的 authoritative resource/state；
-- DELETE 成功返回 HTTP 204，不再返回另一套资源 schema；
-- artwork 成功返回真实媒体 bytes 和持久化 MIME type。
-
-### Validation / status mapping
-
-统一错误对象冻结为：
-
-```json
-{
-  "error": {
-    "code": "STABLE_MACHINE_CODE",
-    "message": "human-readable message",
-    "details": null
-  }
-}
-```
-
-其中 `details` 可为固定结构对象，不得因 endpoint 随意变更字段名。
-
-状态映射：
-
-- 200：读取成功、播放/控制成功并返回 state/resource；
-- 201：创建 Playlist 成功；
-- 204：删除 Playlist、删除 playlist song、取消 favorite、删除 Queue item、
-  清空 Queue；
-- 400：已通过 schema 校验但请求语义本身无效；
-- 404：Song / Playlist / Queue item / collection source / artwork source 不存在；
-- 409：duplicate playlist song、playlist reorder member mismatch、
-  Queue revision conflict、Idempotency-Key payload conflict、系统 Playlist
-  禁止修改等资源状态冲突；
-- 422：Pydantic/request schema validation failure；
-- 500：Repository / unexpected service failure；
-- 502：MPD / PlayerPort 已到达但上游命令失败；
-- 503：MPD / PlayerPort 当前不可达；
-- artwork read failure 使用 500 + `ARTWORK_READ_ERROR`，绝不伪装成 404
-  “无封面”；
-- 空 Collection 是成功的 200 结果，不是错误。
-
-### Playback request semantics
-
-REST 不重新解释 Playback Service 语义：
-
-- `tracks/{song_id}/play` 对应已有 Start Track / 新 PlaybackContext；
-- Queue item play 对应已有 Play Now；
-- song play-next / queue 对应已有 Play Next / Add to Queue；
-- pause / stop / next / previous / seek 原样进入 PlaybackService；
-- queue reorder/delete/clear/save-as-playlist 只调用 QueueManager/
-  PlaybackService/PlaylistService 现有业务；
-- collection play 先通过 CollectionService 生成统一 Collection，再交由
-  PlaybackService 执行；
-- API 不直接修改 Queue，不直接向 MPD 发命令。
-
-### 4.7.7 Idempotency Contract Freeze
-
-Task 5 使用标准 HTTP header：
-
-```
-Idempotency-Key: <opaque-client-key>
-```
-
-以下所有 mutation endpoint 都要求 `Idempotency-Key`：
-
-- library scan；
-- playlist CRUD / song membership / reorder；
-- favorite / unfavorite；
-- playback / queue mutations。
-
-同一路径、同 HTTP method、同 canonical request payload 与同
-`Idempotency-Key`：
-
-- 第一次执行实际调用 Service；
-- 后续重复成功请求直接返回第一次保存的 status + response body；
-- 不再次执行业务 mutation。
-
-同一 Key：
-
-- endpoint/method/payload 任一不同 → HTTP 409 +
-  `IDEMPOTENCY_KEY_CONFLICT`；
-- 不得错误复用前一次结果。
-
-失败语义：
-
-- schema validation 失败不创建幂等记录；
-- Service/Repository/Player 失败且业务事务未提交时，不保存 terminal response，
-  同一 Key 可以 retry；
-- 不允许通过进程内 dict、global mutable cache 或单进程状态作为唯一保证。
-
-持久化位置冻结为 SQLite 专用幂等记录表，后续 Batch 5 实现；记录至少需要：
-
-- operation scope（method + canonical path）
-- idempotency key
-- canonical payload hash
-- response status
-- serialized response body
-- created_at
-
-并建立唯一约束：
-
-```
-(operation_scope, idempotency_key)
-```
-
-事务关系冻结为：
-
-```
-business mutation
-+
-idempotency terminal result
-```
-
-必须具有明确的同一 SQLite transaction / unit-of-work 原子边界。Batch 5
-不得通过“先执行业务、后写幂等记录”的可竞态序列实现保证。
-
-失败业务若未提交，则 terminal idempotency result 不存在；因此 retry 可以重新执行。
-
-### 4.7.8 Audit Conclusion / Batch Allocation
-
-Contract Audit 本身**不实现业务功能**，当前审计结果为：
-
-- Dependency Gate：通过；
-- Architecture Gate：通过；
-- LibraryRepository：现有 Available Songs contract 足以支撑首期 Service 聚合；
-- PlaylistRepository：确认存在 CRUD contract gap，分配到 Batch 2 的最小 hardening；
-- Collection contract：已冻结；
-- Search contract：已冻结；
-- REST contract：已冻结；
-- Idempotency contract：已冻结，实际 SQLite persistence 分配到 Batch 5；
-- Future Task dependency：未发现；
-- WebSocket / Output Manager / final config / deployment / physical acceptance：
-  均不属于 Task 5。
-
-后续 Batch 不得重新定义上述语义；如实际代码暴露不可绕过的新冲突，必须先停止当前 Batch，
-记录冲突并修正本计划，再继续实现。
-
-
-# 5. Batch 1：Collection + LibraryService
-
-## 对应原 Plan
-
-- Step 1
-- Step 2
-- Step 3
-- Step 4
-- Step 5 的 LibraryService / CollectionService 部分
-
-## 核心文件
-
-允许主要涉及：
-
-- `server/app/services/library_service.py`
-- `server/app/services/collection_service.py`
-- `server/tests/services/test_library_service.py`
-- `server/tests/services/test_collection_service.py`
-- 为冻结 contract 所必需的最小既有 Repository/model 文件
-
-不得创建最终 REST API。
-
-## TDD 顺序
-
-### Step 1 RED
-
-为每一种 Collection source 编写最小失败测试。
-
-必须覆盖：
-
-- Album
-- Artist
-- Genre
-- Year
-- Tag
-- Search
-- Playlist
-- Favorites
-- Entire Library
-- Explicit song selection
-
-### Step 2 RED
-
-验证：
-
-- 默认排序；
-- 去重；
-- random seed；
-- 同一 PlaybackContext 内随机顺序固定；
-- 新建 Context 才重新生成随机顺序。
-
-### Step 3 RED
-
-验证：
-
-- empty collection；
-- 不把随机歌曲替代明确的空集合；
-- 不伪造结果。
-
-### Step 4 RED
-
-验证 Service/Repository boundary：
-
-```text
-LibraryService / CollectionService
-        ↓
-Repository contract
-```
-
-而不是：
-
-```text
-Service → SQLite connection
-```
-
-## 实现
-
-只实现满足上述测试的最小 LibraryService / CollectionService。
-
-## Batch 1 不做
-
-- PlaylistService
-- REST API
-- Idempotency
-- WebSocket
-- Output Manager
-- config.py
-- Web/PWA
-- 浏览器测试
-
-## Batch 1 接受条件
-
-- focused service tests GREEN；
-- 受影响 Task 3 / Task 2R regression GREEN；
-- compile 通过；
-- Ruff 通过；
-- diff --check 通过；
-- 无未来 Task 依赖；
-- Collection 不越界进入 Playback Service 内部实现。
-
----
-
-# 6. Batch 2：PlaylistService + Repository Contract
-
-## 对应原 Plan
-
-- Step 5 剩余 PlaylistService 部分
-
-## 核心目标
-
-完成：
-
-- Playlist CRUD
-- Playlist add/remove/reorder
-- Favorites
-- Queue save-as-playlist
-
-## 核心文件
-
-允许主要涉及：
-
-- `server/app/services/playlist_service.py`
-- `server/app/repositories/playlist_repository.py`（仅在 Contract Audit 证明缺失时最小补齐）
-- 相关 model 文件
-- `server/tests/services/test_playlist_service.py`
-- 必要的 repository tests
-
-## 必须保持
-
-- 删除 Playlist 不删除 Song；
-- 删除 Song relation 不影响原始音乐文件；
-- Favorites 与普通 Playlist 独立；
-- Favorites 不随 Queue/Collection 改变；
-- Queue save 不混入 Played/History；
-- Queue save 的顺序稳定；
-- Playlist duplicate 行为严格按规格和已有 Repository 约束；
-- reorder/delete 的原子性不被破坏。
-
-## 特别限制
-
-如果需要补 Repository contract：
-
-- 只补 Task 5 实际需要的最小方法；
-- 不做 Repository 全量重构；
-- 不修改 Task 2 已经确认的事务语义；
-- 不改变历史数据模型，除非测试证明 Task 5 contract 无法成立且修改是必要的。
-
-## Batch 2 不做
-
-- REST API
-- request ID / idempotency
-- WebSocket
-- Output Manager
-- config
-- Web/PWA
-
-## 接受条件
-
-除上述 Batch 2 focused tests 外，至少回归：
-
-- Task 2R affected tests；
-- Task 3 affected tests；
-- Task 4 affected tests。
-
-并通过：
-
-- compileall
-- Ruff
-- git diff --check
-- architecture boundary review
-
----
-
-# 7. Batch 3：REST Read API
-
-## 对应原 Plan
-
-- Step 6 的 read-side 部分
-
-## 核心目标
-
-先把查询和资源读取 API 完整打通，不进入 mutation idempotency。
-
-## API 范围
-
-至少包括：
-
-- Song
-- Album
-- Artist
-- Genre
-- Year
-- Tag
-- Search
-- Collection
-- Library
-- Favorites / Playlist read
-- Album artwork read
-- Manual library scan result/query contract
-
-## 核心文件
-
-- `server/app/api/schemas.py`
-- `server/app/api/library.py`
-- 必要的 read-only API modules
-- `server/tests/api/*`
-
-## 必须验证
-
-### Request validation
-
-非法参数不能进入 Service。
-
-### Response schema
-
-同一资源不得因为不同 endpoint 产生互不兼容的数据结构。
-
-### Empty result
-
-必须明确表达：
-
-- empty collection
-- no search results
-- unavailable item
-
-不得返回伪造内容。
-
-### Artwork
-
-Artwork 必须：
-
-```text
-Persisted ArtworkRef
-        ↓
-Read-only source file
-        ↓
-API response
-```
-
-不得修改音频文件。
-
-Artwork 读取失败必须是可观察的 API 错误，而不是伪装成“没有封面”。
-
-### Manual scan
-
-API 只能调用已有 Scanner/Service contract。
-
-不得让 API 自己扫描音乐目录。
-
-## Batch 3 不做
-
-- WebSocket
-- browser E2E
-- frontend build
-- idempotency implementation
-- Output Manager
-- config system
-
-## 接受条件
-
-- API focused tests GREEN；
-- Service focused tests GREEN；
-- affected regression GREEN；
-- schema stable；
-- API 不直接访问 SQLite/MPD；
-- compile / Ruff / diff green。
-
----
-
-# 8. Batch 4：REST Mutation + Playback API
-
-## 对应原 Plan
-
-- Step 6 的 mutation / playback 部分
-
-## 核心目标
-
-对外暴露已经存在的服务端业务能力，不重新实现业务。
-
-## Playback API
-
-至少覆盖：
-
-- Play Now
-- Play Next
-- Add to Queue
-- Pause
-- Stop
-- Next
-- Previous
-- Seek
-- Queue reorder
-- Queue delete
-- Queue clear
-- Save Queue as Playlist
-
-这些请求必须进入已有：
-
-```text
-PlaybackService
-QueueManager
-PlaylistService
-        ↓
-Repository / PlayerPort
-```
-
-禁止 API 自己操作 Queue 或 MPD。
-
-## Playlist/Favorites mutation API
-
-覆盖：
-
-- create playlist
-- rename/update playlist
-- delete playlist
-- add song
-- remove song
-- reorder
-- favorite/unfavorite
-
-## History API
-
-按已有 HistoryService / Repository contract 读取历史。
-
-不得在 API 层重新解释 History reason。
-
-## 错误
-
-先使用已有 Service error，再由 API 统一映射。
-
-不要为了 API 方便改变底层 Service 语义。
-
-## Batch 4 不做
-
-- WebSocket
-- StateService
-- Output Manager
-- config.py
-- Web/PWA
-- browser E2E
-- Idempotency final storage（Batch 5）
-
-## 接受条件
-
-- mutation API focused tests GREEN；
-- playback behavior regression GREEN；
-- Task 4 affected regression GREEN；
-- API → Service → Repository/PlayerPort boundary 检查通过；
-- compile / Ruff / diff green。
-
-## 8.1 Batch 4 Corrective Completion Record（2026-10-01）
-
-本记录用于闭合 Batch 4 在 History API 缺失后进行的 corrective completion。
-
-### 实际完成内容
-
-- 补齐 GET /api/history；
-- 补齐 GET /api/history/played；
-- History API 通过 HistoryService 获取历史数据，不在 API 层重新解释 HistoryReason；
-- 新增 HistoryEventResponse / HistoryListResponse，统一使用 "items + count" list envelope；
-- /api/history/played 复用既有 QueueItemResponse / QueueListResponse；
-- 在 dependencies.py 和 main.py 完成 HistoryService 的 API 依赖注入与路由注册；
-- API contract test 保持 API 不直接导入 Repository 的边界约束。
-
-### TDD / 验证状态
-
-- RED：1862e28467ae7161667b35da01a640b5d667f27c 增加 Task 5 History API RED coverage。
-- GREEN：0828bc3e2a0a7e33be41991cc450e3b5481929e8 完成 History API 实现。
-- 后续仅为测试/contract-lint 修正：
-  - e60f8eb320241b474a0d5e8b551849e10ad6f19e；
-  - a514cc44e0c1541094e9e50ea15d6f6c38f8bbf9；
-  - 87e676df4dac5bb2ec425adbaeb9ed41f818fb24。
-- 当前远端 feature/task-5-library-api HEAD 为 87e676df4dac5bb2ec425adbaeb9ed41f818fb24。
-- 用户已在 ARM64 真实 Python virtualenv、FastAPI 0.141.1 环境完成本次要求的验证，结果均通过。
-
-### 范围审查
-
-本 corrective completion 仅补齐 Batch 4 已声明范围内的 History REST API 与其测试/contract 修正。
-
-未修改：
-
-- HistoryService；
-- HistoryRepository；
-- QueueManager；
-- PlaybackService；
-- WebSocket / StateService；
-- Output Manager；
-- config.py；
-- Web/PWA；
-- Task 6 及后续 Task 的生产实现。
-
-实际从 Batch 4 corrective 基线 82720475716a821245be06452eb4105a03a9d603 到当前 HEAD 的变更文件仅为：
-
-- server/app/api/dependencies.py
-- server/app/api/history.py
-- server/app/api/schemas.py
-- server/app/main.py
-- server/tests/api/test_api_contracts.py
-- server/tests/api/test_history_api.py
-
-### 最终状态
-
-- Batch 4 Corrective Completion：COMPLETE
-- Batch 5 前置的 Batch 4 功能依赖：已闭合
-- 本记录不改变 Batch 5 的既有范围；Batch 5 仍严格对应原 Plan Step 7–8。
-
-# 9. Batch 5：Idempotency + Error Contract + API Consistency
-
-## 对应原 Plan
-
-- Step 7
-- Step 8
-
-## 核心目标
-
-把 REST mutation 的可重试行为和错误契约固定下来。
-
-## Idempotency
-
-必须测试：
-
-1. 首次 request-id；
-2. 同 request-id + 相同 payload；
-3. 同 request-id + 不同 payload；
-4. mutation 已成功后重复请求；
-5. mutation 执行失败后的请求；
-6. 不带 request-id 的允许 mutation；
-7. 要求 request-id 的 mutation 缺失 request-id。
-
-实现必须保证：
-
-- 业务成功与幂等记录的关系明确；
-- 重复请求不得重复执行业务；
-- 不同 payload 不得错误复用旧结果；
-- 不使用进程内临时 dict 作为唯一持久状态；
-- 不破坏现有 SQLite transaction boundary。
-
-## Error contract
-
-统一验证：
-
-- 404
-- 409
-- validation failure
-- service/domain failure
-- repository failure
-- playback/MPD failure
-- artwork read failure
-- empty collection
-
-具体 status code 必须以 Task 5 contract audit 后冻结的定义为准。
-
-## Stable response schemas
-
-同一类错误不能因为 endpoint 不同而随机改变字段结构。
-
-同一类资源返回字段必须保持稳定。
-
-## Batch 5 不做
-
-- WebSocket
-- FullStateSnapshot
-- Output Manager
-- Web/PWA
-- Task 10 configuration system
-
-## 接受条件
-
-- 所有 idempotency focused tests GREEN；
-- API error mapping focused tests GREEN；
-- stable schema tests GREEN；
-- affected service/API regressions GREEN；
-- compile / Ruff / diff green。
-
----
-
-# 10. Batch 6：Task 5 Final Acceptance
-
-## 对应原 Plan
-
-- Step 9
-- Step 10
-
-## Step 9
-
-禁止新增功能。
-
-只做：
-
-- 全量 Task 5 focused tests；
-- Service aggregate tests；
-- API aggregate tests；
-- affected Task 2R regression；
-- affected Task 3 regression；
-- affected Task 4 regression；
-- full `server/tests`；
-- compileall；
-- Ruff；
-- git diff --check；
-- changed-files review；
-- architecture-boundary review。
-
-## 必须审查
-
-### Service boundary
-
+固定架构：
 ```text
 API
  ↓
@@ -1302,403 +44,172 @@ Service
 Repository / PlayerPort
 ```
 
-不得存在：
-
-```text
-API → SQLite
-API → MPDAdapter
-```
-
-### Collection
-
-- 各来源一致；
-- song_id 稳定；
-- 去重；
-- random order 在 PlaybackContext 内固定；
-- empty collection 不伪造歌曲。
-
-### Playlist/Favorites
-
-- Playlist 与 Song 独立；
-- Favorites 独立；
-- Queue save 不混入 Played/History；
-- reorder/delete 语义正确。
-
-### Playback
-
-- API 只调用 PlaybackService；
-- PlaybackService 仍是播放编排权威；
-- API 不新增第二套播放业务。
-
-### Artwork
-
-- 原始音乐文件严格只读；
-- API 通过持久化 ArtworkRef 读取。
-
-### Idempotency
-
-- mutation retry 不重复执行；
-- request-id conflict 行为明确；
-- 不引入进程内临时唯一状态。
-
-### Future Task isolation
-
-不得引入：
-
-- WebSocket / StateService
-- Output Manager
-- Task 8 Web/PWA 状态层
-- Task 9 UI
-- Task 10 final config system
-- Task 11 deployment automation
-- Task 12 physical acceptance
-
-## Step 10
-
-使用：
-
-```text
-feat: expose library and playback api
-```
-
-作为 Task 5 最终提交。
-
-Task 5 Batch 6 commit 成功 ≠ Task 5 自动进入 `main`。
-
----
-
-# 11. 测试策略
-
-Task 5 采用后端为主的回归策略。
-
-## 每个 Batch
-
-执行：
-
-```text
-focused tests
-+
-受影响的历史 Task regression
-+
-compileall
-+
-Ruff
-+
-git diff --check
-```
-
-## Batch 6
-
-增加：
-
-```text
-full server/tests
-```
-
-## Web 测试
-
-Task 5 不修改 Web/PWA，因此：
-
-- 不重复运行 Web build；
-- 不重复运行 Web typecheck；
-- 不新增复杂浏览器 E2E；
-- 不把 Web 构建加入 Task 5 的永久后端回归命令。
-
-只有实际 Task 5 变更触及 `web/` 时，才重新判断是否需要 Web build/typecheck。
-
----
-
-# 12. 真实 MPD 与实机验证边界
-
-Task 5 正常实现与 API 验证不要求真实 MPD。
-
-原因：
-
-- Task 1/1R 已验证 MPD 0.23.5 capabilities；
-- Task 4 已验证 PlaybackService → PlayerPort → MPDAdapter 集成；
-- Task 5 的主要新增边界是 API → Service。
-
-因此：
-
-```text
-API tests
-→ Mock MPD / Fake PlayerPort
-```
-
-即可覆盖 Task 5 的主要实现。
-
-真实：
-
-- 播放；
-- USB DAC；
-- NAS；
-- 输出切换；
-- 长时间运行；
-- WebSocket 重连；
-- NAS 重启恢复；
-
-保留到后续对应 Task / Task 12。
-
----
-
-# 13. Batch 间统一 Git 要求
-
-每个 Batch 完成后必须确认：
-
-1. branch = `feature/task-5-library-api`
-2. HEAD 正确；
-3. workspace 状态明确；
-4. changed files 仅属于本 Batch；
-5. commit message 明确；
-6. commit 已 push；
-7. 重新读取远端 branch/ref；
-8. 重新读取该 commit，确认真实存在；
-9. 不自动 merge `main`。
-
 禁止：
+- API → SQLite；
+- API → concrete MPDAdapter；
+- Service 绕过 PlayerPort 控制 MPD；
+- 为当前 Batch 顺手实现未来 Task。
 
-- force push；
-- 无必要的 squash；
-- 把多个互不相关 Batch 压成一个 commit；
-- 提交测试目录里的临时文件；
-- 把环境生成物加入 Git。
+跨 Task 合同可以被当前范围调用和验证；若当前 Task 的明确 invariant 横跨已有接口，允许做满足该合同所必需的最小修复，不以“旧 Task 文件”作为保留错误行为的理由。
 
----
+## 3. Frozen contracts
 
-# 14. 每个 Batch 的统一交接模板
+### 3.1 Collection
 
-完成后必须输出：
+source type 固定为：
+`ALBUM / ARTIST / GENRE / YEAR / TAG / SEARCH / PLAYLIST / FAVORITES / LIBRARY / SONGS`。
 
-```text
-【Task 5 Batch <N> 结束交接】
+核心 invariant：
+- `song_ids` 只包含当前可播放 Song，按最终播放顺序且去重；
+- 已知但不可用成员进入 `unavailable_song_ids`；
+- explicit SONGS 保留第一次出现的用户顺序；
+- empty Collection 是合法空结果，不用随机歌曲补齐；
+- random seed 每个新 PlaybackContext 生成一次，同一 Context 内顺序固定；
+- Collection 决定“哪些歌曲、什么顺序”；PlaybackService 决定真正播放与 Queue/AutoPlay 行为。
 
-1. 本次实际范围
-- Task:
-- Batch:
-- 原 Plan Steps:
-- 实际执行到：
+默认排序保持原冻结规则：
+- Album：disc → track → file_uri → song_id；
+- Playlist：persisted position；
+- Favorites：created_at DESC → song_id DESC；
+- Artist/Genre/Year/Tag/Library：title → album → file_uri → song_id；
+- Search：match rank 后使用稳定 fallback。
 
-2. Contract Audit 状态
-- 本 Batch 使用的 contract:
-- 是否发现与上一窗口不同:
-- 是否发生最小 contract hardening:
-- 是否存在未冻结 contract:
+### 3.2 Playlist resource 与 Collection 必须分离
 
-3. Step 状态
-- Step X: COMPLETE / PARTIALLY COMPLETE — ENVIRONMENT VALIDATION PENDING / BLOCKED
-- ...
-- RED：
-- GREEN：
-- 最终状态：
+Playlist 资源表示**持久化成员关系**：
+- list/detail/mutation response 的 `song_ids` 必须保留 persisted order；
+- MISSING / UNREADABLE 成员仍属于 Playlist resource；
+- `GET /playlists/{id}/songs` 应暴露这些成员及 availability；
+- 不允许不同 Playlist endpoint 对成员集合使用不同 visibility policy。
 
-4. 实际修改
-新增：
-- ...
+Playlist 转为 Collection 时才应用 playable split：
+- AVAILABLE → `song_ids`；
+- unavailable → `unavailable_song_ids`。
 
-修改：
-- ...
+不得用 Collection 的过滤结果替代 Playlist resource membership。
 
-删除：
-- ...
+### 3.3 Search
 
-并说明每个文件为什么属于本 Batch。
+字段：title、artists、album、album_artists、genres、tag_names、year。
 
-5. 测试
-逐项写实际命令和实际结果：
-- focused:
-- regression:
-- compile:
-- lint:
-- diff:
+规则：
+- trim + Unicode `casefold()`；
+- 非空 query 做 substring match；
+- 排序：exact → prefix → substring → title → album → file_uri → song_id；
+- 同一 Song 只返回一次；
+- 空 query / 无结果均返回合法空结果；
+- 不引入 FTS 或外部搜索引擎。
 
-不得把未执行测试写成 PASS。
+### 3.4 REST / schema
 
-6. 环境限制
-- NONE
-或：
-- 测试目的：
-- 当前环境：
-- 阻塞原因：
-- 是否影响下一 Batch：
+API 使用 `/api` 前缀，覆盖：
+- Library Song/Album/Artist/Genre/Year/Tag/Search/Collection/artwork/scan；
+- Playlist/Favorites read + mutation；
+- Playback state/actions/Queue/collection play/save；
+- History read。
 
-7. Specs / Plan / Code 冲突
-- NONE
-或具体记录。
+统一原则：
+- API schemas 与 domain models 分离；
+- list 使用 `items + count`；
+- mutation 返回 mutation 后 authoritative resource/state；DELETE 成功为 204；
+- artwork 从 persisted ArtworkRef 只读返回真实 bytes/MIME；
+- 同一资源类型跨 endpoint 使用同一资源语义。
 
-8. 依赖状态
-- Task 3:
-- Task 4:
-- 本 Batch 是否引入未来 Task：
-- 下一 Batch 所需 contract 是否已经存在：
-
-9. Git
-- branch:
-- HEAD:
-- workspace:
-- changed files:
-- commit SHA:
-- commit message:
-- remote branch:
-- remote ref:
-- 二次确认：
-
-10. 下一 Batch
-- Batch:
-- Steps:
-- 本 Batch commit:
-- 下一窗口必须重新确认：
-- 已知风险：
-- 必须避免的越界：
-
-11. 最终判定
-只能使用：
-COMPLETE
-PARTIALLY COMPLETE — ENVIRONMENT VALIDATION PENDING
-PARTIALLY COMPLETE — BLOCKED
-BLOCKED BY DEPENDENCY
+统一错误 envelope：
+```json
+{"error":{"code":"STABLE_MACHINE_CODE","message":"human-readable message","details":null}}
 ```
 
----
+状态类别保持：200/201/204 success；400 semantic invalid；404 missing source/resource；
+409 resource/idempotency conflict；422 schema validation；500 repository/unexpected；
+502 PlayerPort 命令已到达但失败；503 PlayerPort 不可达。Artwork read failure 不伪装成 404。
 
-# 15. Task 5 最终完成后的处理
+### 3.5 Idempotency / transaction
 
-Batch 6 完成后，在创建 PR 前必须再次执行一次完整 Task 5 verification：
+所有可重试 mutation 使用 `Idempotency-Key`。
 
-1. 检查原 Plan Task 5 的 10 个 checkbox；
-2. 检查本文件 1 Audit + 6 Batch 的完成状态；
-3. 检查所有 Specs 覆盖；
-4. 检查 changed files；
-5. 检查 architecture boundary；
-6. 检查未来 Task isolation；
-7. 检查 full server regression；
-8. 检查 branch / commit / remote ref；
-9. 确认没有未验证的环境阻塞；
-10. 再决定是否创建 PR 并合并 `main`。
+同 method + canonical path + canonical payload + key：
+- 首次执行业务；
+- 成功后 replay 原 status/body，不重复 mutation；
+- scope/payload 不同则 409 `IDEMPOTENCY_KEY_CONFLICT`；
+- schema/service/player 失败且业务未提交时不保存 terminal success，允许 retry；
+- 不使用进程内 dict/global mutable cache 作为唯一保证。
 
-**Task 5 的最终 commit、Batch 6 完成和进入 main 是三个独立状态，不得混为一谈。**
+`business mutation + idempotency terminal record` 必须具有同一 SQLite unit-of-work 的原子边界。
 
----
+任何同时修改 SQLite 权威状态与进程内会话状态的路径，还必须在外层事务失败时恢复进程内状态；不能仅依赖 SQLite rollback。这正是当前 blocker C 的范围。
 
-# 16. Task 5 Batch 总览
+### 3.6 Playback / Queue / History
 
-| 阶段 | 原 Plan Steps | 核心范围 | 主要风险 |
-|---|---:|---|---|
-| Contract Audit | — | Repository / Collection / Search / API / Idempotency contract 冻结 | **最高** |
-| Batch 1 | 1–5 部分 | Collection + LibraryService | 高 |
-| Batch 2 | 5 剩余 | PlaylistService + Repository contract | 高 |
-| Batch 3 | 6 read-side | REST read API | 中高 |
-| Batch 4 | 6 mutation-side | REST mutation + Playback API | **最高** |
-| Batch 5 | 7–8 | Idempotency + error/schema contract | **最高** |
-| Batch 6 | 9–10 | 整体验收与最终提交 | 中 |
+- PlaybackService 是播放编排权威；
+- API 不直接修改 Queue 或调用 PlayerPort；
+- QueueManager/Repository 负责 Queue 业务与持久化，不成为第二个播放编排器；
+- execution queue 不包含 Played；
+- Queue、persistent History、Playlist/Favorites 相互独立；
+- queue reorder/delete/clear 后，Repository/PlaybackService/PlayerPort 的可观察执行状态必须同步；
+- 删除 current 必须基于可用 successor/AutoPlay/STOP 的实际结果更新 History；
+- unavailable pending 的推进语义遵循 playback spec §8.3：跳过无效项并继续可用 successor；无可用项再进入 AutoPlay/终止语义；
+- 任何 History transition 必须与最终成功事务一致，失败/retry 不得制造丢失或 phantom event。
 
-Task 5 的实现原则：
+## 4. Batch map
 
-```text
-先冻结 contract
-    ↓
-再实现 Service
-    ↓
-再暴露 Read API
-    ↓
-再暴露 Mutation / Playback API
-    ↓
-再加入 Idempotency / Error Contract
-    ↓
-最后做全量验收
-```
+| 阶段 | 原 Plan | 状态 | 长期输出 |
+|---|---|---|---|
+| Contract Audit | — | COMPLETE | 本文件 §3 contracts |
+| Batch 1 | Step 1–5 部分 | COMPLETE | Collection + LibraryService |
+| Batch 2 | Step 5 剩余 | COMPLETE | PlaylistService + repository contract |
+| Batch 3 | Step 6 read | COMPLETE | REST read API |
+| Batch 4 | Step 6 mutation/playback | COMPLETE | mutation/playback/history API |
+| Batch 5 | Step 7–8 | COMPLETE | idempotency + error/schema |
+| A/B corrective | pre-Batch-6 | COMPLETE | Queue mutation orchestration + persisted Playlist membership |
+| C/D corrective | pre-Batch-6 | OPEN | 见当前 handoff |
+| Batch 6 | Step 9–10 | BLOCKED | final acceptance + final Task 5 commit |
 
-**不要一次性实现整个 Task 5。**
+已完成 Batch 的逐步 RED/GREEN、commit、命令输出不再追加到本文件；需要追溯时读取 `archive/task-5/`。
 
----
+## 5. 当前进入 Batch 6 的 Gate
 
-## Batch 5 Corrective Completion Record（2026-10-01）
+在 C/D 未关闭前不得执行 Batch 6，也不得勾选 Task 5 Step 9/10。
 
-- 实际基线：branch `feature/task-5-library-api`，本地 HEAD 与远端 ref 均为
-  `4a4e514c9dea6dd19e62ef2eed96a91e7e4b8b7d`；唯一 worktree，开始时工作区干净。
-- A：reorder member mismatch 原为普通 `ValueError` → 400；新增
-  `PlaylistReorderMemberMismatchError`，API 映射 409 +
-  `PLAYLIST_REORDER_MEMBER_MISMATCH`，不解析异常字符串。
-  RED：两个案例均为实际 400 != 409；GREEN：两个案例通过，原成员不变。
-- B：不存在 Song 的 playlist add / favorite PUT 原触发 SQLite FK
-  `IntegrityError` → 500；Repository 在同一事务内检查 Song，形成
-  `SongNotFoundError`，经 Service 暴露给 API 映射 404 + `SONG_NOT_FOUND`。
-  RED：两个 endpoint 均为实际 500 != 404；GREEN：两个案例通过，成员关系未写入。
-- C：新增 focused test 覆盖 `PlayerCommandError` → 502 +
-  `PLAYER_COMMAND_FAILED`，details 固定为 command/error_code/command_list_index，
-  覆盖有值及 null。首次运行即 GREEN（2 passed），未发现生产 contract gap；
-  只补测试，没有人为制造 RED 或修改生产映射。
-- D：真实 SQLite AFTER INSERT trigger 确认 business mutation 已执行，随后使
-  idempotency terminal record 插入失败；通过真实 `run_transaction()` / Repository
-  从新事务确认 playlist 和 idempotency record 均不存在。
-  首次运行即 GREEN（1 passed），既有 ContextVar nested transaction 已满足原子性；
-  `database.py` / `idempotency_service.py` 未修改。
+C/D 关闭后，Batch 6 **禁止新增功能**，只做：
+- Task 5 focused/service/API aggregate；
+- affected Task 2R/3/4 regression；
+- full `server/tests`；
+- compileall；
+- Ruff；
+- `git diff --check`；
+- changed-files review；
+- architecture boundary review；
+- contract/invariant matrix re-check；
+- future Task isolation。
 
-Fresh verification（均从仓库根目录使用既有 `.venv/bin/python`，最终重跑退出码均为 0）：
+必须再次确认：
+- API → Service → Repository/PlayerPort；
+- Collection 与 Playlist resource 语义不混淆；
+- Queue/PlayerPort/History 在所有 mutation/transition 后一致；
+- History 与 idempotency transaction failure/retry 一致；
+- unavailable successor semantics 一致；
+- artwork 只读；
+- 无未来 Task 实现。
 
-| 命令 | 实际结果 |
-|---|---|
-| `.venv/bin/python -m pytest -q server/tests/api/test_idempotency.py server/tests/api/test_api_contracts.py server/tests/api/test_library_api.py server/tests/api/test_mutations_playback.py` | 45 passed |
-| `.venv/bin/python -m pytest -q server/tests/api` | 51 passed |
-| `.venv/bin/python -m pytest -q server/tests/services/test_library_service.py server/tests/services/test_collection_service.py server/tests/services/test_playlist_service.py` | 48 passed |
-| `.venv/bin/python -m pytest -q server/tests/repositories` | 44 passed |
-| `.venv/bin/python -m pytest -q server/tests` | 302 passed |
-| `.venv/bin/python -m compileall -q server` | PASS |
-| `.venv/bin/python -m ruff check server` | All checks passed |
-| `git diff --check` | PASS |
+只有这些证据成立，才能完成原 Step 9，并进入 Step 10 的 Task 5 final commit。Task 5 final commit、创建 PR、合并 main 仍是独立状态。
 
-首次 Ruff 检查发现新增测试 import 空行（I001），最小修正后上述全部命令重新运行并通过。
-API/full tests 有一条既有 Starlette TestClient/httpx deprecation warning；没有依赖修改。
-环境确认：Python 3.14.4、pytest 9.1.1、Ruff 0.16.9。未使用 Docker 或真实 MPD。
+## 6. 验证与记录规则
 
-Changed files（含本记录，共六个）：
+每次 corrective/Batch：
+- focused tests + 直接受影响 regression；
+- 必要时 full server regression；
+- compileall / Ruff / diff check；
+- changed-files + architecture review；
+- 只记录真实执行结果。
 
-- `server/app/repositories/playlist_repository.py`
-- `server/app/services/playlist_service.py`
-- `server/app/api/playlists.py`
-- `server/tests/api/test_mutations_playback.py`
-- `server/tests/api/test_idempotency.py`
-- `docs/superpowers/plans/2026-09-29-mpd-server-task-5-batch-plan.md`
+新的真实 defect 必须分类为：
+- code gap；
+- test gap；
+- contract/invariant gap；
+- architecture guard gap。
 
-已检查 `git status --short`、`git diff`、`git diff --stat`，独立只读 review 无阻塞项。
-API 仍为 API → Service → Repository / PlayerPort，无 API → SQLite / concrete
-MPDAdapter，无无关修改或未来 Task 依赖。原 Task 5 Step 9/10 checkbox 未修改，
-未实施 Batch 6。
+若属于后三类，不能只改 production code 后关闭 finding；必须留下对应的可执行保护或唯一权威合同。
 
-最终修复 commit SHA：`0d40e9b1662f4b455ae36101383b802819175b2b`
-（`fix(task-5): close batch 5 contract gaps`），已通过 `git rev-parse HEAD`、
-`git log -3 --oneline`、`git show --stat --oneline HEAD` 确认真实存在。
-本 completion record 使用随后单独的 docs commit 固化，以记录确切修复 SHA；
-该文档提交的 SHA 可由 `git log -1 --format=%H -- docs/superpowers/plans/2026-09-29-mpd-server-task-5-batch-plan.md`
-读取。Push 后的最终 HEAD / remote ref 二次确认由本次交接报告记录。
-
-Batch 5 最终状态：**COMPLETE**（四项 corrective 有自动化覆盖，全部本地验收通过）。
-这不代表 Batch 6 或整个 Task 5 完成。
-
-## Pre-Batch-6 Contract / Architecture Corrective Re-audit（2026-10-01）
-
-- Fresh remote baseline was re-read: Task 5 feature HEAD `1912ea178d2ee31e92e289b937b6da5fd69b91c5`, main `43fa8999cee72c2ca7c88e2f8e3147b956d2525c`.
-- [Minimal corrective plan and compatibility supplement](2026-10-01-task-5-contract-architecture-corrective-plan.md) was recorded before implementation.
-- Source existence now consistently uses typed 404; valid empty/all-unavailable Collections remain distinct. Catalog aggregation belongs to LibraryService; missing/blank/unparseable category metadata has synthetic unknown view categories. Year summary value is nullable and source_id is provided; Song metadata is not fabricated.
-- Associated typed playback lookup correction closes absent Queue item play 400→404 and removes exception-message type classification.
-- Repair commit `a3fc1b1fe548652c81573204d7c214049ba921b7` was committed, pushed and re-read via fresh remote ref/fetch/commit inspection.
-- Fresh verification: corrective 51 passed; focused aggregate 141 passed; API 102 passed; services 155 passed; repositories 44 passed; affected Task 2R/3/4 + integration 144 passed; full server/tests 354 passed; compileall/Ruff/diff checks passed.
-- [Corrective acceptance and full Task 5 audit/handoff](2026-10-01-task-5-contract-architecture-corrective-acceptance.md) records the exact commands and two **independent blockers** reproduced with actual Services/SQLite/MockMPD: Queue reorder/delete/clear do not synchronize PlayerPort/History; PlaylistResponse membership differs between list/mutations and detail when members are unavailable.
-- Corrective scope/local automated validation: **COMPLETE**. Entire Task 5 readiness: **PARTIALLY COMPLETE — BLOCKED**. The earlier Batch 5 completion record is historical scoped evidence, not permission to bypass these current findings.
-- Original Task 5 Step 9–10 checkboxes remain untouched. Batch 6 final acceptance/commit was not executed. No main merge, PR or future Task implementation. Resolve the independent blockers in separately authorized corrective scope before entering Batch 6.
-
-## Pre-Batch-6 A/B corrective continuation (2026-10-01)
-
-- [Scoped corrective plan and execution ledger](2026-10-01-task-5-pre-batch6-ab-corrective-plan.md)
-  records actual baseline `86aedd6`, reproduced RED, minimal implementation and GREEN.
-- A Queue mutation orchestration and B persisted Playlist resource membership are
-  **CLOSED locally**; 32 real SQLite/Services/MockMPD focused cases passed.
-- [Updated corrective acceptance/handoff](2026-10-01-task-5-contract-architecture-corrective-acceptance.md)
-  records the fresh mandatory ten-area re-audit and two newly confirmed independent
-  blockers: existing playback History memory is not restored after terminal-record
-  transaction failure; Next aborts on an unavailable pending member instead of skipping.
-- Overall readiness remains **PARTIALLY COMPLETE — BLOCKED**. New independent defects
-  were reported with code/spec evidence and minimum next scope, not silently fixed.
-- Initial conditional commit/push gate was unmet. The user subsequently explicitly
-  authorized publication (“先执行push”); commit/push the reviewed correction and verify
-  fresh remote ref/commit, retaining C/D blockers. Original Task 5 Steps 9/10 and
-  completion checkboxes remain untouched; no Batch 6, PR, main merge or future Task.
+历史完整计划：
+`docs/superpowers/archive/task-5/2026-09-29-mpd-server-task-5-batch-plan-full-history.md`。
