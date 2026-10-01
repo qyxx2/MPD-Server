@@ -94,14 +94,18 @@ def test_api_does_not_import_repositories():
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if (
-                isinstance(node, ast.ImportFrom)
-                and node.module
-                and node.module.startswith("server.app.repositories.")
-            ):
-                forbidden.append(f"{path.name}:{node.lineno}")
-            elif isinstance(node, ast.Import) and any(
-                alias.name.startswith("server.app.repositories.")
-                for alias in node.names
+                (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module
+                    and node.module.startswith("server.app.repositories.")
+                )
+                or (
+                    isinstance(node, ast.Import)
+                    and any(
+                        alias.name.startswith("server.app.repositories.")
+                        for alias in node.names
+                    )
+                )
             ):
                 forbidden.append(f"{path.name}:{node.lineno}")
     assert not forbidden, "API imports repository modules: " + ", ".join(forbidden)
