@@ -24,7 +24,10 @@ from server.app.services.collection_service import CollectionService
 from server.app.services.history_service import HistoryService
 from server.app.services.idempotency_service import IdempotencyService
 from server.app.services.library_scanner import LibraryScanner
-from server.app.services.library_service import LibraryService
+from server.app.services.library_service import (
+    CollectionSourceNotFoundError,
+    LibraryService,
+)
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
 from server.app.services.queue_manager import QueueManager
@@ -114,6 +117,26 @@ async def handle_idempotent_mutation(request: Request, call_next):
         service: IdempotencyService = request.app.state.idempotency_service
         return await service.execute(request, call_next)
     return await call_next(request)
+
+
+@app.exception_handler(CollectionSourceNotFoundError)
+async def collection_source_exception_handler(
+    request: Request,
+    exc: CollectionSourceNotFoundError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": {
+                "code": "COLLECTION_SOURCE_NOT_FOUND",
+                "message": str(exc),
+                "details": {
+                    "source_type": exc.source_type,
+                    "source_id": exc.source_id,
+                },
+            }
+        },
+    )
 
 
 @app.exception_handler(RequestValidationError)

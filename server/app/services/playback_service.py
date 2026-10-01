@@ -9,7 +9,15 @@ from server.app.player.ports import PlayerPort
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.services.autoplay import AutoPlay
 from server.app.services.history_service import HistoryService
-from server.app.services.queue_manager import QueueManager
+from server.app.services.queue_manager import QueueItemNotFoundError, QueueManager
+
+
+class PlaybackSongNotFoundError(ValueError):
+    """A requested Song identity is absent from the library."""
+
+
+class PlaybackSongUnavailableError(ValueError):
+    """A known requested Song currently cannot be played."""
 
 
 class PlaybackReconciliationError(RuntimeError):
@@ -81,7 +89,7 @@ class PlaybackService:
     async def play_now(self, queue_item_id: str) -> QueueItem:
         item = await self.queue_manager.get_item(queue_item_id)
         if item is None:
-            raise ValueError(f"queue item not found: {queue_item_id}")
+            raise QueueItemNotFoundError(queue_item_id)
         song = await self._require_available_song(item.song_id)
         await self._prepare_play(song)
 
@@ -434,7 +442,7 @@ class PlaybackService:
     async def _require_available_song(self, song_id: str) -> Song:
         song = await self.library_repository.get_song(song_id)
         if song is None:
-            raise ValueError(f"song not found: {song_id}")
+            raise PlaybackSongNotFoundError(f"song not found: {song_id}")
         if song.availability_status != "AVAILABLE":
-            raise ValueError(f"song is not available: {song_id}")
+            raise PlaybackSongUnavailableError(f"song is not available: {song_id}")
         return song

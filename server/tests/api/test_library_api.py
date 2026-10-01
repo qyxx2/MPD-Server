@@ -10,7 +10,7 @@ from server.app.main import app
 from server.app.models.library import ArtworkRef, ScanResult, Song
 from server.app.models.playlist import Playlist
 from server.app.services.collection_service import Collection
-from server.app.services.library_service import library_entity_id
+from server.app.services.library_service import LibraryService, library_entity_id
 
 
 def song(
@@ -94,6 +94,21 @@ class FakeLibraryService:
     async def find_songs_by_tag(self, tag: str) -> list[Song]:
         self.calls.append(("find_songs_by_tag", tag))
         return await self.list_available_songs()
+
+    async def list_albums(self):
+        return await LibraryService(self).list_albums()
+
+    async def list_artists(self):
+        return await LibraryService(self).list_artists()
+
+    async def list_genres(self):
+        return await LibraryService(self).list_genres()
+
+    async def list_years(self):
+        return await LibraryService(self).list_years()
+
+    async def list_tags(self):
+        return await LibraryService(self).list_tags()
 
     async def read_artwork(self, song_id: str) -> tuple[bytes, str]:
         self.calls.append(("read_artwork", song_id))

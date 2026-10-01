@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext
-from server.app.services.library_service import LibraryService, library_entity_id
+from server.app.services.library_service import LibraryService
 
 CollectionSourceType = Literal[
     "ALBUM",
@@ -134,64 +134,13 @@ class CollectionService:
         if playback_context is not None:
             return await self._resolve_members(playback_context.ordered_song_ids)
 
-        if source_type in {"ALBUM", "ARTIST", "GENRE", "YEAR", "TAG", "LIBRARY"}:
-            songs = await self._library.list_songs()
-            if source_type == "ALBUM":
-                if source_id is None:
-                    raise ValueError("source_id is required for ALBUM")
-                songs = [song for song in songs if song.album_id == source_id]
-                songs = _sort_album(songs)
-            elif source_type == "ARTIST":
-                if source_id is None:
-                    raise ValueError("source_id is required for ARTIST")
-                normalized = source_id.strip().casefold()
-                songs = [
-                    song
-                    for song in songs
-                    if any(
-                        value.casefold() == normalized
-                        or library_entity_id("artists", value) == source_id
-                        for value in (*song.artists, *song.album_artists)
-                    )
-                ]
-                songs = _sort_standard(songs)
-            elif source_type == "GENRE":
-                if source_id is None:
-                    raise ValueError("source_id is required for GENRE")
-                normalized = source_id.strip().casefold()
-                songs = [
-                    song
-                    for song in songs
-                    if any(
-                        value.casefold() == normalized
-                        or library_entity_id("genres", value) == source_id
-                        for value in song.genres
-                    )
-                ]
-                songs = _sort_standard(songs)
-            elif source_type == "YEAR":
-                if source_id is None:
-                    raise ValueError("source_id is required for YEAR")
-                normalized = source_id.strip()
-                songs = [song for song in songs if str(song.year) == normalized]
-                songs = _sort_standard(songs)
-            elif source_type == "TAG":
-                if source_id is None:
-                    raise ValueError("source_id is required for TAG")
-                normalized = source_id.strip().casefold()
-                songs = [
-                    song
-                    for song in songs
-                    if any(
-                        value.casefold() == normalized
-                        or library_entity_id("tags", value) == source_id
-                        for value in song.tag_names
-                    )
-                ]
-                songs = _sort_standard(songs)
-            else:
-                songs = _sort_standard(songs)
+        if source_type in {"ALBUM", "ARTIST", "GENRE", "YEAR", "TAG"}:
+            if source_id is None:
+                raise ValueError(f"source_id is required for {source_type}")
+            songs = await self._library.category_members(source_type, source_id)
             return _split_availability(songs)
+        if source_type == "LIBRARY":
+            return _split_availability(_sort_standard(await self._library.list_songs()))
         if source_type == "SEARCH":
             return await self._library.search_library(query or source_id or ""), []
         if source_type == "PLAYLIST":
@@ -202,9 +151,6 @@ class CollectionService:
         if source_type == "FAVORITES":
             ids = await self._playlist_reader.list_favorite_song_ids()
             return await self._resolve_members(ids)
-        if source_type == "LIBRARY":
-            songs = await self._library.list_available_songs()
-            return _sort_standard(songs), []
         return await self._resolve_members(song_ids or [])
 
     async def _resolve_members(
@@ -292,21 +238,6 @@ def _deduplicate(songs: list[Song]) -> list[Song]:
         seen.add(song.song_id)
         result.append(song)
     return result
-
-
-def _sort_album(songs: list[Song]) -> list[Song]:
-    return sorted(songs, key=_album_sort_key)
-
-
-def _album_sort_key(song: Song) -> tuple[object, ...]:
-    return (
-        song.disc_number is None,
-        song.disc_number if song.disc_number is not None else 0,
-        song.track_number is None,
-        song.track_number if song.track_number is not None else 0,
-        song.file_uri,
-        song.song_id or "",
-    )
 
 
 def _sort_standard(songs: list[Song]) -> list[Song]:

@@ -7,8 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from server.app.models.queue import PlaybackState, QueueItem
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.services.collection_service import CollectionService
-from server.app.services.playback_service import PlaybackService
-from server.app.services.playlist_service import PlaylistService
+from server.app.services.library_service import CollectionSourceNotFoundError
+from server.app.services.playback_service import (
+    PlaybackService,
+    PlaybackSongNotFoundError,
+    PlaybackSongUnavailableError,
+)
+from server.app.services.playlist_service import PlaylistNotFoundError, PlaylistService
 from server.app.services.queue_manager import (
     CurrentTrackDeletionError,
     QueueItemNotFoundError,
@@ -68,6 +73,17 @@ def _playlist_response(playlist, song_ids: list[str] | None = None) -> PlaylistR
 
 
 def _raise_playback_http_error(exc: Exception) -> None:
+    if isinstance(exc, CollectionSourceNotFoundError):
+        raise exc
+    if isinstance(exc, PlaylistNotFoundError):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "PLAYLIST_NOT_FOUND",
+                "message": f"playlist not found: {exc.args[0]}",
+                "details": None,
+            },
+        ) from exc
     if isinstance(exc, PlayerUnavailable):
         raise HTTPException(
             status_code=503,
@@ -122,9 +138,11 @@ def _raise_playback_http_error(exc: Exception) -> None:
         ) from exc
     if isinstance(exc, ValueError):
         message = str(exc)
-        status_code = 404 if message.startswith(
-            ("song not found:", "song is not available:")
-        ) else 400
+        status_code = (
+            404
+            if isinstance(exc, (PlaybackSongNotFoundError, PlaybackSongUnavailableError))
+            else 400
+        )
         raise HTTPException(
             status_code=status_code,
             detail={

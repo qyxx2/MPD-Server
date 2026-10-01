@@ -133,3 +133,47 @@ def test_artist_collection_matches_album_artist(service):
 
 def test_search_empty_query_returns_empty(service):
     assert run(service.search_library("   ")) == []
+
+
+def test_catalog_summaries_are_service_owned_and_preserve_contract():
+    from server.app.services.library_service import library_entity_id
+
+    first = Song(
+        song_id="1",
+        title="Z",
+        file_uri="a.flac",
+        album_id="album",
+        album="Album",
+        artists=("Artist", "ARTIST"),
+        album_artists=("Artist",),
+        genres=("Rock", "rock"),
+        tag_names=("Live",),
+        year=2024,
+        track_number=2,
+    )
+    second = first.model_copy(
+        update={"song_id": "2", "file_uri": "b.flac", "track_number": 1, "year": 2023}
+    )
+    missing = first.model_copy(
+        update={
+            "song_id": "missing",
+            "file_uri": "missing.flac",
+            "availability_status": "MISSING",
+        }
+    )
+    service = LibraryService(FakeLibraryRepository([first, second, missing]))
+    album = run(service.list_albums())[0]
+    assert album.album_id == "album"
+    assert album.song_count == 2
+    assert album.year == 2023
+    assert [item.model_dump() for item in run(service.list_artists())] == [
+        {
+            "artist_id": library_entity_id("artists", "Artist"),
+            "name": "Artist",
+            "song_count": 2,
+        }
+    ]
+    assert [item.name for item in run(service.list_genres())] == ["Rock"]
+    assert run(service.list_genres())[0].song_count == 2
+    assert run(service.list_tags())[0].tag_id == library_entity_id("tags", "Live")
+    assert [item.value for item in run(service.list_years())] == [2023, 2024]

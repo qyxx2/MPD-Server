@@ -79,3 +79,37 @@ class ScanResult(BaseModel):
     moved_song_ids: tuple[str, ...] = ()
     missing_song_ids: tuple[str, ...] = ()
     unreadable_song_ids: tuple[str, ...] = ()
+
+
+class AlbumSummary(BaseModel):
+    album_id: str
+    title: str
+    album_artists: tuple[str, ...] = ()
+    year: int | None = None
+    date: str | None = None
+    song_count: int
+    artwork: ArtworkRef | None = None
+
+
+class ArtistSummary(BaseModel):
+    artist_id: str
+    name: str
+    song_count: int
+
+
+class GenreSummary(BaseModel):
+    genre_id: str
+    name: str
+    song_count: int
+
+
+class YearSummary(BaseModel):
+    source_id: str
+    value: int | None
+    song_count: int
+
+
+class TagSummary(BaseModel):
+    tag_id: str
+    name: str
+    song_count: int

@@ -12,7 +12,6 @@ from server.app.services.library_service import (
     ArtworkNotFoundError,
     ArtworkReadError,
     LibraryService,
-    library_entity_id,
 )
 from server.app.services.playlist_service import PlaylistNotFoundError
 
@@ -139,43 +138,10 @@ async def get_song(
 async def list_albums(
     service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> AlbumListResponse:
-    songs = await service.list_available_songs()
-    groups: dict[str, list[Song]] = {}
-    for song in songs:
-        if song.album_id is not None and song.album is not None:
-            groups.setdefault(song.album_id, []).append(song)
-
-    items: list[AlbumSummaryResponse] = []
-    for album_id, members in sorted(
-        groups.items(),
-        key=lambda item: (
-            min(member.album.casefold() for member in item[1] if member.album),
-            item[0],
-        ),
-    ):
-        ordered = sorted(
-            members,
-            key=lambda song: (
-                song.disc_number is None,
-                song.disc_number if song.disc_number is not None else 0,
-                song.track_number is None,
-                song.track_number if song.track_number is not None else 0,
-                song.file_uri,
-                song.song_id or "",
-            ),
-        )
-        representative = ordered[0]
-        items.append(
-            AlbumSummaryResponse(
-                album_id=album_id,
-                title=representative.album or "",
-                album_artists=representative.album_artists,
-                year=representative.year,
-                date=representative.date,
-                song_count=len({song.song_id for song in members if song.song_id}),
-                artwork=representative.artwork,
-            )
-        )
+    items = [
+        AlbumSummaryResponse.model_validate(item.model_dump())
+        for item in await service.list_albums()
+    ]
     return AlbumListResponse(items=items, count=len(items))
 
 
@@ -197,30 +163,9 @@ async def list_album_songs(
 async def list_artists(
     service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> ArtistListResponse:
-    songs = sorted(
-        await service.list_available_songs(),
-        key=lambda song: (song.file_uri, song.song_id or ""),
-    )
-    groups: dict[str, tuple[str, set[str]]] = {}
-    for song in songs:
-        if song.song_id is None:
-            continue
-        for name in (*song.artists, *song.album_artists):
-            normalized = name.casefold()
-            current = groups.get(normalized)
-            if current is None:
-                groups[normalized] = (name, {song.song_id})
-            else:
-                current[1].add(song.song_id)
     items = [
-        ArtistSummaryResponse(
-            artist_id=library_entity_id("artists", name),
-            name=name,
-            song_count=len(song_ids),
-        )
-        for name, song_ids in sorted(
-            groups.values(), key=lambda value: value[0].casefold()
-        )
+        ArtistSummaryResponse.model_validate(item.model_dump())
+        for item in await service.list_artists()
     ]
     return ArtistListResponse(items=items, count=len(items))
 
@@ -243,12 +188,10 @@ async def list_artist_songs(
 async def list_genres(
     service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> GenreListResponse:
-    items = _name_summary(
-        await service.list_available_songs(),
-        lambda song: song.genres,
-        GenreSummaryResponse,
-        "genres",
-    )
+    items = [
+        GenreSummaryResponse.model_validate(item.model_dump())
+        for item in await service.list_genres()
+    ]
     return GenreListResponse(items=items, count=len(items))
 
 
@@ -270,15 +213,9 @@ async def list_genre_songs(
 async def list_years(
     service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> YearListResponse:
-    songs = await service.list_available_songs()
-    counts: dict[int, set[str]] = {}
-    for song in songs:
-        if song.year is None or song.song_id is None:
-            continue
-        counts.setdefault(song.year, set()).add(song.song_id)
     items = [
-        YearSummaryResponse(value=year, song_count=len(song_ids))
-        for year, song_ids in sorted(counts.items())
+        YearSummaryResponse.model_validate(item.model_dump())
+        for item in await service.list_years()
     ]
     return YearListResponse(items=items, count=len(items))
 
@@ -301,12 +238,10 @@ async def list_year_songs(
 async def list_tags(
     service: Annotated[LibraryService, Depends(get_library_service)],
 ) -> TagListResponse:
-    items = _name_summary(
-        await service.list_available_songs(),
-        lambda song: song.tag_names,
-        TagSummaryResponse,
-        "tags",
-    )
+    items = [
+        TagSummaryResponse.model_validate(item.model_dump())
+        for item in await service.list_tags()
+    ]
     return TagListResponse(items=items, count=len(items))
 
 
@@ -394,30 +329,3 @@ async def scan_library(
             },
         ) from exc
     return ScanResultResponse.model_validate(result.model_dump())
-
-
-def _name_summary(songs, getter, model, entity_kind):
-    groups: dict[str, tuple[str, set[str]]] = {}
-    for song in songs:
-        if song.song_id is None:
-            continue
-        for name in getter(song):
-            normalized = name.casefold()
-            current = groups.get(normalized)
-            if current is None:
-                groups[normalized] = (name, {song.song_id})
-            else:
-                current[1].add(song.song_id)
-    return [
-        model(
-            **(
-                {"name": name}
-                if entity_kind is None
-                else {f"{entity_kind[:-1]}_id": library_entity_id(entity_kind, name), "name": name}
-            ),
-            song_count=len(song_ids),
-        )
-        for name, song_ids in sorted(
-            groups.values(), key=lambda value: value[0].casefold()
-        )
-    ]

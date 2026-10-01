@@ -137,7 +137,8 @@ class GenreSummaryResponse(BaseModel):
 
 
 class YearSummaryResponse(BaseModel):
-    value: int
+    source_id: str
+    value: int | None
     song_count: int
 
 

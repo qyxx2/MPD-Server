@@ -4,14 +4,28 @@ import hashlib
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TypeVar
 
 from mutagen import MutagenError
 from mutagen.flac import FLAC
 from mutagen.id3 import APIC
 from mutagen.mp3 import MP3
 
-from server.app.models.library import Song
+from server.app.models.library import (
+    AlbumSummary,
+    ArtistSummary,
+    GenreSummary,
+    Song,
+    TagSummary,
+    YearSummary,
+)
+
+
+class CollectionSourceNotFoundError(LookupError):
+    def __init__(self, source_type: str, source_id: str) -> None:
+        self.source_type = source_type
+        self.source_id = source_id
+        super().__init__(f"collection source not found: {source_type}/{source_id}")
 
 
 class ArtworkReadError(RuntimeError):
@@ -115,6 +129,98 @@ class LibraryService:
             if any(value.casefold() == normalized for value in song.tag_names)
         ]
         return _sort_standard(matched)
+
+    async def category_members(self, source_type: str, source_id: str) -> list[Song]:
+        songs = await self.list_songs()
+        normalized = source_id.strip().casefold()
+        matched = []
+        for song in songs:
+            values = _category_values(song, source_type)
+            if source_id == unknown_category_id(source_type):
+                matches = not values
+            elif source_type in {"ALBUM", "YEAR"}:
+                matches = source_id.strip() in values
+            else:
+                kind = _CATEGORY_KINDS[source_type]
+                matches = any(
+                    value.casefold() == normalized
+                    or library_entity_id(kind, value) == source_id
+                    for value in values
+                )
+            if matches:
+                matched.append(song)
+        if not matched:
+            raise CollectionSourceNotFoundError(source_type, source_id)
+        return (
+            _sort_album(matched) if source_type == "ALBUM" else _sort_standard(matched)
+        )
+
+    async def list_albums(self) -> list[AlbumSummary]:
+        groups: dict[str, list[Song]] = {}
+        for song in await self.list_available_songs():
+            values = _category_values(song, "ALBUM")
+            album_id = values[0] if values else unknown_category_id("ALBUM")
+            groups.setdefault(album_id, []).append(song)
+        items = []
+        for album_id, members in sorted(
+            groups.items(),
+            key=lambda item: (
+                min(
+                    (
+                        member.album if _category_values(member, "ALBUM") else "未知"
+                    ).casefold()
+                    for member in item[1]
+                ),
+                item[0],
+            ),
+        ):
+            representative = _sort_album(members)[0]
+            unknown = album_id == unknown_category_id("ALBUM")
+            items.append(
+                AlbumSummary(
+                    album_id=album_id,
+                    title="未知" if unknown else representative.album,
+                    album_artists=() if unknown else representative.album_artists,
+                    year=None if unknown else representative.year,
+                    date=None if unknown else representative.date,
+                    song_count=len({song.song_id for song in members if song.song_id}),
+                    artwork=None if unknown else representative.artwork,
+                )
+            )
+        return items
+
+    async def list_artists(self) -> list[ArtistSummary]:
+        songs = sorted(
+            await self.list_available_songs(),
+            key=lambda song: (song.file_uri, song.song_id or ""),
+        )
+        return _name_summary(songs, "ARTIST", ArtistSummary)
+
+    async def list_genres(self) -> list[GenreSummary]:
+        return _name_summary(await self.list_available_songs(), "GENRE", GenreSummary)
+
+    async def list_years(self) -> list[YearSummary]:
+        counts: dict[int | None, set[str]] = {}
+        for song in await self.list_available_songs():
+            if song.song_id is not None:
+                counts.setdefault(song.year, set()).add(song.song_id)
+        return [
+            YearSummary(
+                value=year,
+                source_id=str(year) if year is not None else "unknown",
+                song_count=len(song_ids),
+            )
+            for year, song_ids in sorted(
+                counts.items(),
+                key=lambda item: (
+                    item[0] is None,
+                    item[0] if item[0] is not None else 0,
+                ),
+            )
+        ]
+
+    async def list_tags(self) -> list[TagSummary]:
+        return _name_summary(await self.list_available_songs(), "TAG", TagSummary)
 
     async def read_artwork(self, song_id: str) -> tuple[bytes, str]:
         song = await self._repository.get_song(song_id)
@@ -265,3 +371,79 @@ def _deduplicate_songs(songs: Iterable[Song]) -> list[Song]:
         seen.add(song.song_id)
         result.append(song)
     return result
+
+
+_CATEGORY_KINDS = {
+    "ALBUM": "albums",
+    "ARTIST": "artists",
+    "GENRE": "genres",
+    "TAG": "tags",
+}
+
+
+def unknown_category_id(source_type: str) -> str:
+    if source_type == "YEAR":
+        return "unknown"
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL, f"mpd-server:unknown:{_CATEGORY_KINDS[source_type]}"
+        )
+    )
+
+
+def _category_values(song: Song, source_type: str) -> tuple[str, ...]:
+    if source_type == "ALBUM":
+        return (
+            (song.album_id,)
+            if song.album_id and song.album and song.album.strip()
+            else ()
+        )
+    if source_type == "YEAR":
+        return (str(song.year),) if song.year is not None else ()
+    values = {
+        "ARTIST": (*song.artists, *song.album_artists),
+        "GENRE": song.genres,
+        "TAG": song.tag_names,
+    }[source_type]
+    return tuple(value for value in values if value.strip())
+
+
+SummaryType = TypeVar("SummaryType", ArtistSummary, GenreSummary, TagSummary)
+
+
+def _name_summary(
+    songs: list[Song],
+    source_type: str,
+    model: type[SummaryType],
+) -> list[SummaryType]:
+    groups: dict[str | None, tuple[str, set[str]]] = {}
+    for song in songs:
+        if song.song_id is None:
+            continue
+        values = _category_values(song, source_type)
+        for name in values or (None,):
+            normalized = name.casefold() if name is not None else None
+            current = groups.get(normalized)
+            if current is None:
+                groups[normalized] = (name or "未知", {song.song_id})
+            else:
+                current[1].add(song.song_id)
+    kind = _CATEGORY_KINDS[source_type]
+    return [
+        model(
+            **{
+                f"{kind[:-1]}_id": unknown_category_id(source_type)
+                if key is None
+                else library_entity_id(kind, name),
+                "name": name,
+                "song_count": len(song_ids),
+            }
+        )
+        for key, (name, song_ids) in sorted(
+            groups.items(),
+            key=lambda item: (
+                item[1][0].casefold(),
+                item[0] is None,
+            ),
+        )
+    ]
