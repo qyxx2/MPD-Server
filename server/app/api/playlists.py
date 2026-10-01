@@ -5,14 +5,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.app.models.library import Song
-from server.app.repositories.playlist_repository import (
-    DuplicatePlaylistSongError,
-    PlaylistNotFoundError,
-    SystemPlaylistModificationError,
-)
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_service import LibraryService
-from server.app.services.playlist_service import PlaylistService
+from server.app.services.playlist_service import (
+    DuplicatePlaylistSongError,
+    PlaylistNotFoundError,
+    PlaylistService,
+    SystemPlaylistModificationError,
+)
 
 from .dependencies import (
     get_library_service,
@@ -51,6 +51,17 @@ def _collection_response(collection) -> CollectionResponse:
 
 def _song_response(song: Song) -> SongResponse:
     return SongResponse.model_validate(song)
+
+
+def _playlist_not_found(playlist_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail={
+            "code": "PLAYLIST_NOT_FOUND",
+            "message": f"playlist not found: {playlist_id}",
+            "details": None,
+        },
+    )
 
 
 @router.get("/api/playlists", response_model=PlaylistListResponse)
@@ -199,7 +210,7 @@ async def create_playlist(
     created = await service.create_playlist(request.name)
     playlist = await service.get_playlist(created.playlist_id)
     if playlist is None:
-        raise PlaylistNotFoundError(created.playlist_id)
+        raise _playlist_not_found(created.playlist_id)
     return _playlist_response(
         playlist,
         await service.list_song_ids(playlist.playlist_id),
@@ -216,7 +227,7 @@ async def update_playlist(
         await service.update_playlist(playlist_id, request.name)
         playlist = await service.get_playlist(playlist_id)
         if playlist is None:
-            raise PlaylistNotFoundError(playlist_id)
+            raise _playlist_not_found(playlist_id)
         return _playlist_response(
             playlist,
             await service.list_song_ids(playlist_id),
@@ -255,7 +266,7 @@ async def add_playlist_song(
         )
         playlist = await service.get_playlist(playlist_id)
         if playlist is None:
-            raise PlaylistNotFoundError(playlist_id)
+            raise _playlist_not_found(playlist_id)
         return _playlist_response(
             playlist,
             await service.list_song_ids(playlist_id),
@@ -294,7 +305,7 @@ async def reorder_playlist(
         await service.reorder_playlist(playlist_id, request.ordered_song_ids)
         playlist = await service.get_playlist(playlist_id)
         if playlist is None:
-            raise PlaylistNotFoundError(playlist_id)
+            raise _playlist_not_found(playlist_id)
         return _playlist_response(
             playlist,
             await service.list_song_ids(playlist_id),
