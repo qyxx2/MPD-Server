@@ -10,13 +10,12 @@ from server.app.repositories.playlist_repository import (
     SystemPlaylistModificationError,
 )
 
-
 __all__ = [
     "DuplicatePlaylistSongError",
     "PlaylistNotFoundError",
-    "SystemPlaylistModificationError",
     "PlaylistRepositoryPort",
     "PlaylistService",
+    "SystemPlaylistModificationError",
 ]
 
 

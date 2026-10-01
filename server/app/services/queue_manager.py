@@ -13,12 +13,11 @@ from server.app.repositories.queue_repository import (
     QueueRevisionConflictError,
 )
 
-
 __all__ = [
     "CurrentTrackDeletionError",
     "QueueItemNotFoundError",
-    "QueueRevisionConflictError",
     "QueueManager",
+    "QueueRevisionConflictError",
 ]
 
 
