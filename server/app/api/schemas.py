@@ -198,6 +198,20 @@ class ScanRequest(BaseModel):
     root: str = Field(min_length=1)
 
 
+class HistoryEventResponse(BaseModel):
+    history_id: int | None = None
+    song_id: str
+    started_at: datetime
+    ended_at: datetime | None = None
+    reason: str | None = None
+    session_id: str | None = None
+
+
+class HistoryListResponse(BaseModel):
+    items: list[HistoryEventResponse] = Field(default_factory=list)
+    count: int = 0
+
+
 class PlaybackContextResponse(BaseModel):
     context_id: str
     source_type: str

@@ -3,11 +3,23 @@ from __future__ import annotations
 from fastapi import Request
 
 from server.app.services.collection_service import CollectionService
+from server.app.services.history_service import HistoryService
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
 from server.app.services.queue_manager import QueueManager
+
+
+async def resolve_history_service(request: Request) -> HistoryService:
+    service = getattr(request.app.state, "history_service", None)
+    if service is None:
+        raise RuntimeError("history service is not configured")
+    return service
+
+
+async def get_history_service(request: Request) -> HistoryService:
+    return await resolve_history_service(request)
 
 
 async def resolve_library_service(request: Request) -> LibraryService:

@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from server.app.api.history import router as history_router
 from server.app.api.library import router as library_router
 from server.app.api.playback import router as playback_router
 from server.app.api.playlists import router as playlists_router
@@ -72,6 +73,7 @@ async def lifespan(app: FastAPI):
     app.state.collection_service = collection_service
     app.state.queue_manager = queue_manager
     app.state.playback_service = playback_service
+    app.state.history_service = history_service
 
     yield
 
@@ -128,6 +130,7 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+app.include_router(history_router)
 app.include_router(library_router)
 app.include_router(playlists_router)
 app.include_router(playback_router)
