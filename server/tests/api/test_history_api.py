@@ -133,10 +133,10 @@ def test_history_empty_results_are_successful(client):
 
 
 def test_history_routes_are_registered():
-    routes = {
-        (route.path, tuple(sorted(route.methods or ())))
-        for route in app.routes
-    }
+    paths = app.openapi()["paths"]
 
-    assert ("/api/history", ("GET",)) in routes
-    assert ("/api/history/played", ("GET",)) in routes
+    assert "/api/history" in paths
+    assert "get" in paths["/api/history"]
+
+    assert "/api/history/played" in paths
+    assert "get" in paths["/api/history/played"]
