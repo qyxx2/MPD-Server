@@ -1608,3 +1608,68 @@ Task 5 的实现原则：
 ```
 
 **不要一次性实现整个 Task 5。**
+
+---
+
+## Batch 5 Corrective Completion Record（2026-10-01）
+
+- 实际基线：branch `feature/task-5-library-api`，本地 HEAD 与远端 ref 均为
+  `4a4e514c9dea6dd19e62ef2eed96a91e7e4b8b7d`；唯一 worktree，开始时工作区干净。
+- A：reorder member mismatch 原为普通 `ValueError` → 400；新增
+  `PlaylistReorderMemberMismatchError`，API 映射 409 +
+  `PLAYLIST_REORDER_MEMBER_MISMATCH`，不解析异常字符串。
+  RED：两个案例均为实际 400 != 409；GREEN：两个案例通过，原成员不变。
+- B：不存在 Song 的 playlist add / favorite PUT 原触发 SQLite FK
+  `IntegrityError` → 500；Repository 在同一事务内检查 Song，形成
+  `SongNotFoundError`，经 Service 暴露给 API 映射 404 + `SONG_NOT_FOUND`。
+  RED：两个 endpoint 均为实际 500 != 404；GREEN：两个案例通过，成员关系未写入。
+- C：新增 focused test 覆盖 `PlayerCommandError` → 502 +
+  `PLAYER_COMMAND_FAILED`，details 固定为 command/error_code/command_list_index，
+  覆盖有值及 null。首次运行即 GREEN（2 passed），未发现生产 contract gap；
+  只补测试，没有人为制造 RED 或修改生产映射。
+- D：真实 SQLite AFTER INSERT trigger 确认 business mutation 已执行，随后使
+  idempotency terminal record 插入失败；通过真实 `run_transaction()` / Repository
+  从新事务确认 playlist 和 idempotency record 均不存在。
+  首次运行即 GREEN（1 passed），既有 ContextVar nested transaction 已满足原子性；
+  `database.py` / `idempotency_service.py` 未修改。
+
+Fresh verification（均从仓库根目录使用既有 `.venv/bin/python`，最终重跑退出码均为 0）：
+
+| 命令 | 实际结果 |
+|---|---|
+| `.venv/bin/python -m pytest -q server/tests/api/test_idempotency.py server/tests/api/test_api_contracts.py server/tests/api/test_library_api.py server/tests/api/test_mutations_playback.py` | 45 passed |
+| `.venv/bin/python -m pytest -q server/tests/api` | 51 passed |
+| `.venv/bin/python -m pytest -q server/tests/services/test_library_service.py server/tests/services/test_collection_service.py server/tests/services/test_playlist_service.py` | 48 passed |
+| `.venv/bin/python -m pytest -q server/tests/repositories` | 44 passed |
+| `.venv/bin/python -m pytest -q server/tests` | 302 passed |
+| `.venv/bin/python -m compileall -q server` | PASS |
+| `.venv/bin/python -m ruff check server` | All checks passed |
+| `git diff --check` | PASS |
+
+首次 Ruff 检查发现新增测试 import 空行（I001），最小修正后上述全部命令重新运行并通过。
+API/full tests 有一条既有 Starlette TestClient/httpx deprecation warning；没有依赖修改。
+环境确认：Python 3.14.4、pytest 9.1.1、Ruff 0.16.9。未使用 Docker 或真实 MPD。
+
+Changed files（含本记录，共六个）：
+
+- `server/app/repositories/playlist_repository.py`
+- `server/app/services/playlist_service.py`
+- `server/app/api/playlists.py`
+- `server/tests/api/test_mutations_playback.py`
+- `server/tests/api/test_idempotency.py`
+- `docs/superpowers/plans/2026-09-29-mpd-server-task-5-batch-plan.md`
+
+已检查 `git status --short`、`git diff`、`git diff --stat`，独立只读 review 无阻塞项。
+API 仍为 API → Service → Repository / PlayerPort，无 API → SQLite / concrete
+MPDAdapter，无无关修改或未来 Task 依赖。原 Task 5 Step 9/10 checkbox 未修改，
+未实施 Batch 6。
+
+最终修复 commit SHA：`0d40e9b1662f4b455ae36101383b802819175b2b`
+（`fix(task-5): close batch 5 contract gaps`），已通过 `git rev-parse HEAD`、
+`git log -3 --oneline`、`git show --stat --oneline HEAD` 确认真实存在。
+本 completion record 使用随后单独的 docs commit 固化，以记录确切修复 SHA；
+该文档提交的 SHA 可由 `git log -1 --format=%H -- docs/superpowers/plans/2026-09-29-mpd-server-task-5-batch-plan.md`
+读取。Push 后的最终 HEAD / remote ref 二次确认由本次交接报告记录。
+
+Batch 5 最终状态：**COMPLETE**（四项 corrective 有自动化覆盖，全部本地验收通过）。
+这不代表 Batch 6 或整个 Task 5 完成。
