@@ -8,8 +8,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from server.app.api.library import router as library_router
-from server.app.api.playlists import router as playlists_router
 from server.app.api.playback import router as playback_router
+from server.app.api.playlists import router as playlists_router
 from server.app.player.mpd_adapter import MPDAdapter
 from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository

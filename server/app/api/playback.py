@@ -34,7 +34,6 @@ from .schemas import (
     SeekRequest,
 )
 
-
 router = APIRouter(prefix="/api/playback", tags=["playback"])
 
 
@@ -123,9 +122,8 @@ def _raise_playback_http_error(exc: Exception) -> None:
         ) from exc
     if isinstance(exc, ValueError):
         message = str(exc)
-        status_code = 404 if (
-            message.startswith("song not found:")
-            or message.startswith("song is not available:")
+        status_code = 404 if message.startswith(
+            ("song not found:", "song is not available:")
         ) else 400
         raise HTTPException(
             status_code=status_code,
