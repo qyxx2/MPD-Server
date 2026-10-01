@@ -19,7 +19,7 @@ Branch: `feature/task-5-library-api`
 - Batch 1–5：完成；
 - Pre-Batch-6 A/B corrective：完成；
 - Batch 6：**BLOCKED**；
-- 当前 blocker：C（History 内存状态在外层事务失败后未恢复）、D（Next 不跳过 unavailable pending）；
+- 当前 blocker：E（Stop 未确认 Player STOPPED 就结束 History）；C/D corrective 已关闭；
 - 原 Implementation Plan Task 5 Step 9–10 保持未完成，直到 blocker 关闭并通过 Batch 6。
 
 当前 blocker 的唯一 active handoff：
@@ -137,7 +137,7 @@ API 使用 `/api` 前缀，覆盖：
 
 `business mutation + idempotency terminal record` 必须具有同一 SQLite unit-of-work 的原子边界。
 
-任何同时修改 SQLite 权威状态与进程内会话状态的路径，还必须在外层事务失败时恢复进程内状态；不能仅依赖 SQLite rollback。这正是当前 blocker C 的范围。
+任何同时修改 SQLite 权威状态与进程内会话状态的路径，还必须在外层事务失败时恢复进程内状态；不能仅依赖 SQLite rollback。C corrective 已为既有 History-changing playback paths 验证此保证（包括取消）。
 
 ### 3.6 Playback / Queue / History
 
@@ -162,16 +162,17 @@ API 使用 `/api` 前缀，覆盖：
 | Batch 4 | Step 6 mutation/playback | COMPLETE | mutation/playback/history API |
 | Batch 5 | Step 7–8 | COMPLETE | idempotency + error/schema |
 | A/B corrective | pre-Batch-6 | COMPLETE | Queue mutation orchestration + persisted Playlist membership |
-| C/D corrective | pre-Batch-6 | OPEN | 见当前 handoff |
+| C/D corrective | pre-Batch-6 | COMPLETE | History rollback + Next unavailable successor；证据见 archive/task-5/ |
+| E corrective | pre-Batch-6 | OPEN | Stop confirmation，见当前 handoff |
 | Batch 6 | Step 9–10 | BLOCKED | final acceptance + final Task 5 commit |
 
 已完成 Batch 的逐步 RED/GREEN、commit、命令输出不再追加到本文件；需要追溯时读取 `archive/task-5/`。
 
 ## 5. 当前进入 Batch 6 的 Gate
 
-在 C/D 未关闭前不得执行 Batch 6，也不得勾选 Task 5 Step 9/10。
+当前 handoff 的所有 blocking finding（现为 E）关闭前不得执行 Batch 6，也不得勾选 Task 5 Step 9/10。
 
-C/D 关闭后，Batch 6 **禁止新增功能**，只做：
+所有 blocker 关闭后，Batch 6 **禁止新增功能**，只做：
 - Task 5 focused/service/API aggregate；
 - affected Task 2R/3/4 regression；
 - full `server/tests`；

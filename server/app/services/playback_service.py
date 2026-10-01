@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from functools import wraps
+from typing import Concatenate, ParamSpec, TypeVar
 
 from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
@@ -12,6 +16,25 @@ from server.app.repositories.queue_repository import QueueRevisionConflictError
 from server.app.services.autoplay import AutoPlay
 from server.app.services.history_service import HistoryService
 from server.app.services.queue_manager import QueueItemNotFoundError, QueueManager
+
+logger = logging.getLogger(__name__)
+P = ParamSpec("P")
+T = TypeVar("T")
+
+
+def _atomic_history_transition(
+    operation: Callable[Concatenate[PlaybackService, P], Awaitable[T]],
+) -> Callable[Concatenate[PlaybackService, P], Awaitable[T]]:
+    """Join the owning transaction, including its in-memory History rollback."""
+    @wraps(operation)
+    async def wrapped(self: PlaybackService, *args: P.args, **kwargs: P.kwargs) -> T:
+        async def transition(_connection):
+            self.history_service.preserve_active_on_rollback()
+            return await operation(self, *args, **kwargs)
+
+        return await run_transaction(self.queue_manager.queue_repository.path, transition)
+
+    return wrapped
 
 
 class PlaybackSongNotFoundError(ValueError):
@@ -44,6 +67,7 @@ class PlaybackService:
         self.player = player
         self.library_repository = library_repository
 
+    @_atomic_history_transition
     async def start_track(self, song_id: str) -> PlaybackContext:
         song = await self._require_available_song(song_id)
         await self._prepare_play(song)
@@ -61,8 +85,10 @@ class PlaybackService:
         await self.history_service.start_track(song_id)
         await self.autoplay.refill(context)
         await self._sync_player_queue()
+        await self._confirm_preserved_state()
         return context
 
+    @_atomic_history_transition
     async def play_context(
         self,
         context: PlaybackContext,
@@ -86,8 +112,10 @@ class PlaybackService:
         await self.history_service.start_track(songs[0].song_id)
         await self.autoplay.refill(context)
         await self._sync_player_queue()
+        await self._confirm_preserved_state()
         return state
 
+    @_atomic_history_transition
     async def play_now(self, queue_item_id: str) -> QueueItem:
         item = await self.queue_manager.get_item(queue_item_id)
         if item is None:
@@ -120,6 +148,7 @@ class PlaybackService:
         )
         await self.history_service.start_track(selected.song_id)
         await self._sync_player_queue()
+        await self._confirm_preserved_state()
         return selected
 
     async def play_next(self, song_id: str) -> QueueItem:
@@ -283,29 +312,22 @@ class PlaybackService:
             return
         await self.autoplay.refill(await self._queue_playback_context(state))
 
+    @_atomic_history_transition
     async def next(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
             return state
 
-        up_next = [
-            item
-            for item in await self.queue_manager.list_items()
-            if item.position > 0
-        ]
-        if not up_next:
+        target = await self._next_available_pending()
+        if target is None:
             context = await self._queue_playback_context(state)
             await self.autoplay.refill(context)
+            target = await self._next_available_pending()
+        if target is None:
             await self._sync_player_queue()
-            up_next = [
-                item
-                for item in await self.queue_manager.list_items()
-                if item.position > 0
-            ]
-        if not up_next:
+            await self._confirm_preserved_state()
             return state
 
-        target = up_next[0]
         song = await self._require_available_song(target.song_id)
         await self._prepare_play(song)
         selected = await self.queue_manager.play_now(
@@ -321,8 +343,28 @@ class PlaybackService:
         )
         await self.history_service.start_track(selected.song_id)
         await self._sync_player_queue()
+        await self._confirm_preserved_state()
         return await self.queue_manager.get_playback_state()
 
+    async def _next_available_pending(self) -> QueueItem | None:
+        target = None
+        for item in await self.queue_manager.list_items():
+            if item.position <= 0:
+                continue
+            song = await self.library_repository.get_song(item.song_id)
+            if song is not None and song.availability_status == "AVAILABLE":
+                if target is None:
+                    target = item
+                continue
+            reason = song.availability_status if song is not None else "SONG_NOT_FOUND"
+            logger.warning(
+                "Skipping unavailable Queue item %s (song %s): %s",
+                item.queue_item_id, item.song_id, reason,
+            )
+            await self.queue_manager.delete(item.queue_item_id, persist_state=False)
+        return target
+
+    @_atomic_history_transition
     async def previous(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
@@ -352,6 +394,7 @@ class PlaybackService:
         )
         await self.history_service.start_track(selected.song_id)
         await self._sync_player_queue()
+        await self._confirm_preserved_state()
         return await self.queue_manager.get_playback_state()
 
     async def pause(self) -> PlaybackState | None:
@@ -381,6 +424,7 @@ class PlaybackService:
             autoplay_enabled=state.autoplay_enabled,
         )
 
+    @_atomic_history_transition
     async def stop(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
 
@@ -394,6 +438,7 @@ class PlaybackService:
         await self.history_service.stop()
         return confirmed
 
+    @_atomic_history_transition
     async def reconcile_external_status(self) -> PlaybackState:
         status = await self.player.status()
         previous = await self.queue_manager.get_playback_state()
@@ -502,7 +547,14 @@ class PlaybackService:
         )
         uris: list[str] = []
         for item in ordered:
-            song = await self._require_available_song(item.song_id)
+            if item.position == 0:
+                # Catalog availability may change while this occurrence still plays.
+                # Retain it until a successor is confirmed; never start it anew here.
+                song = await self.library_repository.get_song(item.song_id)
+                if song is None:
+                    raise PlaybackSongNotFoundError(f"song not found: {item.song_id}")
+            else:
+                song = await self._require_available_song(item.song_id)
             uris.append(song.file_uri)
         return uris
 

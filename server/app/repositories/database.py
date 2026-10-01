@@ -112,7 +112,7 @@ async def run_transaction(
                 result = await result
             connection.commit()
             return result
-        except Exception:
+        except BaseException:
             connection.rollback()
             for callback in reversed(rollbacks[key]):
                 callback()

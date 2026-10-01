@@ -560,6 +560,7 @@ def test_play_context_does_not_fake_state_or_history_when_play_fails(
     run(service.start_track("x"))
     before_state = run(components["state"].get_state())
     before_history = components["history_service"].active_event
+    before_queue = run(components["queue"].get_snapshot())
     assert before_state is not None
     assert before_history is not None
 
@@ -571,16 +572,7 @@ def test_play_context_does_not_fake_state_or_history_when_play_fails(
 
     assert run(components["state"].get_state()) == before_state
     assert components["history_service"].active_event == before_history
-    queue_items = [
-        item
-        for item in run(components["queue"].list_items())
-        if item.position >= 0
-    ]
-    assert [item.song_id for item in queue_items] == ["a", "b", "c"]
-    assert all(
-        item.playback_context_id == context.context_id
-        for item in queue_items
-    )
+    assert run(components["queue"].get_snapshot()) == before_queue
 
 
 def test_play_context_does_not_fake_state_or_history_when_player_unavailable(

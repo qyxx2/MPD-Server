@@ -31,7 +31,7 @@ def real_client(tmp_path, monkeypatch):
                     )
                 )
             )
-        player = MockMPD([f"{song_id}.flac" for song_id in "abc"])
+        player = MockMPD([f"{song_id}.flac" for song_id in "abcd"])
         app.state.playback_service.player = player
         yield client, library, player, app.state.playback_service
 
@@ -603,3 +603,432 @@ def test_mock_transport_controls_keep_queue_current_identity(real_client):
     assert status.song_uri == "a.flac"
     assert status.song_id == entries[0].mpd_song_id
     assert status.song_position == 0
+
+
+@pytest.mark.parametrize(
+    "operation", ["next", "play_now", "start_track", "context", "previous", "stop"]
+)
+def test_playback_terminal_failure_restores_history_and_retry(real_client, operation):
+    import sqlite3
+
+    from server.app.repositories.database import run_transaction
+
+    client, _, player, service = real_client
+    items = start(client)
+    if operation == "previous":
+        assert (
+            mutate(
+                client, "POST", "/api/playback/next", key="prepare-previous"
+            ).status_code
+            == 200
+        )
+    pending = next(item for item in items if item["song_id"] == "b")
+    endpoint = {
+        "next": "/api/playback/next",
+        "play_now": f"/api/playback/queue/items/{pending['queue_item_id']}/play",
+        "start_track": "/api/playback/tracks/b/play",
+        "context": "/api/playback/collections/play",
+        "previous": "/api/playback/previous",
+        "stop": "/api/playback/stop",
+    }[operation]
+    body = (
+        {"source_type": "SONGS", "song_ids": ["b", "c"]}
+        if operation == "context"
+        else None
+    )
+    before = run(service.queue_manager.queue_repository.get_snapshot())
+    state = run(service.queue_manager.get_playback_state())
+    active = service.history_service.active_event
+    session = service.history_service.session_id
+    before_history = run(service.history_service.list_history())
+    path = service.queue_manager.queue_repository.path
+    run(
+        run_transaction(
+            path,
+            lambda connection: connection.execute("""
+        CREATE TRIGGER fail_playback_record BEFORE INSERT ON idempotency_records
+        WHEN NEW.idempotency_key = 'terminal-playback'
+        BEGIN SELECT RAISE(ABORT, 'terminal playback failure'); END
+    """),
+        )
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="terminal playback failure"):
+        mutate(client, "POST", endpoint, body, key="terminal-playback")
+    assert run(service.queue_manager.queue_repository.get_snapshot()) == before
+    assert run(service.queue_manager.get_playback_state()) == state
+    assert run(service.history_service.list_history()) == before_history
+    assert service.history_service.active_event == active
+    assert service.history_service.session_id == session
+    run(
+        run_transaction(
+            path,
+            lambda connection: connection.execute("DROP TRIGGER fail_playback_record"),
+        )
+    )
+    retry = mutate(client, "POST", endpoint, body, key="terminal-playback")
+    assert retry.status_code == 200, retry.text
+    history = run(service.history_service.list_history())
+    expected_history = (
+        [("b", "SWITCH_AWAY"), ("a", "SWITCH_AWAY")]
+        if operation == "previous"
+        else [("a", "STOP" if operation == "stop" else "SWITCH_AWAY")]
+    )
+    assert [(event.song_id, event.reason) for event in history] == expected_history
+    if operation == "stop":
+        assert service.history_service.active_event is None
+        assert service.history_service.session_id is None
+    else:
+        assert service.history_service.active_event.song_id == (
+            "a" if operation == "previous" else "b"
+        )
+    assert_synced(client, player)
+    snapshot = run(service.queue_manager.queue_repository.get_snapshot())
+    replay = mutate(client, "POST", endpoint, body, key="terminal-playback")
+    assert replay.json() == retry.json()
+    assert run(service.queue_manager.queue_repository.get_snapshot()) == snapshot
+    assert run(service.history_service.list_history()) == history
+
+
+@pytest.mark.parametrize("availability", ["MISSING", "UNREADABLE"])
+def test_next_skips_unavailable_pending(real_client, availability, caplog):
+    client, library, player, service = real_client
+    start(client)
+    song = run(library.get_song("b"))
+    run(
+        library.upsert_song(
+            song.model_copy(update={"availability_status": availability})
+        )
+    )
+    response = mutate(client, "POST", "/api/playback/next", key="skip-invalid")
+    assert response.status_code == 200, response.text
+    assert response.json()["song_id"] == "c"
+    assert f"(song b): {availability}" in caplog.text
+    assert service.history_service.active_event.song_id == "c"
+    assert [
+        (event.song_id, event.reason)
+        for event in run(service.history_service.list_history())
+    ] == [("a", "SWITCH_AWAY")]
+    assert not any(
+        item.song_id == "b" and item.position > 0
+        for item in run(service.queue_manager.list_items())
+    )
+    assert_synced(client, player)
+
+
+@pytest.mark.parametrize(
+    "operation", ["start_track", "play_context", "play_now", "next", "previous"]
+)
+def test_direct_playback_sync_failure_restores_transaction(
+    real_client, monkeypatch, operation
+):
+    from server.app.models.queue import PlaybackContext
+    from server.app.player.ports import PlayerCommandError
+
+    client, _, _, service = real_client
+    items = start(client)
+    if operation == "previous":
+        run(service.next())
+    before = run(service.queue_manager.queue_repository.get_snapshot())
+    state = run(service.queue_manager.get_playback_state())
+    active = service.history_service.active_event
+    session = service.history_service.session_id
+    history = run(service.history_service.list_history())
+
+    async def fail_sync():
+        raise PlayerCommandError("queue_move", "forced post-History sync failure")
+
+    monkeypatch.setattr(service, "_sync_player_queue", fail_sync)
+    pending = next(item for item in items if item["song_id"] == "b")
+    with pytest.raises(PlayerCommandError, match="forced post-History sync failure"):
+        if operation == "play_now":
+            run(service.play_now(pending["queue_item_id"]))
+        elif operation == "start_track":
+            run(service.start_track("b"))
+        elif operation == "play_context":
+            run(
+                service.play_context(
+                    PlaybackContext(
+                        context_id="new",
+                        source_type="SONGS",
+                        ordered_song_ids=("b", "c"),
+                    )
+                )
+            )
+        else:
+            run(getattr(service, operation)())
+    assert run(service.queue_manager.queue_repository.get_snapshot()) == before
+    assert run(service.queue_manager.get_playback_state()) == state
+    assert run(service.history_service.list_history()) == history
+    assert service.history_service.active_event == active
+    assert service.history_service.session_id == session
+
+
+@pytest.mark.parametrize("stopped", [False, True])
+def test_reconciliation_outer_rollback_restores_history(real_client, stopped):
+    from server.app.repositories.database import run_transaction
+
+    client, _, player, service = real_client
+    start(client)
+    state = run(service.queue_manager.get_playback_state())
+    active = service.history_service.active_event
+    session = service.history_service.session_id
+    if stopped:
+        run(player.stop())
+    else:
+        run(player.play("b.flac"))
+
+    async def fail_after_reconcile(_connection):
+        await service.reconcile_external_status()
+        raise RuntimeError("outer transaction failure")
+
+    with pytest.raises(RuntimeError, match="outer transaction failure"):
+        run(
+            run_transaction(
+                service.queue_manager.queue_repository.path, fail_after_reconcile
+            )
+        )
+    assert run(service.queue_manager.get_playback_state()) == state
+    assert run(service.history_service.list_history()) == []
+    assert service.history_service.active_event == active
+    assert service.history_service.session_id == session
+    run(service.reconcile_external_status())
+    assert [
+        (event.song_id, event.reason)
+        for event in run(service.history_service.list_history())
+    ] == [("a", "STOP" if stopped else "SWITCH_AWAY")]
+
+
+@pytest.mark.parametrize("failure", ["play", "disconnected", "confirmation"])
+def test_next_skip_failure_rolls_back_and_same_key_retries(
+    real_client, monkeypatch, failure
+):
+    client, library, player, service = real_client
+    start(client)
+    song = run(library.get_song("b"))
+    run(library.upsert_song(song.model_copy(update={"availability_status": "MISSING"})))
+    before = run(service.queue_manager.queue_repository.get_snapshot())
+    state = run(service.queue_manager.get_playback_state())
+    active = service.history_service.active_event
+    actual_status = player.status
+    if failure == "play":
+        player.fail_next("play")
+    elif failure == "disconnected":
+        player.disconnect()
+    else:
+
+        async def wrong_status():
+            status = await actual_status()
+            if status.song_uri == "c.flac":
+                return status.model_copy(update={"song_uri": "wrong.flac"})
+            return status
+
+        monkeypatch.setattr(player, "status", wrong_status)
+    response = mutate(client, "POST", "/api/playback/next", key="skip-retry")
+    assert response.status_code == (503 if failure == "disconnected" else 502), (
+        response.text
+    )
+    assert run(service.queue_manager.queue_repository.get_snapshot()) == before
+    assert run(service.queue_manager.get_playback_state()) == state
+    assert run(service.history_service.list_history()) == []
+    assert service.history_service.active_event == active
+    player.reconnect()
+    monkeypatch.setattr(player, "status", actual_status)
+    retry = mutate(client, "POST", "/api/playback/next", key="skip-retry")
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["song_id"] == "c"
+    assert_synced(client, player)
+    snapshot = run(service.queue_manager.queue_repository.get_snapshot())
+    history = run(service.history_service.list_history())
+    replay = mutate(client, "POST", "/api/playback/next", key="skip-retry")
+    assert replay.json() == retry.json()
+    assert run(service.queue_manager.queue_repository.get_snapshot()) == snapshot
+    assert run(service.history_service.list_history()) == history
+
+
+def test_next_skips_unavailable_later_pending(real_client):
+    client, library, player, service = real_client
+    start(client)
+    song = run(library.get_song("c"))
+    run(library.upsert_song(song.model_copy(update={"availability_status": "MISSING"})))
+    response = mutate(client, "POST", "/api/playback/next", key="later-invalid")
+    assert response.status_code == 200, response.text
+    assert response.json()["song_id"] == "b"
+    assert not any(
+        item.song_id == "c" and item.position > 0
+        for item in run(service.queue_manager.list_items())
+    )
+    assert_synced(client, player)
+
+
+@pytest.mark.parametrize("candidate", [True, False])
+def test_next_unavailable_exhaustion_attempts_autoplay(
+    real_client, candidate, monkeypatch
+):
+    client, library, player, service = real_client
+    start(client)
+    for song_id in "abc":
+        song = run(library.get_song(song_id))
+        run(
+            library.upsert_song(
+                song.model_copy(update={"availability_status": "MISSING"})
+            )
+        )
+    if candidate:
+        run(library.upsert_song(Song(song_id="d", title="d", file_uri="d.flac")))
+    calls = []
+    actual_refill = service.autoplay.refill
+
+    async def refill(context):
+        calls.append(context)
+        return await actual_refill(context)
+
+    monkeypatch.setattr(service.autoplay, "refill", refill)
+    active = service.history_service.active_event
+    response = mutate(client, "POST", "/api/playback/next", key="exhaustion")
+    assert response.status_code == 200, response.text
+    assert len(calls) == 1
+    assert response.json()["song_id"] == ("d" if candidate else "a")
+    assert run(player.status()).song_uri == ("d.flac" if candidate else "a.flac")
+    if candidate:
+        assert service.history_service.active_event.song_id == "d"
+        assert [
+            (event.song_id, event.reason)
+            for event in run(service.history_service.list_history())
+        ] == [("a", "SWITCH_AWAY")]
+    else:
+        assert service.history_service.active_event == active
+        assert run(service.history_service.list_history()) == []
+    assert_synced(client, player)
+
+
+def test_next_skips_absent_pending_identity(real_client, monkeypatch, caplog):
+    client, _, player, service = real_client
+    start(client)
+    actual_get = service.library_repository.get_song
+
+    async def absent_b(song_id):
+        return None if song_id == "b" else await actual_get(song_id)
+
+    # Persisted Queue foreign keys prohibit deleting a referenced Song. Simulate
+    # the repository's absent lookup boundary without disabling DB constraints.
+    monkeypatch.setattr(service.library_repository, "get_song", absent_b)
+    response = mutate(client, "POST", "/api/playback/next", key="absent-pending")
+    assert response.status_code == 200, response.text
+    assert response.json()["song_id"] == "c"
+    assert "(song b): SONG_NOT_FOUND" in caplog.text
+    assert_synced(client, player)
+
+
+def test_next_transaction_serializes_stale_revision_mutation(real_client):
+    from server.app.repositories.queue_repository import QueueRevisionConflictError
+
+    client, _, player, service = real_client
+    items = start(client)
+    pending = next(item for item in items if item["song_id"] == "c")
+    snapshot = run(service.queue_manager.queue_repository.get_snapshot())
+
+    async def concurrent_mutations():
+        return await asyncio.gather(
+            service.next(),
+            service.reorder(
+                pending["queue_item_id"], expected_revision=snapshot.revision
+            ),
+            return_exceptions=True,
+        )
+
+    transition, stale = run(concurrent_mutations())
+    assert transition.song_id == "b"
+    assert isinstance(stale, QueueRevisionConflictError)
+    assert service.history_service.active_event.song_id == "b"
+    assert_synced(client, player)
+
+
+@pytest.mark.parametrize("initial", [True, False])
+def test_initial_or_skipping_next_terminal_failure_retries(real_client, initial):
+    import sqlite3
+
+    from server.app.repositories.database import run_transaction
+
+    client, library, player, service = real_client
+    endpoint = "/api/playback/tracks/a/play" if initial else "/api/playback/next"
+    if not initial:
+        start(client)
+        song = run(library.get_song("b"))
+        run(
+            library.upsert_song(
+                song.model_copy(update={"availability_status": "MISSING"})
+            )
+        )
+    snapshot = run(service.queue_manager.queue_repository.get_snapshot())
+    state = run(service.queue_manager.get_playback_state())
+    active = service.history_service.active_event
+    session = service.history_service.session_id
+    path = service.queue_manager.queue_repository.path
+    run(
+        run_transaction(
+            path,
+            lambda connection: connection.execute("""
+        CREATE TRIGGER fail_initial_or_skip BEFORE INSERT ON idempotency_records
+        WHEN NEW.idempotency_key = 'initial-or-skip'
+        BEGIN SELECT RAISE(ABORT, 'forced terminal failure'); END
+    """),
+        )
+    )
+    with pytest.raises(sqlite3.IntegrityError, match="forced terminal failure"):
+        mutate(client, "POST", endpoint, key="initial-or-skip")
+    assert run(service.queue_manager.queue_repository.get_snapshot()) == snapshot
+    assert run(service.queue_manager.get_playback_state()) == state
+    assert service.history_service.active_event == active
+    assert service.history_service.session_id == session
+    assert run(service.history_service.list_history()) == []
+    run(
+        run_transaction(
+            path,
+            lambda connection: connection.execute("DROP TRIGGER fail_initial_or_skip"),
+        )
+    )
+    retry = mutate(client, "POST", endpoint, key="initial-or-skip")
+    assert retry.status_code == 200, retry.text
+    assert service.history_service.active_event.song_id == ("a" if initial else "c")
+    history = run(service.history_service.list_history())
+    assert [(event.song_id, event.reason) for event in history] == (
+        [] if initial else [("a", "SWITCH_AWAY")]
+    )
+    assert_synced(client, player)
+
+
+@pytest.mark.parametrize("outer", [True, False])
+def test_cancelled_playback_restores_history_and_database(
+    real_client, monkeypatch, outer
+):
+    from server.app.repositories.database import run_transaction
+
+    client, _, _, service = real_client
+    start(client)
+    snapshot = run(service.queue_manager.queue_repository.get_snapshot())
+    state = run(service.queue_manager.get_playback_state())
+    active = service.history_service.active_event
+    session = service.history_service.session_id
+
+    async def cancel():
+        asyncio.current_task().cancel()
+        await asyncio.sleep(0)
+
+    async def stop_then_cancel(_connection):
+        await service.stop()
+        await cancel()
+
+    if outer:
+        action = run_transaction(
+            service.queue_manager.queue_repository.path, stop_then_cancel
+        )
+    else:
+        monkeypatch.setattr(service, "_sync_player_queue", cancel)
+        action = service.next()
+    with pytest.raises(asyncio.CancelledError):
+        run(action)
+    assert run(service.queue_manager.queue_repository.get_snapshot()) == snapshot
+    assert run(service.queue_manager.get_playback_state()) == state
+    assert run(service.history_service.list_history()) == []
+    assert service.history_service.active_event == active
+    assert service.history_service.session_id == session
