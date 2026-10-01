@@ -54,7 +54,7 @@ All-unavailable sources; empty vs absent source; real “未知” names vs synt
 - [x] Independently review entire Task 5 against specs and frozen routes/schema/status/idempotency/transaction contracts, tracing API → Service → Repository/PlayerPort, Playlist/Favorites, Queue/History, ordering/random context, read-only files and future Task isolation.
 - [x] Record any additional evidence/range before a necessary associated fix; independent/out-of-scope gaps block readiness and are not silently implemented.
 - [x] Run focused tests, API/Service/Repository aggregates, affected Task 2R/3/4 integration and services, complete `server/tests`, compileall, Ruff, diff/check/changed-files review using `.venv/bin/python` from root. Unexecuted checks cannot PASS.
-- [ ] Write corrective acceptance/handoff with actual commands/results and blockers. Commit and push only corrective scope; fresh fetch, ls-remote and remote commit read confirm published SHA. No main merge; no Batch 6 final commit.
+- [x] Write corrective acceptance/handoff with actual commands/results and blockers. Commit and push only corrective scope; fresh fetch, ls-remote and remote commit read confirm published SHA. No main merge; no Batch 6 final commit.
 
 ## Execution rulings / findings
 
@@ -69,3 +69,5 @@ All-unavailable sources; empty vs absent source; real “未知” names vs synt
 - Final review: independent read-only reviewer audited all Task 5 actual chains and found no blocker in A–C; two independent pre-existing Important gaps were confirmed again by root's `.venv/bin/python /tmp/task5-contract-audit.py`. They are retained as blockers: inconsistent PlaylistResponse membership; Queue reorder/delete/clear fail to synchronize PlayerPort, and current deletion leaves History stale. No unrelated implementation added.
 - Final fresh automated verification: corrective file 51 passed; Task 5 focused combined 141 passed; API 102 passed; services 155 passed; repositories 44 passed; affected Task 2R/3/4 + integration 144 passed; complete server/tests 354 passed. compileall/Ruff/diff-check passed. Exact commands and audit coverage belong in the corrective acceptance record.
 - Ruling: original Task 5 Steps 9–10 and Batch 6 remain unexecuted/unmodified. This corrective run's full-suite verification is required by the user's repair request; it does not close the overall Task 5 acceptance gate. Cost if wrong: falsely permitting final acceptance despite reproduced state/contract inconsistencies.
+
+- Repair publication verified: push succeeded; fresh fetch/ls-remote/remote commit read confirmed `a3fc1b1fe548652c81573204d7c214049ba921b7`; main unchanged. Final documentation publication is separately re-read in terminal handoff.

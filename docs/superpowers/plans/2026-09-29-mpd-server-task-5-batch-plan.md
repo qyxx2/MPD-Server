@@ -1673,3 +1673,15 @@ MPDAdapter，无无关修改或未来 Task 依赖。原 Task 5 Step 9/10 checkbo
 
 Batch 5 最终状态：**COMPLETE**（四项 corrective 有自动化覆盖，全部本地验收通过）。
 这不代表 Batch 6 或整个 Task 5 完成。
+
+## Pre-Batch-6 Contract / Architecture Corrective Re-audit（2026-10-01）
+
+- Fresh remote baseline was re-read: Task 5 feature HEAD `1912ea178d2ee31e92e289b937b6da5fd69b91c5`, main `43fa8999cee72c2ca7c88e2f8e3147b956d2525c`.
+- [Minimal corrective plan and compatibility supplement](2026-10-01-task-5-contract-architecture-corrective-plan.md) was recorded before implementation.
+- Source existence now consistently uses typed 404; valid empty/all-unavailable Collections remain distinct. Catalog aggregation belongs to LibraryService; missing/blank/unparseable category metadata has synthetic unknown view categories. Year summary value is nullable and source_id is provided; Song metadata is not fabricated.
+- Associated typed playback lookup correction closes absent Queue item play 400→404 and removes exception-message type classification.
+- Repair commit `a3fc1b1fe548652c81573204d7c214049ba921b7` was committed, pushed and re-read via fresh remote ref/fetch/commit inspection.
+- Fresh verification: corrective 51 passed; focused aggregate 141 passed; API 102 passed; services 155 passed; repositories 44 passed; affected Task 2R/3/4 + integration 144 passed; full server/tests 354 passed; compileall/Ruff/diff checks passed.
+- [Corrective acceptance and full Task 5 audit/handoff](2026-10-01-task-5-contract-architecture-corrective-acceptance.md) records the exact commands and two **independent blockers** reproduced with actual Services/SQLite/MockMPD: Queue reorder/delete/clear do not synchronize PlayerPort/History; PlaylistResponse membership differs between list/mutations and detail when members are unavailable.
+- Corrective scope/local automated validation: **COMPLETE**. Entire Task 5 readiness: **PARTIALLY COMPLETE — BLOCKED**. The earlier Batch 5 completion record is historical scoped evidence, not permission to bypass these current findings.
+- Original Task 5 Step 9–10 checkboxes remain untouched. Batch 6 final acceptance/commit was not executed. No main merge, PR or future Task implementation. Resolve the independent blockers in separately authorized corrective scope before entering Batch 6.
