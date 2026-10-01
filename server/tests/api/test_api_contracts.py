@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 from __future__ import annotations
 
 import ast
@@ -92,13 +93,15 @@ def test_api_does_not_import_repositories():
     for path in sorted(API_DIR.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                if node.module and node.module.startswith("server.app.repositories."):
-                    forbidden.append(f"{path.name}:{node.lineno}")
-            elif isinstance(node, ast.Import):
-                if any(
-                    alias.name.startswith("server.app.repositories.")
-                    for alias in node.names
-                ):
-                    forbidden.append(f"{path.name}:{node.lineno}")
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("server.app.repositories.")
+            ):
+                forbidden.append(f"{path.name}:{node.lineno}")
+            elif isinstance(node, ast.Import) and any(
+                alias.name.startswith("server.app.repositories.")
+                for alias in node.names
+            ):
+                forbidden.append(f"{path.name}:{node.lineno}")
     assert not forbidden, "API imports repository modules: " + ", ".join(forbidden)
