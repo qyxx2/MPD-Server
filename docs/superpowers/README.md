@@ -26,6 +26,16 @@
 
 只有需要追溯某项历史决定、旧测试证据或旧 commit 时，才读取 `archive/`。
 
+## Relationship / Invariant Test Gate
+
+主 Implementation Plan 的 `Cross-Module Relationship / Invariant Test Gate` 是所有当前和未来 Task/Batch 的强制验收规则。
+
+- 每个 Task、Batch、corrective 都要明确标记 `REQUIRED` 或 `N/A + 原因`。
+- 只要触及跨模块接口、状态同步、事务、表示一致性、事件顺序或 retry/idempotency，关系测试就是 REQUIRED。
+- Backend 新的可复用关系测试默认进入 `server/tests/invariants/`；完整 full-suite 不能替代显式 invariant gate。
+- 已完成并归档的 Task 不因新增规则自动重开；但后续工作一旦触及其合同，就必须运行矩阵中对应的历史 invariant regression。
+- 真实跨模块 defect 修复后必须留下机械保护，不能只在 acceptance 文档里描述“已审计”。
+
 ## plans/ 的内容规则
 
 `plans/` 只保存仍会影响下一次实现决策的文件。

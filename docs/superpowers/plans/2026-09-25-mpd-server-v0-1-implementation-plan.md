@@ -26,6 +26,10 @@
 > - Album artwork is represented by a persisted reference to embedded artwork and read on demand by the API. The original media file remains read-only.
 > - A valid sidecar LRC has priority over embedded lyrics. If the sidecar LRC exists but cannot be read or parsed, embedded lyrics may be used as fallback while the sidecar failure remains observable.
 
+> Plan Revision 3 (2026-10-01): executable cross-module relationship/invariant gate
+>
+> This revision adds a distinct test class for relationships between modules and authorities. Passing each module's unit tests is no longer sufficient when a Task/Batch changes a boundary, state transition, transaction, representation, or synchronization contract. Completed historical Tasks are not reopened solely by this revision; their rows in the Relationship-Test Matrix become regression obligations whenever later work touches those contracts.
+
 ## Global Constraints
 
 - MPD 固定按目标环境 0.23.5 实测，不假定新版本能力。
@@ -82,6 +86,52 @@ These rules apply to the entire implementation plan.
 10. A Task is complete only after behavior tests, dependency-boundary checks, diff review, and remote commit/ref verification.
 11. Historical RED checkpoints are development evidence; a completed Task does not need to remain permanently failing.
 12. Real music files are never used as mutable test fixtures. Tests use temporary copies or generated fixtures outside the real library root.
+
+---
+
+## Cross-Module Relationship / Invariant Test Gate
+
+This is a separate verification class from unit tests, endpoint tests, and broad full-suite regression.
+
+A **relationship/invariant test** must cross at least two independently owned modules, authorities, representations, or persisted/runtime states and assert the relationship that must remain true between them. Merely calling two components in one test does not satisfy this gate.
+
+Default locations:
+- Backend reusable relationship/invariant tests: `server/tests/invariants/`.
+- Existing integration tests may satisfy a named invariant when they explicitly assert it; new reusable invariants belong under `server/tests/invariants/`.
+- Web relationship tests are introduced by Task 8 in a dedicated location owned by the Web test harness; they must assert REST/WebSocket → store → UI/state relationships rather than component rendering alone.
+
+Required mechanics:
+1. Before every Task and every Batch/corrective, classify the relationship gate as `REQUIRED` or `N/A`.
+2. `REQUIRED` applies whenever scope changes or relies on a cross-module interface, authoritative-state synchronization, transaction boundary, resource representation, event ordering, retry/idempotency boundary, or persisted/runtime relationship.
+3. `N/A` is allowed only for genuinely isolated work that does not change or rely on a shared contract; the handoff records the reason.
+4. For `REQUIRED`, name the invariant(s) before implementation and run the smallest relevant relationship tests after focused GREEN. A failing relationship test blocks the Batch even when module-local tests pass.
+5. Task completion runs all relationship tests required by that Task plus affected earlier invariants. Final/release acceptance runs the complete applicable relationship/invariant suite.
+6. Relationship tests use real collaborating implementations where practical (for example SQLite Repository + Services + Mock/Fake PlayerPort) rather than mocking every boundary. Physical MPD/NAS/DAC checks remain separate acceptance unless explicitly required.
+7. Shared invariant assertion helpers are preferred when many operations must satisfy the same state relation. Property/state-machine tests are preferred when the invariant spans many legal sequences.
+8. A confirmed cross-module audit defect cannot be closed by production code alone. It must leave an executable relationship/invariant regression; when it exposes a broader rule, add a reusable invariant assertion/property/state-machine test rather than only one endpoint-specific example.
+9. Architecture boundaries that can be checked mechanically (for example API must not import repositories/SQLite/concrete MPDAdapter) belong in automated architecture relationship checks rather than prose-only review.
+
+### Relationship-Test Matrix
+
+| Task | Required cross-module relationship/invariant coverage |
+|---|---|
+| Task 0 | Historical foundation is not reopened. If deploy/static-serving wiring is later touched, verify Compose/FastAPI/Web serving together in Task 11/12. |
+| Task 1 | `PlayerPort` conformance across MockMPD and MPDAdapter; capability wrapper must not expose unverified transport behavior. |
+| Task 2 | Domain model ↔ SQLite ↔ Repository transaction/foreign-key semantics; Playlist/Favorites/History relationships remain independent. |
+| Task 1R | Extended Queue/Output/Stats transport contract remains behaviorally consistent across MockMPD, MPDAdapter and VerifiedPlayerPort. |
+| Task 2R | Migration/reconciliation ↔ LibraryRepository preserves Song identity plus Playlist/Favorites/History references across availability changes and rollback. |
+| Task 3 | media parser/filesystem → scanner → Repository atomic persistence → post-commit event/optional MPD update ordering; source media remains read-only. |
+| Task 4 | QueueRepository/PlaybackState ↔ QueueManager/PlaybackService ↔ PlayerPort ↔ History/AutoPlay remain mutually consistent across mutations and transitions. |
+| Task 5 | API ↔ Service ↔ Repository/PlayerPort; Playlist persisted membership ↔ all REST representations; Collection playable split remains distinct; idempotency rollback restores persisted and in-memory session state. |
+| Task 7 | OutputManager ↔ PlayerPort output state while preserving current Song/Queue/PlaybackContext/best-effort position and reconciling actual MPD state. |
+| Task 6 | authoritative Services → FullStateSnapshot/event publication → WebSocket delivery/reconnect; events occur post-commit and reconnect recovers from full state. |
+| Task 8 | REST/WebSocket state → typed client/store → Player UI; client never becomes Queue/AutoPlay authority and reconnect replaces stale local state. |
+| Task 9 | server-authoritative Queue/Library/Playlist/Favorites/Search ↔ Web actions/views; UI state must not reimplement conflicting business semantics. |
+| Task 10 | config → composition root; backup/restore write gate ↔ Repository writes; health reports FastAPI/SQLite/MPD independently. |
+| Task 11 | Git state → build → Compose deployment → healthcheck sequencing; a failed stage cannot be reported as a successful update. |
+| Task 12 | Full system chain across Web/API/Services/Repositories/PlayerPort/MPD/persistence/restart/reverse-proxy; all applicable relationship suites plus physical acceptance. |
+
+For already accepted historical Tasks, this matrix is a regression map, not a retroactive completion reset. A later Batch that touches one of these relationships must run the corresponding invariant tests even when the owning Task is already complete.
 
 ---
 
@@ -692,6 +742,7 @@ Files:
 - Create: server/tests/services/test_library_service.py
 - Create: server/tests/services/test_playlist_service.py
 - Create: server/tests/services/test_collection_service.py
+- Create/Extend: server/tests/invariants/* (Task 5 establishes the reusable backend relationship-test foundation)
 
 Service boundary:
 - LibraryService uses LibraryRepository and Scanner data contracts.
@@ -722,7 +773,7 @@ Idempotency:
 - [ ] Step 6: Implement REST schemas and endpoints.
 - [ ] Step 7: Implement request-ID/idempotency handling.
 - [ ] Step 8: Test validation, error mapping, artwork read failures and stable response schemas.
-- [ ] Step 9: Run full API/service tests and diff review.
+- [ ] Step 9: Establish/run the Task 5 cross-module relationship/invariant gate, then run full API/service tests, affected prior-Task regressions and diff review.
 - [ ] Step 10: Commit: feat: expose library and playback api.
 
 
@@ -761,7 +812,7 @@ Rules:
 - [ ] Step 3: Implement WebSocket connection manager and initial snapshot.
 - [ ] Step 4: Test disconnected clients.
 - [ ] Step 5: Test reconnect/full snapshot restoration.
-- [ ] Step 6: Run realtime tests and diff review.
+- [ ] Step 6: Run realtime tests, required Service/Snapshot/Event/WebSocket relationship invariants and diff review.
 - [ ] Step 7: Commit: feat: add realtime state synchronization.
 
 
@@ -797,7 +848,7 @@ Rules:
 - [ ] Step 5: Implement capability-gated output management.
 - [ ] Step 6: Implement MPD About using MPDCapabilities version and runtime stats/status.
 - [ ] Step 7: Test unknown-field behavior.
-- [ ] Step 8: Run focused tests, compile/lint and diff review.
+- [ ] Step 8: Run focused tests, required OutputManager/PlayerPort/playback-preservation relationship invariants, compile/lint and diff review.
 - [ ] Step 9: Commit: feat: add output manager and mpd info api.
 
 
@@ -839,7 +890,7 @@ Files:
 - [ ] Step 7: Implement playback controls and progress/seek.
 - [ ] Step 8: Implement album-art ↔ lyrics toggle and timestamp-synchronized LRC scrolling.
 - [ ] Step 9: Test UI state transitions and seek behavior.
-- [ ] Step 10: Run typecheck/component tests/build and diff review.
+- [ ] Step 10: Run typecheck/component tests, required REST/WebSocket → store → UI relationship tests, build and diff review.
 - [ ] Step 11: Commit: feat: add web player and state layer.
 
 
@@ -873,7 +924,7 @@ Files:
 - [ ] Step 10: Implement search by title, artist, album, album artist, genre and year.
 - [ ] Step 11: Implement Settings → About using MPD info API.
 - [ ] Step 12: Implement responsive bottom navigation and Player as default view.
-- [ ] Step 13: Run typecheck, component tests and production build.
+- [ ] Step 13: Run typecheck, component tests, required server-state ↔ Web action/view relationship tests and production build.
 - [ ] Step 14: Commit: feat: add library queue playlists search and settings.
 
 
@@ -928,7 +979,7 @@ Logging:
 - [ ] Step 6: Implement daily/manual backup/restore.
 - [ ] Step 7: Test health independently reports FastAPI/SQLite/MPD.
 - [ ] Step 8: Implement logging configuration and Docker rotation.
-- [ ] Step 9: Run config/backup/health tests and diff review.
+- [ ] Step 9: Run config/backup/health tests, required composition/backup-write-gate/health relationship invariants and diff review.
 - [ ] Step 10: Commit: feat: add config backup health and logging.
 
 
@@ -950,7 +1001,7 @@ Files:
 - [ ] Step 4: Never use destructive reset/checkout to overwrite NAS-local changes.
 - [ ] Step 5: Document stable-tag rollback.
 - [ ] Step 6: Run ShellCheck and disposable Git repository tests.
-- [ ] Step 7: Run deployment tests and diff review.
+- [ ] Step 7: Run deployment tests, required Git/build/Compose/health sequencing invariants and diff review.
 - [ ] Step 8: Commit: feat: add safe nas deployment updater.
 
 
@@ -973,13 +1024,14 @@ Files:
 - [ ] Step 5: Verify WebSocket reconnect and complete state restoration.
 - [ ] Step 6: Verify NAS reboot/container rebuild preserves SQLite/config/backup.
 - [ ] Step 7: Verify Synology reverse proxy HTTPS/WSS.
-- [ ] Step 8: Run complete local suite:
+- [ ] Step 8: Run complete local suite and all applicable cross-module relationship/invariant suites:
 ~~~text
 make test
 make lint
 make typecheck
 make build
 ~~~
+The release gate must additionally execute the complete backend invariant suite and the Web relationship suite introduced by Task 8/9; a unit-only green run is insufficient.
 - [ ] Step 9: Deploy with update.sh and complete real-device acceptance.
 - [ ] Step 10: Fix all discovered discrepancies through tests before release.
 - [ ] Step 11: Create annotated Git tag v0.1.0 only after verification.
@@ -1018,6 +1070,7 @@ make build
 ## Pre-Task Acceptance Gate
 
 Before starting any Task:
+0. Read the Relationship-Test Matrix and classify the Task relationship gate as REQUIRED or N/A with a concrete reason.
 1. Confirm every listed dependency is complete and its commit is reachable.
 2. Confirm every imported contract exists on the current branch.
 3. Confirm required schema version/features exist.
@@ -1025,6 +1078,12 @@ Before starting any Task:
 5. Confirm the Task does not import a later Task.
 6. Confirm intended files are within the Task's allowed file list.
 7. Run the smallest relevant existing regression suite before modifications.
+
+Before starting each Batch/corrective inside a Task:
+1. Classify its relationship gate as REQUIRED or N/A.
+2. If REQUIRED, name the exact matrix relationship/invariant(s) and the test file/command that will prove them.
+3. If the needed invariant test does not exist, creating the smallest reusable relationship test is part of that Batch; do not defer it to final audit.
+4. A Batch cannot be accepted from module-local focused tests alone when its relationship gate is REQUIRED.
 
 After each Step:
 1. Run focused verification.
@@ -1034,12 +1093,13 @@ After each Step:
 
 Before Task completion:
 1. Run Task-focused tests.
-2. Run relevant prior-Task regression tests.
-3. Run applicable global tests/lint/typecheck/build.
-4. Review diff for unrelated changes.
-5. Verify branch name.
-6. Verify the commit exists on the remote ref after the write.
-7. Only then check the Task in the plan.
+2. Run every REQUIRED relationship/invariant test for this Task and every affected earlier matrix row.
+3. Run relevant prior-Task regression tests.
+4. Run applicable global tests/lint/typecheck/build.
+5. Review diff for unrelated changes.
+6. Verify branch name.
+7. Verify the commit exists on the remote ref after the write.
+8. Only then check the Task in the plan.
 
 ## Five Highest-Risk Tests
 
