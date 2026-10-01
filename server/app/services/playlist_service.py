@@ -11,6 +11,15 @@ from server.app.repositories.playlist_repository import (
 )
 
 
+__all__ = [
+    "DuplicatePlaylistSongError",
+    "PlaylistNotFoundError",
+    "SystemPlaylistModificationError",
+    "PlaylistRepositoryPort",
+    "PlaylistService",
+]
+
+
 class PlaylistRepositoryPort(Protocol):
     async def create_playlist(self, name: str) -> Playlist: ...
     async def list_playlists(self) -> list[Playlist]: ...

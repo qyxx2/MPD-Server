@@ -14,6 +14,14 @@ from server.app.repositories.queue_repository import (
 )
 
 
+__all__ = [
+    "CurrentTrackDeletionError",
+    "QueueItemNotFoundError",
+    "QueueRevisionConflictError",
+    "QueueManager",
+]
+
+
 class QueueManager:
     """Owns Queue business semantics without becoming the MPD orchestrator."""
 
