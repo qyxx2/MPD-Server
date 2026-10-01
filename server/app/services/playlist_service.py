@@ -4,7 +4,11 @@ from collections.abc import Iterable
 from typing import Protocol
 
 from server.app.models.playlist import Playlist
-from server.app.repositories.playlist_repository import PlaylistNotFoundError
+from server.app.repositories.playlist_repository import (
+    DuplicatePlaylistSongError,
+    PlaylistNotFoundError,
+    SystemPlaylistModificationError,
+)
 
 
 class PlaylistRepositoryPort(Protocol):
