@@ -51,8 +51,7 @@ def test_observation_uses_current_alsa_fact_without_control_capability(enabled, 
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("enabled", [False, True])
-def test_nas_control_is_explicitly_unavailable_in_read_only_batch(enabled):
+def test_nas_disable_is_explicitly_unavailable_before_its_batch():
     async def run():
         class NoCallsPlayer:
             async def outputs(self):
@@ -66,7 +65,7 @@ def test_nas_control_is_explicitly_unavailable_in_read_only_batch(enabled):
             operation_runner=no_runner,
         )
         with pytest.raises(OutputError) as error:
-            await manager.set_enabled(OutputMode.NAS_DAC, enabled)
+            await manager.set_enabled(OutputMode.NAS_DAC, False)
         assert error.value.code == "OUTPUT_CONTROL_UNAVAILABLE"
 
     asyncio.run(run())

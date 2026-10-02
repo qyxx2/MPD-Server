@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from time import monotonic
 from typing import TypeVar
 
-from server.app.models.output import OutputMode, OutputSnapshot, OutputState
+from server.app.models.output import (
+    OutputMode,
+    OutputRequestState,
+    OutputSnapshot,
+    OutputState,
+)
 from server.app.player.capabilities import MPDCapabilities
 from server.app.player.models import OutputInfo, PlayerState
 from server.app.player.ports import PlayerCommandError, PlayerPort, PlayerUnavailable
-from server.app.services.events import EventPublisher
+from server.app.services.events import EventPublisher, OutputChangedEvent
 from server.app.services.output_operation import (
     OutputOperationLifecycle,
     OutputOperationRunner,
@@ -26,7 +32,7 @@ class OutputError(RuntimeError):
 
 
 class OutputManager:
-    """Observe MPD output facts without taking ownership of playback state."""
+    """Coordinate selected MPD output facts while preserving playback ownership."""
 
     def __init__(
         self,
@@ -45,6 +51,7 @@ class OutputManager:
         self.event_publisher = event_publisher
         self.monotonic_clock = monotonic_clock
         self._nas_observation: OutputState | None = None
+        self._last_request: OutputRequestState | None = None
 
     async def get_state(self) -> OutputSnapshot:
         async def observe(_lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
@@ -109,7 +116,83 @@ class OutputManager:
     async def set_enabled(self, mode: OutputMode, enabled: bool) -> OutputSnapshot:
         if mode == OutputMode.CLIENT_STREAM:
             raise OutputError("OUTPUT_MODE_UNSUPPORTED", "Client streaming is not supported in v0.1")
-        raise OutputError("OUTPUT_CONTROL_UNAVAILABLE", "NAS output control is not implemented yet")
+        if not enabled:
+            raise OutputError("OUTPUT_CONTROL_UNAVAILABLE", "NAS disable is not implemented yet")
+
+        async def execute(lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
+            self._last_request = OutputRequestState(
+                mode=mode, enabled=True, status="PREPARING", updated_at=datetime.now(timezone.utc),
+            )
+            request = self._last_request
+
+            def rollback_request() -> None:
+                if self._last_request is request:
+                    self._fail_request(OutputError(
+                        "OUTPUT_TRANSACTION_FAILED", "Output request transaction did not commit",
+                    ))
+                    if self._nas_observation is not None:
+                        self._nas_observation.stale = True
+
+            lifecycle.on_rollback(rollback_request)
+            try:
+                return await self._enable(lifecycle)
+            except (Exception, asyncio.CancelledError) as exc:
+                self._fail_request(exc)
+                await self._observe()
+                raise
+
+        return await self.operation_runner(execute)
+
+    def _fail_request(self, exc: BaseException) -> None:
+        code = (
+            exc.code if isinstance(exc, OutputError)
+            else "OUTPUT_CANCELLED" if isinstance(exc, asyncio.CancelledError)
+            else "PLAYER_UNAVAILABLE" if isinstance(exc, PlayerUnavailable)
+            else "PLAYER_COMMAND_ERROR" if isinstance(exc, PlayerCommandError)
+            else "OUTPUT_OPERATION_FAILED"
+        )
+        self._last_request = self._last_request.model_copy(update={
+            "status": "SWITCH_FAILED", "error_code": code, "error_message": str(exc),
+            "updated_at": datetime.now(timezone.utc),
+        })
+
+    async def _enable(self, lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
+        for operation in ("outputs", "set_output_enabled", "status", "queue_entries"):
+            if not self.capabilities.supports_operation(operation):
+                raise OutputError(
+                    "OUTPUT_CAPABILITY_UNVERIFIED", f"Output operation requires {operation}",
+                )
+        changed = False
+
+        async def enable(_lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
+            nonlocal changed
+            outputs = tuple(output.model_copy(deep=True) for output in await self.player.outputs())
+            self._observe_outputs(outputs, datetime.now(timezone.utc))
+            target = self._select_target(outputs)
+            changed = not target.enabled
+            if changed:
+                await self.player.set_output_enabled(target.id, True)
+            confirmed = tuple(await self.player.outputs())
+            self._observe_outputs(confirmed, datetime.now(timezone.utc))
+            actual = self._select_target(confirmed)
+            expected = tuple(
+                output.model_copy(update={"enabled": True}) if output.id == target.id else output
+                for output in outputs
+            )
+            if actual.id != target.id or not actual.enabled or confirmed != expected:
+                raise OutputError(
+                    "OUTPUT_RECONCILIATION_FAILED", "MPD output state did not confirm enable",
+                )
+            return self._snapshot(self._nas_observation, datetime.now(timezone.utc))
+
+        snapshot = await self._run_preserved_operation(enable)
+        self._last_request.status = "SUCCEEDED"
+        self._last_request.updated_at = datetime.now(timezone.utc)
+        snapshot.last_request = self._last_request.model_copy(deep=True)
+        if changed and self.event_publisher is not None:
+            event = OutputChangedEvent(snapshot=snapshot)
+            lifecycle.on_commit(lambda: self.event_publisher.publish(event))
+        return snapshot
 
     async def _observe(self) -> OutputSnapshot:
         now = datetime.now(timezone.utc)
@@ -131,8 +214,11 @@ class OutputManager:
             nas.error_message = str(exc)
             return self._snapshot(nas, now)
 
+        return self._observe_outputs(tuple(outputs), now)
+
+    def _observe_outputs(self, outputs: tuple[OutputInfo, ...], now: datetime) -> OutputSnapshot:
         try:
-            target = self._select_target(tuple(outputs))
+            target = self._select_target(outputs)
         except OutputError as exc:
             nas = OutputState(
                 mode=OutputMode.NAS_DAC, status="UNAVAILABLE",
@@ -148,7 +234,7 @@ class OutputManager:
 
     def _snapshot(self, nas: OutputState, now: datetime) -> OutputSnapshot:
         return OutputSnapshot(states=(
-            nas,
+            nas.model_copy(deep=True),
             OutputState(
                 mode=OutputMode.CLIENT_STREAM,
                 status="UNAVAILABLE",
@@ -156,7 +242,7 @@ class OutputManager:
                 error_message="Client streaming is not supported in v0.1",
                 updated_at=now,
             ),
-        ))
+        ), last_request=self._last_request.model_copy(deep=True) if self._last_request else None)
 
     def _select_target(self, outputs: tuple[OutputInfo, ...]) -> OutputInfo:
         candidates = tuple(output for output in outputs if output.plugin == "alsa")
