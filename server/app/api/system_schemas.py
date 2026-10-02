@@ -1,10 +1,15 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictBool
 from pydantic.alias_generators import to_camel
 
 from server.app.models.output import OutputMode
+
+
+class OutputSetRequest(BaseModel):
+    mode: OutputMode
+    enabled: StrictBool
 
 
 class OutputStateResponse(BaseModel):

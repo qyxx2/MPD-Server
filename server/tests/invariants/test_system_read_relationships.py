@@ -228,5 +228,5 @@ def test_system_composition_uses_injected_capabilities_without_probe(tmp_path, m
         paths = client.get("/openapi.json").json()["paths"]
         assert {path: set(operations) for path, operations in paths.items()
                 if path.startswith("/api/system/")} == {
-            "/api/system/output": {"get"}, "/api/system/mpd": {"get"},
+            "/api/system/output": {"get", "put"}, "/api/system/mpd": {"get"},
         }
