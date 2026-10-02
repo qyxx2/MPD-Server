@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories → MPD/SQLite`。
 
-当前 `main` 已完成 Task 0–4；`feature/task-5-library-api` 正在实施 Task 5。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
+当前 `main` 已完成 Task 0–4；`feature/task-5-library-api` 已完成 Task 5 final acceptance，待 PR/main merge 审查。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
 
 ## 当前状态
 
@@ -13,7 +13,7 @@ Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories →
 | 2 / 2R | 已完成 | SQLite、Library/Playlist/Favorites/History、reconciliation persistence |
 | 3 | 已完成 | 元数据、歌词、扫描、watch/scheduler、artwork lifecycle |
 | 4 | 已完成 | Queue、PlaybackContext、History、AutoPlay、PlaybackService |
-| 5 | 进行中 | Collection、Library/Playlist Service、REST API；Batch 1–5 已完成，进入 Batch 6 前仍有 C/D corrective blocker |
+| 5 | 分支验收完成，未合并 main | Collection、Library/Playlist Service、REST API；Batch 6 final acceptance 已通过 |
 | 6–12 | 未开始 | Realtime、Output、Web/PWA、配置/部署及最终实机验收 |
 
 Task 5 当前 Gate 只看：

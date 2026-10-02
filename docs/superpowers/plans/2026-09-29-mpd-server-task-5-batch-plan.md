@@ -18,12 +18,12 @@ Branch: `feature/task-5-library-api`
 - Contract Audit：完成；
 - Batch 1–5：完成；
 - Pre-Batch-6 A/B corrective：完成；
-- Batch 6：**NOT EXECUTED**（E 与 invariant foundation 前置 Gate 已通过）；
+- Batch 6：**COMPLETE**（final acceptance Gate GREEN）；
 - Task 5 relationship/invariant foundation：**COMPLETE**；relationship gate 仍为 **REQUIRED**；
-- A/B/C/D/E corrective 已关闭；本轮 I2 insertion confirmation finding 已修复，无已知未关闭 blocking finding；
-- 原 Implementation Plan Task 5 Step 9–10 保持未完成，直到 blocker 关闭并通过 Batch 6。
+- A/B/C/D/E corrective 已关闭；Batch 6 pending duplicate occurrence corrective 已关闭，无已知未关闭 blocking finding；
+- 原 Implementation Plan Task 5 Step 9–10 已完成；Task 5 final acceptance 与 PR/main merge 保持独立状态。
 
-当前 blocker 的唯一 active handoff：
+当前验收证据的唯一 handoff：
 `2026-10-01-task-5-contract-architecture-corrective-acceptance.md`。
 
 ## 2. Dependency 与范围
@@ -196,13 +196,15 @@ Batch 6 不新增业务语义。其 Contract Matrix gate 为 **REQUIRED**，上�
 | C/D corrective | pre-Batch-6 | COMPLETE | History rollback + Next unavailable successor；证据见 archive/task-5/ |
 | E corrective | pre-Batch-6 | CLOSED | Stop confirmation；relationship gate REQUIRED |
 | Invariant foundation | Step 9 prerequisite | COMPLETE | I1–I5 reusable cross-module tests under `server/tests/invariants/` |
-| Batch 6 | Step 9–10 | NOT EXECUTED | final acceptance + full invariant gate + final Task 5 commit |
+| Batch 6 | Step 9–10 | COMPLETE | final acceptance + full invariant gate + final Task 5 commit |
 
 已完成 Batch 的逐步 RED/GREEN、commit、命令输出不再追加到本文件；需要追溯时读取 `archive/task-5/`。
 
-## 5. 当前进入 Batch 6 的 Gate
+## 5. Batch 6 Final Acceptance Gate
 
-当前 handoff 的 blocking finding 已关闭，I1–I5 foundation Gate 已通过；具备进入 Batch 6 的前置证据。本轮只完成 corrective/foundation，不执行 Batch 6、不勾选 Task 5 Step 9/10。
+Batch 6 已执行并通过：Relationship / Contract Matrix、I1–I5、11 行 traceability、Task 5 focused、affected Task 2R/3/4 regression、full server tests、compileall、Ruff、architecture、diff review 与 future-task isolation。最新可复现证据仅在上述唯一 handoff 中记录，不向本文件追加执行日志。
+
+Task 5 已完成，可进入 PR/main merge 审查；尚未创建 PR 或合并 main。以下冻结 Gate 继续作为后续触及 Task 5 合同时的 regression obligations。
 
 E corrective 的 relationship gate 为 **REQUIRED**：Stop 的成功不能只由 History/SQLite 局部结果证明，必须通过关系测试证明 PlayerPort 最终确认 STOPPED 后才允许关闭 active History；失败/未确认时 History 与 authoritative playback state 不得伪装成功。
 

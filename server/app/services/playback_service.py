@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Concatenate, ParamSpec, TypeVar
@@ -173,12 +173,13 @@ class PlaybackService:
         expected_revision: int | None = None,
     ) -> list[QueueItem]:
         async def operation(_connection):
+            previous_items = await self.queue_manager.list_items()
             items = await self.queue_manager.reorder(
                 queue_item_id,
                 before_queue_item_id,
                 expected_revision=expected_revision,
             )
-            await self._sync_player_queue()
+            await self._sync_player_queue(previous_items=previous_items)
             await self._confirm_preserved_state()
             return items
 
@@ -217,7 +218,7 @@ class PlaybackService:
                     persist_state=False,
                 )
                 await self._refill_empty_pending()
-                await self._sync_player_queue()
+                await self._sync_player_queue(previous_items=snapshot.items)
                 await self._confirm_preserved_state()
                 return None
 
@@ -504,18 +505,53 @@ class PlaybackService:
             )
         return status
 
-    async def _sync_player_queue(self) -> None:
+    async def _sync_player_queue(
+        self, *, previous_items: Sequence[QueueItem] | None = None,
+    ) -> None:
         desired = await self._desired_song_uris()
         current = await self.player.queue_entries()
+        retained_ids: dict[str, int] | None = None
+        if previous_items is not None:
+            previous_execution = sorted(
+                (item for item in previous_items if item.position >= 0),
+                key=lambda item: item.position,
+            )
+            previous_uris = []
+            for item in previous_execution:
+                song = await self.library_repository.get_song(item.song_id)
+                previous_uris.append(song.file_uri if song else None)
+            # Bind before mutation only when the player still executes that Queue.
+            # A failed earlier command may require URI reconciliation on retry.
+            if previous_uris == [entry.song_uri for entry in current]:
+                retained_ids = {
+                    item.queue_item_id: entry.mpd_song_id
+                    for item, entry in zip(previous_execution, current, strict=True)
+                }
+        execution = sorted(
+            (item for item in await self.queue_manager.list_items() if item.position >= 0),
+            key=lambda item: item.position,
+        )
         for position, song_uri in enumerate(desired):
-            if position < len(current) and current[position].song_uri == song_uri:
+            retained_id = (
+                retained_ids.get(execution[position].queue_item_id)
+                if retained_ids is not None else None
+            )
+            if position < len(current) and (
+                current[position].mpd_song_id == retained_id
+                if retained_ids is not None
+                else current[position].song_uri == song_uri
+            ):
                 continue
 
             source_index = next(
                 (
                     index
                     for index in range(position, len(current))
-                    if current[index].song_uri == song_uri
+                    if (
+                        current[index].mpd_song_id == retained_id
+                        if retained_ids is not None
+                        else current[index].song_uri == song_uri
+                    )
                 ),
                 None,
             )

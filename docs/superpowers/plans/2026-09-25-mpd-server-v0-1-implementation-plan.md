@@ -816,16 +816,16 @@ Idempotency:
 - Mutating API operations that may be retried carry a request ID.
 - Idempotency storage and lookup are implemented within this Task; no later Task is required.
 
-- [ ] Step 1: RED tests for every Collection source.
-- [ ] Step 2: RED tests for default ordering and fixed random order within PlaybackContext.
-- [ ] Step 3: RED tests for explicit empty-collection behavior.
-- [ ] Step 4: RED tests for Service/Repository boundaries.
-- [ ] Step 5: Implement LibraryService, PlaylistService and CollectionService.
-- [ ] Step 6: Implement REST schemas and endpoints.
-- [ ] Step 7: Implement request-ID/idempotency handling.
-- [ ] Step 8: Test validation, error mapping, artwork read failures and stable response schemas.
-- [ ] Step 9: Establish/run the Task 5 cross-module relationship/invariant gate, then run full API/service tests, affected prior-Task regressions and diff review.
-- [ ] Step 10: Commit: feat: expose library and playback api.
+- [x] Step 1: RED tests for every Collection source.
+- [x] Step 2: RED tests for default ordering and fixed random order within PlaybackContext.
+- [x] Step 3: RED tests for explicit empty-collection behavior.
+- [x] Step 4: RED tests for Service/Repository boundaries.
+- [x] Step 5: Implement LibraryService, PlaylistService and CollectionService.
+- [x] Step 6: Implement REST schemas and endpoints.
+- [x] Step 7: Implement request-ID/idempotency handling.
+- [x] Step 8: Test validation, error mapping, artwork read failures and stable response schemas.
+- [x] Step 9: Establish/run the Task 5 cross-module relationship/invariant gate, then run full API/service tests, affected prior-Task regressions and diff review.
+- [x] Step 10: Commit: feat: expose library and playback api.
 
 
 

@@ -10,6 +10,46 @@ from server.tests.invariants.assertions import (
 from server.tests.support.playback import mutate, run, start
 
 
+@pytest.mark.parametrize("operation", ["reorder", "delete"])
+def test_same_uri_pending_mutation_preserves_occurrence_identity(real_client, operation):
+    """PB-REORDER-001/PB-DELETE-PENDING-001: URI equality is not identity."""
+    client, _, player, service = real_client
+    start(client)
+    assert mutate(client, "POST", "/api/playback/songs/b/queue").status_code == 200
+    items = run(service.queue_manager.list_items())
+    duplicates = [i for i in items if i.position > 0 and i.song_id == "b"]
+    assert len(duplicates) >= 2
+    selected = duplicates[0]
+    current = next(i for i in items if i.position == 0)
+    before = assert_execution_relationship(service, player)
+    state = run(service.queue_manager.get_playback_state())
+    history = server_snapshot(service)[2:]
+    path = f"/api/playback/queue/items/{selected.queue_item_id}"
+    method = "PUT" if operation == "reorder" else "DELETE"
+    body = {} if operation == "reorder" else None
+    response = mutate(client, method, path, body)
+    assert response.status_code == (200 if operation == "reorder" else 204)
+    after = assert_execution_relationship(service, player, current_id=current.queue_item_id)
+    retained = set(before) - ({selected.queue_item_id} if operation == "delete" else set())
+    assert set(after) == retained
+    assert {i: after[i].mpd_song_id for i in retained} == {
+        i: before[i].mpd_song_id for i in retained
+    }
+    if operation == "delete":
+        assert before[selected.queue_item_id].mpd_song_id not in {
+            entry.mpd_song_id for entry in run(player.queue_entries())
+        }
+    else:
+        assert after[selected.queue_item_id].position == len(after) - 1
+    assert run(service.queue_manager.get_playback_state()) == state
+    assert server_snapshot(service)[2:] == history
+    final = server_snapshot(service)
+    entries = run(player.queue_entries())
+    assert mutate(client, method, path, body).status_code == response.status_code
+    assert server_snapshot(service) == final
+    assert run(player.queue_entries()) == entries
+
+
 @pytest.mark.parametrize("operation", ["reorder", "delete", "clear"])
 def test_duplicate_execution_occurrences_survive_mutation(real_client, operation):
     client, _, player, service = real_client
