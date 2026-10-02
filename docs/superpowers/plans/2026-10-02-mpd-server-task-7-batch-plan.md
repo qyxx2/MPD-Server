@@ -17,7 +17,7 @@
 - Task 1R `03f4de9`（transport 完成）、Task 4 corrective `86975d6` 均经 `git merge-base --is-ancestor <commit> HEAD` 验证可达。main 已含 Task 5 merge。代码/测试证据见 §2；提交可达不等于本窗口重新跑过测试。
 - M Dependency Matrix：Task 7 依赖 1R + 4；Task 6 依赖 3 + 4 + 5 + 7。Task 7 先于 Task 6。
 - Relationship Gate：**REQUIRED**；Contract Matrix Gate：**REQUIRED**。涉及外部输出事实、播放保留、HTTP 表示、外层事务和事件顺序。
-- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4 已完成提交通知基础设施局部验收。B5 pre-flight 已确认 lifecycle 技术接口缺口：现有 runner 只能执行无参 callback，无法在不泄漏 DB path/私有事务状态的前提下注册 B4 的 commit/rollback hooks；该缺口由后续 B4.5 修复；B5 当前状态见本节末及 B5 局部验收。B4.5 corrective 已完成显式 lifecycle 注入接口及局部关系验收；B5 enable 已完成本地 Service acceptance；B6 disable 已完成本地 Service acceptance；B7–B9 均 NOT STARTED。O-STATE-001/O-FAIL-001/O-PRESERVE-001 的 Service 两操作 proof 已通过，O-TX-001/O-EVENT-001 最终 integration proof 仍 pending B8，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-6-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
+- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4 已完成提交通知基础设施局部验收。B5 pre-flight 已确认 lifecycle 技术接口缺口：现有 runner 只能执行无参 callback，无法在不泄漏 DB path/私有事务状态的前提下注册 B4 的 commit/rollback hooks；该缺口由后续 B4.5 修复；B5 当前状态见本节末及 B5 局部验收。B4.5 corrective 已完成显式 lifecycle 注入接口及局部关系验收；B5 enable 已完成本地 Service acceptance；B6 disable 已完成本地 Service acceptance；B7 已完成 System read API 本地 acceptance；B8–B9 均 NOT STARTED。O-STATE-001/O-FAIL-001/O-PRESERVE-001 的 Service 两操作 proof 已通过，O-TX-001/O-EVENT-001 最终 integration proof 仍 pending B8，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-6-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
 - 规划审计环境曾返回 `No module named pytest`，未跑测试。B1 使用现有 `.venv` 完成本地验证，未安装/修改依赖、未访问真实 NAS；fresh evidence 见上述归档，不沿用规划环境结论。
 
 ### Global Constraints
@@ -64,7 +64,7 @@
 | R-ARCH | `server/tests/invariants/test_architecture_relationships.py::test_dependency_direction_preserves_repository_and_player_authorities` |
 | R-PL | `server/tests/invariants/test_playlist_relationships.py::test_persisted_membership_matches_every_representation_and_collection_split` |
 
-审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；B2 已创建 models/mpd_info.py、services/mpd_info_service.py、test_mpd_info_service.py 和 F2 test_mpd_info_relationships.py。B3 已创建 F3 test_output_serialization.py 并实现 runner/guard。B4 已创建 F4 test_output_event_transactions.py 和 test_transaction_commit_hooks.py，实现 commit hook/OutputChangedEvent 基础。B5 已创建 F5 test_output_enable.py 与 test_output_transport.py；B6 已创建 F6 test_output_disable.py。api/system.py、api/system_schemas.py 以及 F7–F9、`test_system_*` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
+审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；B2 已创建 models/mpd_info.py、services/mpd_info_service.py、test_mpd_info_service.py 和 F2 test_mpd_info_relationships.py。B3 已创建 F3 test_output_serialization.py 并实现 runner/guard。B4 已创建 F4 test_output_event_transactions.py 和 test_transaction_commit_hooks.py，实现 commit hook/OutputChangedEvent 基础。B5 已创建 F5 test_output_enable.py 与 test_output_transport.py；B6 已创建 F6 test_output_disable.py。B7 已创建 api/system.py、api/system_schemas.py、test_system_reads.py 和 F7 test_system_read_relationships.py；F8–F9 和 mutation API tests 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
 
 ## 3. Contract Gap resolution（先于 Matrix 和 Batch）
 
@@ -247,7 +247,7 @@ B5 pre-flight 对当前实现与 §5 冻结接口复核后确认：B4 已提供 
 
 不得在接口冻结 Batch 写占位“成功”实现；不可用路径必须明确拒绝。内部 helper 名称可在所属 Batch RED 后决定，不得改变上述跨 Batch 合同。
 
-## 6. 新 invariant proof register（F1–F6/F4L 及 transport 已存在；F7–F9 TO CREATE）
+## 6. 新 invariant proof register（F1–F7/F4L 及 transport 已存在；F8–F9 TO CREATE）
 
 | ID | TO CREATE 文件与函数 | 必须跨越的真实关系 / 核心断言 | owner / final proof |
 |---|---|---|---|
@@ -369,6 +369,7 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - 禁止：PUT 路由、幂等/事务规则改写、未来 config loader/dev-prod 重构、WebSocket/Web/真实 NAS 操作。
 - Acceptance：F7/R-ARCH/R-PL、`server/tests/test_health.py`、既有 `server/tests/api/test_api_contracts.py` GREEN；GET 无 Idempotency-Key 也合法、null/0 原样保留。未验证 capability 时不谎报 ready。
 - Complexity：1 row，2 边界，0 写转换，4 production files，约 170–270 行。4 文件都是同一 read representation+DI，不能在此展开第二生命周期或配置系统。
+- 当前局部验收：System GET nullable/0/完整表示、fresh/stale/request 与独立来源错误、共享 PlayerPort/runner/capabilities/selector/publisher、无能力/断线启动及无 probe/写入已通过；fresh evidence、范围/traceability 和独立审查见 `../archive/task-7/2026-10-02-task-7-batch-7-acceptance.md`。仅 SYS-READ-001 完成；B8 mutation/最终事务和 B9 gate 未实施。
 
 ### B8 — 输出 mutation REST 与外层事务最终 proof
 
