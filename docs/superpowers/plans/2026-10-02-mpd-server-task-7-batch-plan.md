@@ -17,7 +17,7 @@
 - Task 1R `03f4de9`（transport 完成）、Task 4 corrective `86975d6` 均经 `git merge-base --is-ancestor <commit> HEAD` 验证可达。main 已含 Task 5 merge。代码/测试证据见 §2；提交可达不等于本窗口重新跑过测试。
 - M Dependency Matrix：Task 7 依赖 1R + 4；Task 6 依赖 3 + 4 + 5 + 7。Task 7 先于 Task 6。
 - Relationship Gate：**REQUIRED**；Contract Matrix Gate：**REQUIRED**。涉及外部输出事实、播放保留、HTTP 表示、外层事务和事件顺序。
-- 规划审计窗口状态：Contract Audit / Matrix / Batch Planning，未实施 production/test。当前 B1 已完成只读/拒绝局部验收；B2–B9 NOT STARTED，O-STATE-001 请求转换仍 pending B5/B6，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
+- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3–B9 NOT STARTED，O-STATE-001 请求转换仍 pending B5/B6，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
 - 规划审计环境曾返回 `No module named pytest`，未跑测试。B1 使用现有 `.venv` 完成本地验证，未安装/修改依赖、未访问真实 NAS；fresh evidence 见上述归档，不沿用规划环境结论。
 
 ### Global Constraints
@@ -64,7 +64,7 @@
 | R-ARCH | `server/tests/invariants/test_architecture_relationships.py::test_dependency_direction_preserves_repository_and_player_authorities` |
 | R-PL | `server/tests/invariants/test_playlist_relationships.py::test_persisted_membership_matches_every_representation_and_collection_split` |
 
-审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；其它 models/mpd_info.py、services/mpd_info_service.py、api/system.py、api/system_schemas.py 以及 F2–F9/transport、`test_mpd_info_*` / `test_system_*` / `test_transaction_commit_hooks.py` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
+审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；B2 已创建 models/mpd_info.py、services/mpd_info_service.py、test_mpd_info_service.py 和 F2 test_mpd_info_relationships.py。api/system.py、api/system_schemas.py 以及 F3–F9/transport、`test_system_*` / `test_transaction_commit_hooks.py` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
 
 ## 3. Contract Gap resolution（先于 Matrix 和 Batch）
 
@@ -284,6 +284,7 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - RED/invariants：TO CREATE test_mpd_info_service.py + F2；统计样本与 runtime 不同、0/null、partial failure、拒绝/断线分开、更新读取不触发 update。
 - 允许 production：TO CREATE models/mpd_info.py、services/mpd_info_service.py。禁止：输出控制、probe 写入、API、NAS 监控、配置/部署。
 - Acceptance：F2 GREEN、R-PORT step5/6/7，确认 MPDStats 七字段无缺失、无伪造/缓存实时统计。
+- 当前局部验收：fresh GREEN、RED 记录及范围审查见 `../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`；INFO-READ-001 Service proof 完成，REST 表示仍由 B7/F7 验收。
 - Complexity：1 row，2 读取来源边界，0 状态转换，2 files，约 100–180 行；RED/GREEN 按一个数据来源定位。
 
 ### B3 — 共同串行化与播放保留 guard
