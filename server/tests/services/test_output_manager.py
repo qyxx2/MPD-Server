@@ -6,7 +6,11 @@ from server.app.models.output import OutputMode
 from server.app.player.capabilities import MPDCapabilities, VerifiedPlayerPort
 from server.app.player.mock_mpd import MockMPD
 from server.app.player.models import OutputInfo
-from server.app.services.output_manager import OutputError, OutputManager
+from server.app.services.output_manager import OutputManager
+from server.tests.invariants.test_output_enable import enable_manager
+from server.tests.support.playback import real_client
+
+__all__ = ["real_client"]
 
 
 async def direct_runner(operation):
@@ -51,21 +55,17 @@ def test_observation_uses_current_alsa_fact_without_control_capability(enabled, 
     asyncio.run(run())
 
 
-def test_nas_disable_is_explicitly_unavailable_before_its_batch():
+def test_nas_disable_confirms_inactive_and_request_is_disabled(real_client):
+    _, _, player, service = real_client
+
     async def run():
-        class NoCallsPlayer:
-            async def outputs(self):
-                pytest.fail("B1 must refuse NAS control before external access")
-
-        async def no_runner(operation):
-            pytest.fail("B1 must refuse NAS control before entering an operation")
-
-        manager = OutputManager(
-            player=NoCallsPlayer(), capabilities=MPDCapabilities.from_commands(set()),
-            operation_runner=no_runner,
-        )
-        with pytest.raises(OutputError) as error:
-            await manager.set_enabled(OutputMode.NAS_DAC, False)
-        assert error.value.code == "OUTPUT_CONTROL_UNAVAILABLE"
+        player._outputs = [OutputInfo(id=37, name="DAC", plugin="alsa", enabled=True)]
+        manager = enable_manager(service, player, monotonic_clock=lambda: 0.0)
+        result = await manager.set_enabled(OutputMode.NAS_DAC, False)
+        assert result.states[0].status == "INACTIVE"
+        assert result.states[0].stale is False
+        assert result.last_request.enabled is False
+        assert result.last_request.status == "SUCCEEDED"
+        assert (await player.outputs())[0].enabled is False
 
     asyncio.run(run())

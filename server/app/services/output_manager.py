@@ -116,12 +116,9 @@ class OutputManager:
     async def set_enabled(self, mode: OutputMode, enabled: bool) -> OutputSnapshot:
         if mode == OutputMode.CLIENT_STREAM:
             raise OutputError("OUTPUT_MODE_UNSUPPORTED", "Client streaming is not supported in v0.1")
-        if not enabled:
-            raise OutputError("OUTPUT_CONTROL_UNAVAILABLE", "NAS disable is not implemented yet")
-
         async def execute(lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
             self._last_request = OutputRequestState(
-                mode=mode, enabled=True, status="PREPARING", updated_at=datetime.now(timezone.utc),
+                mode=mode, enabled=enabled, status="PREPARING", updated_at=datetime.now(timezone.utc),
             )
             request = self._last_request
 
@@ -135,7 +132,7 @@ class OutputManager:
 
             lifecycle.on_rollback(rollback_request)
             try:
-                return await self._enable(lifecycle)
+                return await self._ensure_enabled(lifecycle, enabled)
             except (Exception, asyncio.CancelledError) as exc:
                 self._fail_request(exc)
                 await self._observe()
@@ -156,7 +153,9 @@ class OutputManager:
             "updated_at": datetime.now(timezone.utc),
         })
 
-    async def _enable(self, lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
+    async def _ensure_enabled(
+        self, lifecycle: OutputOperationLifecycle, enabled: bool,
+    ) -> OutputSnapshot:
         for operation in ("outputs", "set_output_enabled", "status", "queue_entries"):
             if not self.capabilities.supports_operation(operation):
                 raise OutputError(
@@ -164,28 +163,28 @@ class OutputManager:
                 )
         changed = False
 
-        async def enable(_lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
+        async def ensure(_lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
             nonlocal changed
             outputs = tuple(output.model_copy(deep=True) for output in await self.player.outputs())
             self._observe_outputs(outputs, datetime.now(timezone.utc))
             target = self._select_target(outputs)
-            changed = not target.enabled
+            changed = target.enabled != enabled
             if changed:
-                await self.player.set_output_enabled(target.id, True)
+                await self.player.set_output_enabled(target.id, enabled)
             confirmed = tuple(await self.player.outputs())
             self._observe_outputs(confirmed, datetime.now(timezone.utc))
             actual = self._select_target(confirmed)
             expected = tuple(
-                output.model_copy(update={"enabled": True}) if output.id == target.id else output
+                output.model_copy(update={"enabled": enabled}) if output.id == target.id else output
                 for output in outputs
             )
-            if actual.id != target.id or not actual.enabled or confirmed != expected:
+            if actual.id != target.id or actual.enabled != enabled or confirmed != expected:
                 raise OutputError(
-                    "OUTPUT_RECONCILIATION_FAILED", "MPD output state did not confirm enable",
+                    "OUTPUT_RECONCILIATION_FAILED", "MPD output state did not confirm requested state",
                 )
             return self._snapshot(self._nas_observation, datetime.now(timezone.utc))
 
-        snapshot = await self._run_preserved_operation(enable)
+        snapshot = await self._run_preserved_operation(ensure)
         self._last_request.status = "SUCCEEDED"
         self._last_request.updated_at = datetime.now(timezone.utc)
         snapshot.last_request = self._last_request.model_copy(deep=True)
