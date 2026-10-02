@@ -68,6 +68,11 @@ class PlaybackService:
         self.library_repository = library_repository
 
     @_atomic_history_transition
+    async def run_output_operation(self, operation: Callable[[], Awaitable[T]]) -> T:
+        """Serialize output work with playback in the owning database transaction."""
+        return await operation()
+
+    @_atomic_history_transition
     async def start_track(self, song_id: str) -> PlaybackContext:
         song = await self._require_available_song(song_id)
         await self._prepare_play(song)
@@ -151,6 +156,7 @@ class PlaybackService:
         await self._confirm_preserved_state()
         return selected
 
+    @_atomic_history_transition
     async def play_next(self, song_id: str) -> QueueItem:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.play_next(song.song_id)
@@ -158,6 +164,7 @@ class PlaybackService:
         await self._confirm_preserved_state()
         return item
 
+    @_atomic_history_transition
     async def add_to_queue(self, song_id: str) -> QueueItem:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.add_to_queue(song.song_id)
@@ -400,6 +407,7 @@ class PlaybackService:
         await self._confirm_preserved_state()
         return await self.queue_manager.get_playback_state()
 
+    @_atomic_history_transition
     async def pause(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
@@ -413,6 +421,7 @@ class PlaybackService:
             autoplay_enabled=state.autoplay_enabled,
         )
 
+    @_atomic_history_transition
     async def seek(self, seconds: float) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":

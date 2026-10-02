@@ -17,7 +17,7 @@
 - Task 1R `03f4de9`（transport 完成）、Task 4 corrective `86975d6` 均经 `git merge-base --is-ancestor <commit> HEAD` 验证可达。main 已含 Task 5 merge。代码/测试证据见 §2；提交可达不等于本窗口重新跑过测试。
 - M Dependency Matrix：Task 7 依赖 1R + 4；Task 6 依赖 3 + 4 + 5 + 7。Task 7 先于 Task 6。
 - Relationship Gate：**REQUIRED**；Contract Matrix Gate：**REQUIRED**。涉及外部输出事实、播放保留、HTTP 表示、外层事务和事件顺序。
-- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3–B9 NOT STARTED，O-STATE-001 请求转换仍 pending B5/B6，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
+- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4–B9 NOT STARTED，O-STATE-001 请求转换仍 pending B5/B6，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
 - 规划审计环境曾返回 `No module named pytest`，未跑测试。B1 使用现有 `.venv` 完成本地验证，未安装/修改依赖、未访问真实 NAS；fresh evidence 见上述归档，不沿用规划环境结论。
 
 ### Global Constraints
@@ -64,7 +64,7 @@
 | R-ARCH | `server/tests/invariants/test_architecture_relationships.py::test_dependency_direction_preserves_repository_and_player_authorities` |
 | R-PL | `server/tests/invariants/test_playlist_relationships.py::test_persisted_membership_matches_every_representation_and_collection_split` |
 
-审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；B2 已创建 models/mpd_info.py、services/mpd_info_service.py、test_mpd_info_service.py 和 F2 test_mpd_info_relationships.py。api/system.py、api/system_schemas.py 以及 F3–F9/transport、`test_system_*` / `test_transaction_commit_hooks.py` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
+审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；B2 已创建 models/mpd_info.py、services/mpd_info_service.py、test_mpd_info_service.py 和 F2 test_mpd_info_relationships.py。B3 已创建 F3 test_output_serialization.py 并实现 runner/guard。api/system.py、api/system_schemas.py 以及 F4–F9/transport、`test_system_*` / `test_transaction_commit_hooks.py` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
 
 ## 3. Contract Gap resolution（先于 Matrix 和 Batch）
 
@@ -296,6 +296,7 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - 允许 production：playback_service.py（runner + play_next/add_to_queue/pause/seek 的整段现有 run_transaction 包装），output_manager.py（注入 runner、before/after preservation guard）。如其它 mutation 实际未整段串行，先记录具体证据并只补同类边界，不重写播放算法。
 - 禁止：改 Queue/AutoPlay/History 规则、自动 seek/重播恢复、repository schema、NAS 启停、API。
 - Acceptance：F3 GREEN；R-PLAY/R-STOP、`server/tests/services/test_playback_service.py`、`server/tests/api/test_pre_batch6_corrective.py` GREEN；没有新增播放副作用。O-PRESERVE-001 仍等待 B5/B6 对真实输出操作证明。
+- 当前局部验收：F3/历史 regression/完整 backend fresh GREEN、直接相关旧 test 的事务预期修正依据和独立审查见 `../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`；只完成 guard/协调基础，O-PRESERVE-001 最终 proof 仍 pending B5/B6。
 - Complexity：1 新 row + 既有关系回归，3 边界，1 协调机制，2 files，约 120–220 行。若需要通用播放器重构即超范围，停在证据化 gate 重新规划。
 
 ### B4 — 最外层提交通知与回滚纪律

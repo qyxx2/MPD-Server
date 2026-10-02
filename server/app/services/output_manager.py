@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Protocol, TypeVar
 
 from server.app.models.output import OutputMode, OutputSnapshot, OutputState
 from server.app.player.capabilities import MPDCapabilities
-from server.app.player.models import OutputInfo
+from server.app.player.models import OutputInfo, PlayerState
 from server.app.player.ports import PlayerCommandError, PlayerPort, PlayerUnavailable
 from server.app.services.events import EventPublisher
 
@@ -35,16 +36,70 @@ class OutputManager:
         operation_runner: OutputOperationRunner,
         selector: OutputSelector | None = None,
         event_publisher: EventPublisher | None = None,
+        monotonic_clock: Callable[[], float] = monotonic,
     ) -> None:
         self.player = player
         self.capabilities = capabilities
         self.operation_runner = operation_runner
         self.selector = selector
         self.event_publisher = event_publisher
+        self.monotonic_clock = monotonic_clock
         self._nas_observation: OutputState | None = None
 
     async def get_state(self) -> OutputSnapshot:
         return await self.operation_runner(self._observe)
+
+    async def _run_preserved_operation(self, operation: Callable[[], Awaitable[T]]) -> T:
+        """Confirm playback preservation within the injected shared operation runner."""
+        async def guarded() -> T:
+            before_start = self.monotonic_clock()
+            before = (await self.player.status()).model_copy(deep=True)
+            before_end = self.monotonic_clock()
+            entries = [entry.model_copy(deep=True) for entry in await self.player.queue_entries()]
+            if before.state != PlayerState.STOPPED and (
+                not entries
+                or entries[0].position != 0
+                or before.song_position != 0
+                or before.song_id != entries[0].mpd_song_id
+                or before.song_uri != entries[0].song_uri
+            ):
+                raise OutputError(
+                    "OUTPUT_RECONCILIATION_FAILED", "MPD current occurrence is unconfirmed",
+                )
+            result = await operation()
+            after_start = self.monotonic_clock()
+            after = await self.player.status()
+            after_end = self.monotonic_clock()
+            after_entries = await self.player.queue_entries()
+            if (
+                before.model_dump(exclude={"elapsed_seconds"})
+                != after.model_dump(exclude={"elapsed_seconds"})
+                or entries != after_entries
+            ):
+                raise OutputError("OUTPUT_RECONCILIATION_FAILED", "Output operation changed playback")
+            if (
+                before.state != PlayerState.PLAYING
+                or before.elapsed_seconds is None
+                or after.elapsed_seconds is None
+            ) and before.elapsed_seconds != after.elapsed_seconds:
+                raise OutputError("OUTPUT_RECONCILIATION_FAILED", "Output operation changed position")
+            if (
+                before.state == PlayerState.PLAYING
+                and before.elapsed_seconds is not None
+                and after.elapsed_seconds is not None
+            ):
+                delta = after.elapsed_seconds - before.elapsed_seconds
+                # MPD elapsed has millisecond precision. Bracket each status read
+                # to include transport latency; never allow a backwards reset.
+                minimum = max(0.0, after_start - before_end - 0.001)
+                maximum = after_end - before_start + 0.001
+                if not minimum <= delta <= maximum:
+                    raise OutputError(
+                        "OUTPUT_RECONCILIATION_FAILED", "Playback position did not advance naturally",
+                    )
+            return result
+
+        return await self.operation_runner(guarded)
 
     async def set_enabled(self, mode: OutputMode, enabled: bool) -> OutputSnapshot:
         if mode == OutputMode.CLIENT_STREAM:
