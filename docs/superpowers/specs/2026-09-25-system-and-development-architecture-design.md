@@ -693,6 +693,48 @@ main
 
 首期不做复杂浏览器 E2E。
 
+### 19.5 Cross-Authority Contract Matrix
+
+跨模块 relationship/invariant test 负责证明“多个模块或权威之间的关系仍成立”；**Contract Matrix** 负责在实现前把这种关系写成可执行的操作合同。两者职责不同，但必须可追溯。
+
+Contract Matrix 不是新的并列规格源，也不得覆盖本目录中既有业务规格。长期业务语义仍由相关 Spec 定义；当前 Task 的 active plan 只把这些语义整理为可实施、可审计的 Contract rows，并映射到 executable invariant tests。
+
+合同分为五类：
+
+- **STATE_TRANSITION**：一个操作使两个或更多权威状态共同变化，例如 PlaybackState / PlayerPort / History。
+- **REPRESENTATION**：同一资源跨 Repository、Service、REST、WebSocket 或客户端表示时必须保持的语义。
+- **STATE_PROPAGATION**：权威状态经 event、WebSocket、client store、UI 等链路传播和恢复时必须保持的关系。
+- **TRANSACTION**：持久化状态、运行时状态、幂等记录和外部副作用在 commit / rollback / retry 中的关系。
+- **LIFECYCLE**：backup/restore、build/deploy/healthcheck 等多阶段流程允许的状态推进和失败恢复。
+
+当一个 Task/Batch/corrective 新增、修改或依赖上述任一跨模块关系时，必须在当前 Task active plan 中建立或引用稳定的 Contract ID。单纯局部计算、无共享状态/表示/事务/外部副作用的实现可以标记 Contract Matrix N/A + 原因。
+
+每个 Contract row 至少定义：
+
+1. **Contract ID / Type / Operation**；
+2. **Preconditions**；
+3. **Authorities**：哪些模块、持久化状态或外部系统拥有独立事实；
+4. **Expected State Delta**：成功后允许且必须发生的变化；
+5. **Must Remain Unchanged**：成功操作不得意外改变的关键状态；
+6. **External Confirmation**：存在 PlayerPort、文件系统、部署环境等外部权威时，什么事实必须被实际确认；
+7. **History/Event Semantics**；
+8. **Transaction Boundary**；
+9. **Failure/Rollback**；
+10. **Retry/Idempotency**；
+11. **Observable Result**；
+12. **Executable Invariant Proof**。
+
+强制规则：
+
+- 对有副作用的跨权威操作，Must Remain Unchanged 与 Expected State Delta 同等重要，不能只描述“要改什么”。
+- 外部权威存在确认步骤时，服务端不得在确认前把目标状态、History/Event 或 terminal idempotency result 当作成功提交。
+- SQLite rollback 不能回滚外部系统副作用；这类路径必须显式定义 reconciliation / retry 行为。
+- 如果实施过程中发现 Contract row 需要一种 Spec 尚未定义的新业务语义，先修正唯一权威 Spec，再更新 Contract Matrix、建立 RED invariant proof，最后修改 production code；不得从现有实现反推并固化未批准语义。
+- 已完成历史 Task 不因本规则自动重开；后续工作一旦触及其 Contract row，该 row 即成为 regression obligation。
+- 当前 Task 的 active plan 保存仍在执行的 Task-specific Contract Matrix；完成证据和历史命令进入 archive，不把同一合同复制成多份长期权威。
+- Task/Batch 完成前必须能建立 Contract ID → authoritative Spec → implementation owner → executable invariant test → fresh verification 的追溯链。
+
+
 ## 20. 统一开发检查命令
 
 项目最终应提供统一命令入口，例如：

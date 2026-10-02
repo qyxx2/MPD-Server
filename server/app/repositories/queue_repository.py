@@ -547,6 +547,7 @@ class QueueRepository:
         queue_item_id: str,
         *,
         expected_revision: int | None = None,
+        allow_no_successor: bool = False,
     ) -> QueueItem | None:
         async def operation(connection):
             self._reserve_mutation(connection, expected_revision)
@@ -574,7 +575,7 @@ class QueueRepository:
                     LIMIT 1
                     """
                 ).fetchone()
-                if next_row is None:
+                if next_row is None and not allow_no_successor:
                     raise CurrentTrackDeletionError(
                         "cannot delete current track without a successor"
                     )
@@ -593,6 +594,8 @@ class QueueRepository:
                     """,
                     (queue_item_id,),
                 )
+                if next_row is None:
+                    return None
                 connection.execute(
                     """
                     UPDATE queue_items

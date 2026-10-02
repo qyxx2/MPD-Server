@@ -30,6 +30,20 @@ def repository(tmp_path):
     return LibraryRepository(str(path))
 
 
+def test_list_songs_includes_available_and_unavailable(repository):
+    run(repository.upsert_song(make_song("music/available.mp3", "AVAILABLE")))
+    run(repository.upsert_song(make_song("music/missing.mp3", "MISSING")))
+    run(repository.upsert_song(make_song("music/unreadable.mp3", "UNREADABLE")))
+
+    songs = run(repository.list_songs())
+
+    assert [(song.file_uri, song.availability_status) for song in songs] == [
+        ("music/available.mp3", "AVAILABLE"),
+        ("music/missing.mp3", "MISSING"),
+        ("music/unreadable.mp3", "UNREADABLE"),
+    ]
+
+
 def test_list_available_songs_includes_only_available(repository):
     run(repository.upsert_song(make_song("music/available.mp3", "AVAILABLE")))
     run(repository.upsert_song(make_song("music/missing.mp3", "MISSING")))

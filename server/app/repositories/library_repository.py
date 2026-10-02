@@ -122,6 +122,7 @@ class LibraryRepository:
             title=row[1],
             file_uri=row[2],
             identity_key=row[3],
+            album_id=row[4],
             album=album[0] if album else None,
             artists=artists,
             album_artists=album_artists,
@@ -400,6 +401,15 @@ class LibraryRepository:
                 for row in rows
                 if row[2].startswith(root_uri_prefix)
             ]
+
+        return await run_transaction(self.path, operation)
+
+    async def list_songs(self) -> list[Song]:
+        async def operation(connection):
+            rows = connection.execute(
+                f"{SONGS_SELECT} ORDER BY song_id"
+            ).fetchall()
+            return [self._song_from_row(connection, row) for row in rows]
 
         return await run_transaction(self.path, operation)
 

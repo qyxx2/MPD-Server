@@ -41,6 +41,7 @@ class MockMPD(PlayerPort):
         self._connected = True
         self._state = PlayerState.STOPPED
         self._current_index: int | None = None
+        self._current_queue_id: int | None = None
         self._elapsed = 0.0
         self._volume = 50
         self._repeat = False
@@ -82,6 +83,9 @@ class MockMPD(PlayerPort):
                 self._current_index = self._songs.index(song_uri)
             except ValueError as exc:
                 raise PlayerCommandError("play", f"unknown song URI: {song_uri}") from exc
+            self._current_queue_id = next(
+                (song_id for uri, song_id in self._queue if uri == song_uri), None,
+            )
             self._elapsed = 0.0
         elif self._current_index is None:
             if not self._songs:
@@ -121,6 +125,10 @@ class MockMPD(PlayerPort):
                     await self._emit("next")
                     return
         self._current_index = next_index
+        self._current_queue_id = next(
+            (song_id for uri, song_id in self._queue
+             if uri == self._songs[self._current_index]), None,
+        )
         self._elapsed = 0.0
         self._state = PlayerState.PLAYING
         await self._emit("next")
@@ -133,6 +141,10 @@ class MockMPD(PlayerPort):
             self._current_index = 0
         else:
             self._current_index = max(0, self._current_index - 1)
+        self._current_queue_id = next(
+            (song_id for uri, song_id in self._queue
+             if uri == self._songs[self._current_index]), None,
+        )
         self._elapsed = 0.0
         self._state = PlayerState.PLAYING
         await self._emit("previous")
@@ -185,6 +197,11 @@ class MockMPD(PlayerPort):
     async def queue_clear(self) -> None:
         self._check("queue_clear")
         self._queue.clear()
+        if self._current_queue_id is not None:
+            self._current_queue_id = None
+            self._current_index = None
+            self._state = PlayerState.STOPPED
+            self._elapsed = 0.0
 
     async def queue_add(self, song_uri: str) -> int:
         self._check("queue_add")
@@ -197,6 +214,11 @@ class MockMPD(PlayerPort):
         self._check("queue_delete")
         index = self._queue_index(mpd_song_id, "queue_delete")
         del self._queue[index]
+        if self._current_queue_id == mpd_song_id:
+            self._current_queue_id = None
+            self._current_index = None
+            self._state = PlayerState.STOPPED
+            self._elapsed = 0.0
 
     async def queue_move(self, mpd_song_id: int, before_mpd_song_id: int | None) -> None:
         self._check("queue_move")
@@ -219,6 +241,7 @@ class MockMPD(PlayerPort):
             self._current_index = self._songs.index(uri)
         except ValueError as exc:
             raise PlayerCommandError("queue_play", f"unknown song URI: {uri}") from exc
+        self._current_queue_id = mpd_song_id
         self._elapsed = 0.0
         self._state = PlayerState.PLAYING
         await self._emit("queue_play")
@@ -256,11 +279,18 @@ class MockMPD(PlayerPort):
     def _status(self) -> PlayerStatus:
         uri = None if self._current_index is None else self._songs[self._current_index]
         duration = None if uri is None else self._durations[uri]
+        queue_position = next(
+            (position for position, (_, song_id) in enumerate(self._queue)
+             if song_id == self._current_queue_id), None,
+        )
         return PlayerStatus(
             state=self._state,
             song_uri=uri,
-            song_position=self._current_index,
-            song_id=None if self._current_index is None else self._current_index + 1,
+            song_position=queue_position if queue_position is not None else self._current_index,
+            song_id=(
+                self._current_queue_id if queue_position is not None
+                else None if self._current_index is None else self._current_index + 1
+            ),
             elapsed_seconds=self._elapsed if uri is not None else None,
             duration_seconds=duration,
             volume=self._volume,

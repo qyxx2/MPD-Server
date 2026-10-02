@@ -19,15 +19,17 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def test_fresh_database_is_schema_v3_with_reconciliation_and_artwork_tables(tmp_path):
+def test_fresh_database_is_schema_v4_with_reconciliation_artwork_and_idempotency_tables(
+    tmp_path,
+):
     path = tmp_path / "library.db"
 
     run(initialize_database(str(path)))
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
-        assert SCHEMA_VERSION == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert SCHEMA_VERSION == 4
 
         song_columns = {
             row[1]
@@ -50,6 +52,7 @@ def test_fresh_database_is_schema_v3_with_reconciliation_and_artwork_tables(tmp_
             )
         }
         assert "album_art_refs" in tables
+        assert "idempotency_records" in tables
 
         indexes = {
             row[1]
@@ -73,7 +76,7 @@ def test_fresh_database_is_schema_v3_with_reconciliation_and_artwork_tables(tmp_
         connection.close()
 
 
-def test_v1_to_v3_migration_preserves_song_playlist_favorite_history_data(tmp_path):
+def test_v1_to_v4_migration_preserves_song_playlist_favorite_history_data(tmp_path):
     path = tmp_path / "library.db"
 
     connection = sqlite3.connect(path)
@@ -176,7 +179,11 @@ def test_v1_to_v3_migration_preserves_song_playlist_favorite_history_data(tmp_pa
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'idempotency_records'"
+        ).fetchone() == ("idempotency_records",)
         assert connection.execute(
             "SELECT title, file_uri, identity_key, metadata_status, "
             "availability_status, lyrics_source, lyrics_status "
