@@ -3,20 +3,20 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from time import monotonic
-from typing import Protocol, TypeVar
+from typing import TypeVar
 
 from server.app.models.output import OutputMode, OutputSnapshot, OutputState
 from server.app.player.capabilities import MPDCapabilities
 from server.app.player.models import OutputInfo, PlayerState
 from server.app.player.ports import PlayerCommandError, PlayerPort, PlayerUnavailable
 from server.app.services.events import EventPublisher
+from server.app.services.output_operation import (
+    OutputOperationLifecycle,
+    OutputOperationRunner,
+)
 
 T = TypeVar("T")
 OutputSelector = Callable[[tuple[OutputInfo, ...]], OutputInfo | None]
-
-
-class OutputOperationRunner(Protocol):
-    async def __call__(self, operation: Callable[[], Awaitable[T]]) -> T: ...
 
 
 class OutputError(RuntimeError):
@@ -47,11 +47,16 @@ class OutputManager:
         self._nas_observation: OutputState | None = None
 
     async def get_state(self) -> OutputSnapshot:
-        return await self.operation_runner(self._observe)
+        async def observe(_lifecycle: OutputOperationLifecycle) -> OutputSnapshot:
+            return await self._observe()
 
-    async def _run_preserved_operation(self, operation: Callable[[], Awaitable[T]]) -> T:
+        return await self.operation_runner(observe)
+
+    async def _run_preserved_operation(
+        self, operation: Callable[[OutputOperationLifecycle], Awaitable[T]],
+    ) -> T:
         """Confirm playback preservation within the injected shared operation runner."""
-        async def guarded() -> T:
+        async def guarded(lifecycle: OutputOperationLifecycle) -> T:
             before_start = self.monotonic_clock()
             before = (await self.player.status()).model_copy(deep=True)
             before_end = self.monotonic_clock()
@@ -66,7 +71,7 @@ class OutputManager:
                 raise OutputError(
                     "OUTPUT_RECONCILIATION_FAILED", "MPD current occurrence is unconfirmed",
                 )
-            result = await operation()
+            result = await operation(lifecycle)
             after_start = self.monotonic_clock()
             after = await self.player.status()
             after_end = self.monotonic_clock()

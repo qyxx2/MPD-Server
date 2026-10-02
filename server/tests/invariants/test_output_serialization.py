@@ -35,7 +35,7 @@ def test_output_runner_joins_outer_transaction_and_restores_history(real_client)
         path = service.queue_manager.queue_repository.path
         assert hasattr(service, "run_output_operation"), "B3 shared output runner is missing"
 
-        async def operation():
+        async def operation(_lifecycle):
             await service.queue_manager.play_next("b")
             await service.history_service.stop()
             return 17
@@ -49,7 +49,7 @@ def test_output_runner_joins_outer_transaction_and_restores_history(real_client)
             await run_transaction(path, outer)
         assert await authority_snapshot(service) == before
 
-        async def read_only():
+        async def read_only(_lifecycle):
             return await authority_snapshot(service)
 
         assert await service.run_output_operation(read_only) == before
@@ -99,7 +99,7 @@ def test_output_operation_serializes_with_playback_mutations(real_client, monkey
         order = []
         blocked_once = False
 
-        async def output():
+        async def output(_lifecycle):
             output_entered.set()
             order.append("output")
             if first == "output":
@@ -176,7 +176,7 @@ def test_output_guard_rejects_playback_state_drift(real_client):
         manager = output_manager(service, player)
         assert hasattr(manager, "_run_preserved_operation"), "B3 preservation guard is missing"
 
-        async def external_drift():
+        async def external_drift(_lifecycle):
             await player.pause()
             return "must not report success"
 
@@ -212,7 +212,7 @@ def test_output_guard_rejects_nonplaying_or_unknown_position_change(real_client,
         before = await authority_snapshot(service)
         manager = output_manager(service, player)
 
-        async def external_position_drift():
+        async def external_position_drift(_lifecycle):
             nonlocal unknown
             unknown = False
             await player.seek(23)
@@ -237,7 +237,7 @@ def test_output_guard_rejects_unnatural_playing_position(real_client, elapsed_af
         manager = output_manager(service, player, monotonic_clock=lambda: now)
         before = await authority_snapshot(service)
 
-        async def drift():
+        async def drift(_lifecycle):
             nonlocal now
             now += wall_seconds
             await player.seek(elapsed_after)
@@ -275,7 +275,7 @@ def test_output_guard_rejects_unconfirmed_current_before_callback(real_client, m
         manager = output_manager(service, player, monotonic_clock=lambda: 0.0)
         called = []
 
-        async def callback():
+        async def callback(_lifecycle):
             called.append("must not execute with invalid baseline")
 
         before = await authority_snapshot(service)
@@ -326,7 +326,7 @@ def test_output_guard_preserves_occurrence_context_and_history(real_client, monk
         now = 100.0
         manager = output_manager(service, player, monotonic_clock=lambda: now)
 
-        async def observe_only():
+        async def observe_only(_lifecycle):
             nonlocal now
             if state == "natural":
                 # Model external natural time, not an output seek/play command.
@@ -366,7 +366,7 @@ def test_output_guard_rejects_external_drift_without_repair(real_client, drift):
         entries = await player.queue_entries()
         manager = output_manager(service, player, monotonic_clock=lambda: 0.0)
 
-        async def external_drift():
+        async def external_drift(_lifecycle):
             if drift == "occurrence":
                 player._current_queue_id = entries[-1].mpd_song_id
             elif drift == "queue-order":
@@ -388,7 +388,7 @@ def test_output_guard_rejects_external_drift_without_repair(real_client, drift):
         # Occurrence/execution drift requires existing playback reconciliation.
         if drift in {"repeat", "random", "volume"}:
             facts = (await player.status(), await player.queue_entries())
-            async def no_op():
+            async def no_op(_lifecycle):
                 return 41
             assert await manager._run_preserved_operation(no_op) == 41
             assert (await player.status(), await player.queue_entries()) == facts
@@ -409,7 +409,7 @@ def test_output_guard_failure_releases_transaction_and_retry_reobserves(real_cli
         if failure == "before-read":
             player.disconnect()
 
-        async def callback():
+        async def callback(_lifecycle):
             called.append("entered")
             if failure == "after-read":
                 player.disconnect()
@@ -428,7 +428,7 @@ def test_output_guard_failure_releases_transaction_and_retry_reobserves(real_cli
         player.reconnect()
         assert await authority_snapshot(service) == before
 
-        async def retry():
+        async def retry(_lifecycle):
             return await manager.get_state()
 
         # A new task proves the prior transaction context/lock was released.
@@ -461,7 +461,7 @@ def test_output_guard_brackets_status_latency_and_millisecond_precision(real_cli
         monkeypatch.setattr(player, "status", status)
         manager = output_manager(service, player, monotonic_clock=lambda: next(times))
 
-        async def no_op():
+        async def no_op(_lifecycle):
             return "unchanged"
 
         assert await manager._run_preserved_operation(no_op) == "unchanged"
@@ -490,7 +490,7 @@ def test_output_guard_keeps_independent_baseline_when_port_reuses_models(real_cl
             monkeypatch.setattr(player, "queue_entries", shared_entries)
         manager = output_manager(service, player, monotonic_clock=lambda: 0.0)
 
-        async def external_change():
+        async def external_change(_lifecycle):
             if shared == "status":
                 status.volume = 23
             else:

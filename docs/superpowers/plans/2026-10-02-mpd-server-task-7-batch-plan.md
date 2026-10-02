@@ -17,7 +17,7 @@
 - Task 1R `03f4de9`（transport 完成）、Task 4 corrective `86975d6` 均经 `git merge-base --is-ancestor <commit> HEAD` 验证可达。main 已含 Task 5 merge。代码/测试证据见 §2；提交可达不等于本窗口重新跑过测试。
 - M Dependency Matrix：Task 7 依赖 1R + 4；Task 6 依赖 3 + 4 + 5 + 7。Task 7 先于 Task 6。
 - Relationship Gate：**REQUIRED**；Contract Matrix Gate：**REQUIRED**。涉及外部输出事实、播放保留、HTTP 表示、外层事务和事件顺序。
-- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4 已完成提交通知基础设施局部验收。B5 pre-flight 已确认 lifecycle 技术接口缺口：现有 runner 只能执行无参 callback，无法在不泄漏 DB path/私有事务状态的前提下注册 B4 的 commit/rollback hooks；B5 实现未开始、无 B5 提交。新增 B4.5 corrective 先冻结并证明 lifecycle 注入接口，B4.5 与 B5–B9 均 NOT STARTED。O-STATE-001 请求转换仍 pending B5/B6，O-TX-001/O-EVENT-001 最终 integration proof 仍 pending B8，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
+- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4 已完成提交通知基础设施局部验收。B5 pre-flight 已确认 lifecycle 技术接口缺口：现有 runner 只能执行无参 callback，无法在不泄漏 DB path/私有事务状态的前提下注册 B4 的 commit/rollback hooks；B5 实现未开始、无 B5 提交。B4.5 corrective 已完成显式 lifecycle 注入接口及局部关系验收；B5–B9 均 NOT STARTED。O-STATE-001 请求转换仍 pending B5/B6，O-TX-001/O-EVENT-001 最终 integration proof 仍 pending B8，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-5-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
 - 规划审计环境曾返回 `No module named pytest`，未跑测试。B1 使用现有 `.venv` 完成本地验证，未安装/修改依赖、未访问真实 NAS；fresh evidence 见上述归档，不沿用规划环境结论。
 
 ### Global Constraints
@@ -234,7 +234,7 @@ B5 pre-flight 对当前实现与 §5 冻结接口复核后确认：B4 已提供 
 - B1 `OutputManager.__init__(*, player: PlayerPort, capabilities: MPDCapabilities, operation_runner, selector=None, event_publisher=None)`；`async get_state() -> OutputSnapshot`；`async set_enabled(mode: OutputMode, enabled: bool) -> OutputSnapshot`。B1 只实现查询和 CLIENT_STREAM 拒绝，不开放 NAS mutation 给 API。
 - selector 技术签名：`Callable[[tuple[OutputInfo, ...]], OutputInfo | None]`；输入仅本次 ALSA candidates；返回必须唯一对应输入的一个成员，不能返回旧 ID/外部对象冒充匹配。无 selector 仅单候选可选。
 - B3 已建立共同串行化入口；B4.5 在不改变 transaction ownership/serialization 的前提下升级 callback contract，旧的无参 callback 签名不再作为 B5+ 冻结接口。
-- B4.5 TO CREATE `server/app/services/output_operation.py`：`OutputOperationLifecycle` Protocol 仅暴露 `on_commit(callback: Callable[[], object | Awaitable[object]]) -> None` 与 `on_rollback(callback: Callable[[], None]) -> None`；`OutputOperationRunner.__call__(operation: Callable[[OutputOperationLifecycle], Awaitable[T]]) -> T`。该接口不得暴露 DB path、sqlite connection 或 Repository。
+- B4.5 已创建 `server/app/services/output_operation.py`：`OutputOperationLifecycle` Protocol 仅暴露 `on_commit(callback: Callable[[], object | Awaitable[object]]) -> None` 与 `on_rollback(callback: Callable[[], None]) -> None`；`OutputOperationRunner.__call__(operation: Callable[[OutputOperationLifecycle], Awaitable[T]]) -> T`。该接口不得暴露 DB path、sqlite connection 或 Repository。
 - B4.5 `PlaybackService.run_output_operation(operation: Callable[[OutputOperationLifecycle], Awaitable[T]]) -> T`：仍由 PlaybackService 打开/加入 `run_transaction(queue_repository.path, ...)`；每次 invocation 创建 path-bound lifecycle facade，内部只调用 B4 已存在的 public `on_transaction_commit(path, ...)` / `on_transaction_rollback(path, ...)`。OutputManager 只经注入 runner 获得该 per-invocation capability，不知道 path。
 - B4.5 `OutputManager` 的 read/guard callback 适配 lifecycle-aware runner；只读路径允许忽略 lifecycle。B5/B6 mutation 必须用当前 invocation 提供的 lifecycle 注册 commit/rollback 动作，不得缓存 lifecycle 跨 invocation 使用。
 - B3 输出 guard 在 `output_manager.py` 读 before/after PlayerStatus+queue_entries；检查 occurrence/order/state/音量模式，position 使用可注入 monotonic clock；播放中 elapsed 差须与测量窗口相容（测试用 fake clock，不硬编码“允许丢 5 秒”）。真实时钟/MPD 时间粒度容差须记录，不能用宽容差掩盖 reset；无法证明时不声称保留成功。
@@ -243,11 +243,11 @@ B5 pre-flight 对当前实现与 §5 冻结接口复核后确认：B4 已提供 
 - B2 `server/app/models/mpd_info.py` / `MPDInfoService.__init__(*, player: PlayerPort, capabilities: MPDCapabilities)`；`async get_info() -> MPDInfo`。包含 version、MPDStats 七字段、DatabaseUpdateStatus 两字段、connected: bool | None、errors 按来源、observed_at。最后一次 status 读取确认连接：成功 true、PlayerUnavailable false、capability/command 未能确认时 null 并留错误；独立 stats 成功不伪造 status 成功。version 保留时标为 verified capability 来源。
 - B7 `server/app/api/system_schemas.py`：OutputSnapshotResponse、MPDInfoResponse、OutputSetRequest(mode, enabled)；API 与 domain model 分离；schema 不开放 MPD 数字 ID/attributes。`system.py`：GET `/api/system/output`、GET `/api/system/mpd`；B8 才加入 PUT `/api/system/output`。
 - B7 `get_output_manager(request)` / `get_mpd_info_service(request)` 放既有 dependencies.py；main 仅 minimal composition/router。OutputManager 与 PlaybackService 必须用同一个 PlayerPort；注入 capabilities/selector/publisher，不建第二播放引擎。没有已验证 capabilities 时 fail closed、可启动，不自动运行会修改 queue/output 的 CapabilityProbe；验证结果加载/最终 config 仍 Task 10。测试显式注入真实格式的 verified capabilities，不把 fixture 当生产证明。
-- TO CREATE / extend tests：`server/tests/services/test_output_manager.py`（B1/B5/B6）、`test_mpd_info_service.py`（B2）、`server/tests/repositories/test_transaction_commit_hooks.py`（B4）、`server/tests/invariants/test_output_lifecycle_injection.py`（B4.5）、`server/tests/api/test_system_reads.py`（B7）、`test_system_output_mutations.py`（B8）。
+- TO CREATE / extend tests：`server/tests/services/test_output_manager.py`（B1/B5/B6）、`test_mpd_info_service.py`（B2）、`server/tests/repositories/test_transaction_commit_hooks.py`（B4）、`server/tests/invariants/test_output_lifecycle_injection.py`（B4.5 已存在）、`server/tests/api/test_system_reads.py`（B7）、`test_system_output_mutations.py`（B8）。
 
 不得在接口冻结 Batch 写占位“成功”实现；不可用路径必须明确拒绝。内部 helper 名称可在所属 Batch RED 后决定，不得改变上述跨 Batch 合同。
 
-## 6. 新 invariant proof register（F1–F4 已存在；F4L/F5–F9 TO CREATE）
+## 6. 新 invariant proof register（F1–F4/F4L 已存在；F5–F9 TO CREATE）
 
 | ID | TO CREATE 文件与函数 | 必须跨越的真实关系 / 核心断言 | owner / final proof |
 |---|---|---|---|
@@ -333,6 +333,7 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - 允许 production：TO CREATE `server/app/services/output_operation.py`（Protocol only）；modify `playback_service.py`（path-bound lifecycle facade + lifecycle-aware runner）；modify `output_manager.py`（runner callback 适配，不实现 B5 mutation）。允许相应 F4L test。
 - 禁止：修改 `database.py`/events.py 的 B4 transaction 算法、修改 Repository schema/幂等协议、实现 enable/disable、读取 bound-method `__self__`、访问 database 私有 ContextVar/事务容器、让 OutputManager 接收 DB path/connection/Repository。
 - Acceptance：F4L GREEN；F3/F4 和直接 R-TX/R-PLAY regression GREEN；`output_manager.py` 不出现 DB path/Repository/private database transaction dependency；runner 仍对 playback/output 提供同一 DB serialization。通过前 B5 保持 NOT STARTED。
+- 当前局部验收：B4.5 lifecycle bridge、invocation 结束失效、outer commit/rollback/cancellation/nested/retry proof 和直接历史 regression 已通过；fresh evidence 与独立审查见 `../archive/task-7/2026-10-02-task-7-batch-4-5-acceptance.md`。B5 可进入独立 pre-flight；实际 mutation/event 业务及最终 API proof 仍由 B5/B6/B8 验收。
 - Complexity：0 新业务 row，1 lifecycle interface + 1 path-bound facade，3 production files（其中 1 个 Protocol-only），约 40–90 substantive LOC；若需要改 database transaction 算法或新增第二事务状态机，视为 corrective 失败并停止重规划。
 
 ### B5 — NAS_DAC enable：完整成功/失败最小操作

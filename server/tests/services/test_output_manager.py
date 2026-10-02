@@ -10,7 +10,7 @@ from server.app.services.output_manager import OutputError, OutputManager
 
 
 async def direct_runner(operation):
-    return await operation()
+    return await operation(None)
 
 
 @pytest.mark.parametrize("enabled, expected", [(True, "ACTIVE"), (False, "INACTIVE")])
@@ -25,7 +25,7 @@ def test_observation_uses_current_alsa_fact_without_control_capability(enabled, 
 
         async def runner(operation):
             calls.append("entered")
-            return await operation()
+            return await operation(None)
 
         manager = OutputManager(
             player=VerifiedPlayerPort(player, cap), capabilities=cap, operation_runner=runner,

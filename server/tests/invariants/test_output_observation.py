@@ -25,7 +25,7 @@ class ObservedMPD(MockMPD):
 
 
 async def direct_runner(operation):
-    return await operation()
+    return await operation(None)
 
 
 async def player_facts(player):
@@ -141,7 +141,7 @@ def test_reserved_mode_has_no_external_side_effect(enabled, connected):
 
         async def runner(operation):
             runner_calls.append("entered")
-            return await operation()
+            return await operation(None)
 
         manager = OutputManager(
             player=VerifiedPlayerPort(player, cap), capabilities=cap,
