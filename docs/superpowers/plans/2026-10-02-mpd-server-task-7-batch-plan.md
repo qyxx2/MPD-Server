@@ -17,7 +17,7 @@
 - Task 1R `03f4de9`（transport 完成）、Task 4 corrective `86975d6` 均经 `git merge-base --is-ancestor <commit> HEAD` 验证可达。main 已含 Task 5 merge。代码/测试证据见 §2；提交可达不等于本窗口重新跑过测试。
 - M Dependency Matrix：Task 7 依赖 1R + 4；Task 6 依赖 3 + 4 + 5 + 7。Task 7 先于 Task 6。
 - Relationship Gate：**REQUIRED**；Contract Matrix Gate：**REQUIRED**。涉及外部输出事实、播放保留、HTTP 表示、外层事务和事件顺序。
-- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4–B9 NOT STARTED，O-STATE-001 请求转换仍 pending B5/B6，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
+- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4 已完成提交通知基础设施局部验收，B5–B9 NOT STARTED。O-STATE-001 请求转换仍 pending B5/B6，O-TX-001/O-EVENT-001 最终 integration proof 仍 pending B8，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
 - 规划审计环境曾返回 `No module named pytest`，未跑测试。B1 使用现有 `.venv` 完成本地验证，未安装/修改依赖、未访问真实 NAS；fresh evidence 见上述归档，不沿用规划环境结论。
 
 ### Global Constraints
@@ -64,7 +64,7 @@
 | R-ARCH | `server/tests/invariants/test_architecture_relationships.py::test_dependency_direction_preserves_repository_and_player_authorities` |
 | R-PL | `server/tests/invariants/test_playlist_relationships.py::test_persisted_membership_matches_every_representation_and_collection_split` |
 
-审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；B2 已创建 models/mpd_info.py、services/mpd_info_service.py、test_mpd_info_service.py 和 F2 test_mpd_info_relationships.py。B3 已创建 F3 test_output_serialization.py 并实现 runner/guard。api/system.py、api/system_schemas.py 以及 F4–F9/transport、`test_system_*` / `test_transaction_commit_hooks.py` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
+审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；B2 已创建 models/mpd_info.py、services/mpd_info_service.py、test_mpd_info_service.py 和 F2 test_mpd_info_relationships.py。B3 已创建 F3 test_output_serialization.py 并实现 runner/guard。B4 已创建 F4 test_output_event_transactions.py 和 test_transaction_commit_hooks.py，实现 commit hook/OutputChangedEvent 基础。api/system.py、api/system_schemas.py 以及 F5–F9/transport、`test_system_*` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
 
 ## 3. Contract Gap resolution（先于 Matrix 和 Batch）
 
@@ -307,6 +307,7 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - RED/invariants：TO CREATE test_transaction_commit_hooks.py + F4；nested 注册、rollback/cancel、commit 抛错、callback 读同 DB 不死锁、publisher exception 不撤 commit、commit 后取消仍保留 terminal 供重放（不能假称回滚）。独立声明这是 hook proof，非最终 output API proof。
 - 允许 production：database.py（only transaction lifecycle hooks）、events.py（OutputChangedEvent）、output_manager.py（注册通知/回滚请求标记的 helper）。禁止：改幂等 fingerprint/status 策略、新 outbox/schema、重写 scanner publication、WebSocket、输出 mutation/API。
 - Acceptance：F4 GREEN；R-TX/R-EVENT/R-PL GREEN；所有 callbacks 在 transaction context/锁退出后运行；DB 已 commit 后不得执行 rollback callbacks 或冒充回滚。O-TX-001/O-EVENT-001 最终 proof 仍 pending B8。
+- 当前局部验收：B4 foundation 已通过显式 F4、历史 rows regression 和范围审查；fresh evidence 与独立 review 见 `../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`。不提前完成 B5/B6 emit 或 B8 API integration。
 - Complexity：2 新 rows + 1 affected implementation row，3 边界，单一 commit lifecycle，3 files，约 160–280 行；以确定性 transaction failure seam 缩短反馈周期。
 
 ### B5 — NAS_DAC enable：完整成功/失败最小操作

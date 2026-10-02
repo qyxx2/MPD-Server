@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import sqlite3
 import threading
 import weakref
@@ -13,6 +14,7 @@ from typing import TypeVar
 from .migrations import apply_migrations
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 _database_locks: weakref.WeakKeyDictionary[
     asyncio.AbstractEventLoop, dict[str, asyncio.Lock]
@@ -26,6 +28,20 @@ _active_transactions: ContextVar[dict[str, sqlite3.Connection] | None] = Context
 _transaction_rollbacks: ContextVar[dict[str, list[Callable[[], None]]] | None] = ContextVar(
     "database_transaction_rollbacks", default=None,
 )
+
+CommitCallback = Callable[[], object | Awaitable[object]]
+_transaction_commits: ContextVar[dict[str, list[CommitCallback]] | None] = ContextVar(
+    "database_transaction_commits", default=None,
+)
+
+
+def on_transaction_commit(path: str, callback: CommitCallback) -> None:
+    """Notify after the owning outer transaction commits and releases its lock."""
+    callbacks = _transaction_commits.get()
+    key = _database_key(path)
+    if callbacks is None or key not in callbacks:
+        raise RuntimeError("commit callback requires an active transaction")
+    callbacks[key].append(callback)
 
 
 def on_transaction_rollback(path: str, callback: Callable[[], None]) -> None:
@@ -105,19 +121,31 @@ async def run_transaction(
         rollbacks = dict(_transaction_rollbacks.get() or {})
         rollbacks[key] = []
         rollback_token = _transaction_rollbacks.set(rollbacks)
+        commits = dict(_transaction_commits.get() or {})
+        commits[key] = []
+        commit_token = _transaction_commits.set(commits)
         try:
             connection.execute("BEGIN")
             result = operation(connection)
             if inspect.isawaitable(result):
                 result = await result
             connection.commit()
-            return result
         except BaseException:
             connection.rollback()
             for callback in reversed(rollbacks[key]):
                 callback()
             raise
         finally:
+            _transaction_commits.reset(commit_token)
             _transaction_rollbacks.reset(rollback_token)
             _active_transactions.reset(token)
             connection.close()
+
+    for callback in commits[key]:
+        try:
+            notification = callback()
+            if inspect.isawaitable(notification):
+                await notification
+        except Exception:
+            logger.exception("Post-commit notification failed for database %s", key)
+    return result

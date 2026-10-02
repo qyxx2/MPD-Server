@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from server.app.models.library import ScanResult
+from server.app.models.output import OutputSnapshot
 
 
 class DomainEvent(BaseModel):
@@ -15,6 +16,18 @@ class LibraryChangedEvent(DomainEvent):
     event_type: str = "library.changed"
     result: ScanResult
     mpd_update_error: str | None = None
+
+
+class OutputChangedEvent(DomainEvent):
+    model_config = ConfigDict(frozen=True)
+
+    event_type: Literal["output.changed"] = "output.changed"
+    snapshot: OutputSnapshot
+
+    @field_validator("snapshot")
+    @classmethod
+    def own_snapshot(cls, snapshot: OutputSnapshot) -> OutputSnapshot:
+        return snapshot.model_copy(deep=True)
 
 
 class EventPublisher(Protocol):
