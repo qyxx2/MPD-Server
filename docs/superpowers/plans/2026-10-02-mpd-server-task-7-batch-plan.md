@@ -17,8 +17,8 @@
 - Task 1R `03f4de9`（transport 完成）、Task 4 corrective `86975d6` 均经 `git merge-base --is-ancestor <commit> HEAD` 验证可达。main 已含 Task 5 merge。代码/测试证据见 §2；提交可达不等于本窗口重新跑过测试。
 - M Dependency Matrix：Task 7 依赖 1R + 4；Task 6 依赖 3 + 4 + 5 + 7。Task 7 先于 Task 6。
 - Relationship Gate：**REQUIRED**；Contract Matrix Gate：**REQUIRED**。涉及外部输出事实、播放保留、HTTP 表示、外层事务和事件顺序。
-- 本窗口状态：Contract Audit / Matrix / Batch Planning；**所有 Batch NOT STARTED，所有新 proof TO CREATE**。不以历史 GREEN 冒充本窗口验证。
-- 本环境 `python -m pytest --version` 返回 `No module named pytest`；未执行现有测试、未安装产品依赖、未访问真实 NAS。实现 Batch 开始前必须在可运行现有依赖的环境重跑其最小前置回归。
+- 规划审计窗口状态：Contract Audit / Matrix / Batch Planning，未实施 production/test。当前 B1 已完成只读/拒绝局部验收；B2–B9 NOT STARTED，O-STATE-001 请求转换仍 pending B5/B6，Task 7 未完成。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
+- 规划审计环境曾返回 `No module named pytest`，未跑测试。B1 使用现有 `.venv` 完成本地验证，未安装/修改依赖、未访问真实 NAS；fresh evidence 见上述归档，不沿用规划环境结论。
 
 ### Global Constraints
 
@@ -64,7 +64,7 @@
 | R-ARCH | `server/tests/invariants/test_architecture_relationships.py::test_dependency_direction_preserves_repository_and_player_authorities` |
 | R-PL | `server/tests/invariants/test_playlist_relationships.py::test_persisted_membership_matches_every_representation_and_collection_split` |
 
-以下**不存在，均 TO CREATE**：本计划 §6 列出的 models/output.py、models/mpd_info.py、services/output_manager.py、services/mpd_info_service.py、api/system.py、api/system_schemas.py 以及所有 `test_output_*` / `test_mpd_info_*` / `test_system_*` / `test_transaction_commit_hooks.py`。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
+审计基线时以下文件不存在，标为 TO CREATE。B1 现已创建 models/output.py、services/output_manager.py、test_output_manager.py 和 F1 test_output_observation.py；其它 models/mpd_info.py、services/mpd_info_service.py、api/system.py、api/system_schemas.py 以及 F2–F9/transport、`test_mpd_info_*` / `test_system_*` / `test_transaction_commit_hooks.py` 仍 TO CREATE。未来命令只在对应 Batch 创建后执行，不能当成当前证据。
 
 ## 3. Contract Gap resolution（先于 Matrix 和 Batch）
 
@@ -215,9 +215,9 @@ G1–G3 是经用户选择补齐的语义，不是假称原规格早已定义。
 | PL-REP-001 | Playlist persisted membership 对所有表示一致 | 同上，R-PL；仅共享 transaction/API wiring 影响时 B4/B7/B8，B9 |
 | PL-COLLECTION-001 | playable split 不修改持久成员 | 同上，R-PL；同前；无 Task 7 新业务 |
 
-## 5. 冻结接口、数据表示与最小文件结构（全部新增项 TO CREATE）
+## 5. 冻结接口、数据表示与最小文件结构
 
-接口在此规划中冻结；下列名字是未来实现目标，不是 existing evidence。
+接口在此规划中冻结；B1 模型、只读/拒绝 Service 和 F1 已存在，其余新增接口仍为未来实现目标。各 row 的最终 proof 阶段不因 B1 局部 GREEN 提前完成。
 
 - B1 `server/app/models/output.py`：`OutputMode(NAS_DAC, CLIENT_STREAM)`；`OutputState` 包含 mode/status、stream 预留字段、error_code/error_message、updated_at、stale；`OutputRequestState` 包含 mode/enabled/status(PREPARING/SUCCEEDED/SWITCH_FAILED)/error/time；`OutputSnapshot(states: tuple[OutputState, ...], last_request: OutputRequestState | None)`。observed 只用三个事实状态，五种原规定状态分布在 observed/request 两个维度。API aliases 使用 O §5.2 的 camelCase。
 - 读取仅要求对应读取能力；actual ACTIVE 不等于具备控制权限。B5/B6 在任何写命令前检查 `outputs`、`set_output_enabled`、`status`、`queue_entries` 所需能力，不能在副作用后才发现无法确认。
@@ -234,7 +234,7 @@ G1–G3 是经用户选择补齐的语义，不是假称原规格早已定义。
 
 不得在接口冻结 Batch 写占位“成功”实现；不可用路径必须明确拒绝。内部 helper 名称可在所属 Batch RED 后决定，不得改变上述跨 Batch 合同。
 
-## 6. 新 invariant proof register（全为 TO CREATE）
+## 6. 新 invariant proof register（F1 已存在，其余 TO CREATE）
 
 | ID | TO CREATE 文件与函数 | 必须跨越的真实关系 / 核心断言 | owner / final proof |
 |---|---|---|---|
@@ -273,6 +273,7 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - RED/invariants：`test_output_manager.py` + F1；包括 target ID 非 0、多个 ALSA、无 selector、selector 无效/抛错、已开 httpd、unverified、unreachable、旧缓存 stale。
 - 允许 production：TO CREATE models/output.py、services/output_manager.py（仅读与 reserved）。禁止：NAS 启停成功路径、DB/History/playback 修改、API/events/main、WebSocket。
 - Acceptance：F1 GREEN、R-PORT 相关 step4/6 tests；读操作没有 mutation。O-STATE-001 的 request transition 仍 pending B5/B6；B1 不宣称 Task 7 控制已完成。
+- 当前局部验收：B1 focused 24 passed、显式 F1 20 passed、R-PORT step4/6 4 passed；compile、changed-Python Ruff、架构/范围审查通过。完整执行/关系 Gate 证据见 §1 归档引用；未完成 row 保持 pending。
 - Complexity：3 紧密相关 rows，1 主边界，0 成功写转换，2 production files，约 180–300 行；失败定位于 observation/selector/schema，diff 单窗口可审阅。
 
 ### B2 — MPD About 真实来源与空值
