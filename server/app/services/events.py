@@ -30,6 +30,15 @@ class OutputChangedEvent(DomainEvent):
         return snapshot.model_copy(deep=True)
 
 
+def invalidation_domains(event: DomainEvent) -> frozenset[str]:
+    """Route existing events without treating their possibly delayed payload as state."""
+    if isinstance(event, LibraryChangedEvent):
+        return frozenset({"library"})
+    if isinstance(event, OutputChangedEvent):
+        return frozenset({"output"})
+    return frozenset()
+
+
 class EventPublisher(Protocol):
     async def publish(self, event: DomainEvent) -> None: ...
 
