@@ -95,6 +95,18 @@ def _queue_change(operation):
     return wrapped
 
 
+def _current_change(operation):
+    """Stage the complete confirmed transition inside the existing outer owner."""
+    @wraps(operation)
+    async def wrapped(self, *args, **kwargs):
+        before = await self._current_content()
+        result = await operation(self, *args, **kwargs)
+        self._stage_transport(before, await self._current_content())
+        return result
+
+    return wrapped
+
+
 class PlaybackSongNotFoundError(ValueError):
     """A requested Song identity is absent from the library."""
 
@@ -146,6 +158,11 @@ class PlaybackService:
             return {}
         return {"queue": await self.queue_manager.queue_repository.get_snapshot()}
 
+    async def _current_content(self) -> dict[str, object]:
+        if self._coordinator is None and self._event_publisher is None:
+            return {}
+        return {**await self._transport_content(), **await self._queue_content()}
+
     def _stage_transport(self, before: dict[str, object], after: dict[str, object]) -> None:
         path = self.queue_manager.queue_repository.path
         if self._coordinator is not None:
@@ -186,6 +203,7 @@ class PlaybackService:
             lifecycle._active = False
 
     @_atomic_history_transition
+    @_current_change
     async def start_track(self, song_id: str) -> PlaybackContext:
         song = await self._require_available_song(song_id)
         await self._prepare_play(song)
@@ -207,6 +225,7 @@ class PlaybackService:
         return context
 
     @_atomic_history_transition
+    @_current_change
     async def play_context(
         self,
         context: PlaybackContext,
@@ -234,6 +253,7 @@ class PlaybackService:
         return state
 
     @_atomic_history_transition
+    @_current_change
     async def play_now(self, queue_item_id: str) -> QueueItem:
         item = await self.queue_manager.get_item(queue_item_id)
         if item is None:
@@ -352,6 +372,7 @@ class PlaybackService:
                 return None
 
             # Resolve availability before promoting a successor. Played is independent.
+            before = await self._current_content()
             for item in snapshot.items:
                 if item.position > 0:
                     song = await self.library_repository.get_song(item.song_id)
@@ -404,6 +425,7 @@ class PlaybackService:
                     autoplay_enabled=state.autoplay_enabled if state else True,
                 )
                 await self.history_service.start_track(promoted.song_id)
+            self._stage_transport(before, await self._current_content())
             return promoted
 
         return await run_transaction(
@@ -445,6 +467,7 @@ class PlaybackService:
         await self.autoplay.refill(await self._queue_playback_context(state))
 
     @_atomic_history_transition
+    @_current_change
     async def next(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
@@ -497,6 +520,7 @@ class PlaybackService:
         return target
 
     @_atomic_history_transition
+    @_current_change
     async def previous(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
@@ -578,6 +602,7 @@ class PlaybackService:
         return confirmed
 
     @_atomic_history_transition
+    @_current_change
     async def reconcile_external_status(self) -> PlaybackState:
         status = await self.player.status()
         previous = await self.queue_manager.get_playback_state()
