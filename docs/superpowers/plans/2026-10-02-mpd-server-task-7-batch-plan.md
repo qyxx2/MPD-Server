@@ -17,7 +17,7 @@
 - Task 1R `03f4de9`（transport 完成）、Task 4 corrective `86975d6` 均经 `git merge-base --is-ancestor <commit> HEAD` 验证可达。main 已含 Task 5 merge。代码/测试证据见 §2；提交可达不等于本窗口重新跑过测试。
 - M Dependency Matrix：Task 7 依赖 1R + 4；Task 6 依赖 3 + 4 + 5 + 7。Task 7 先于 Task 6。
 - Relationship Gate：**REQUIRED**；Contract Matrix Gate：**REQUIRED**。涉及外部输出事实、播放保留、HTTP 表示、外层事务和事件顺序。
-- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4 已完成提交通知基础设施局部验收。B5 pre-flight 已确认 lifecycle 技术接口缺口：现有 runner 只能执行无参 callback，无法在不泄漏 DB path/私有事务状态的前提下注册 B4 的 commit/rollback hooks；该缺口由后续 B4.5 修复；B5 当前状态见本节末及 B5 局部验收。B4.5 corrective 已完成显式 lifecycle 注入接口及局部关系验收；B5 enable 已完成本地 Service acceptance；B6 disable 已完成本地 Service acceptance；B7 已完成 System read API 本地 acceptance；B8 已完成输出 mutation REST 与外层事务本地 acceptance，B9 NOT STARTED。O-STATE-001/O-FAIL-001/O-PRESERVE-001 的 Service 两操作 proof 及 SYS-WRITE-001/O-TX-001/O-EVENT-001 最终 REST integration proof 已通过；Task 7 final gate 未执行，Task 7 未完成。B8 fresh evidence 见 `../archive/task-7/2026-10-02-task-7-batch-8-acceptance.md`。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-6-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
+- 规划审计窗口未实施 production/test。当前 B1 已完成只读/拒绝局部验收，B2 已完成 About Service 局部验收；B3 已完成共同串行化/guard 局部验收，B4 已完成提交通知基础设施局部验收。B5 pre-flight 已确认 lifecycle 技术接口缺口：现有 runner 只能执行无参 callback，无法在不泄漏 DB path/私有事务状态的前提下注册 B4 的 commit/rollback hooks；该缺口由后续 B4.5 修复；B5 当前状态见本节末及 B5 局部验收。B4.5 corrective 已完成显式 lifecycle 注入接口及局部关系验收；B5 enable 已完成本地 Service acceptance；B6 disable 已完成本地 Service acceptance；B7 已完成 System read API 本地 acceptance；B8 已完成输出 mutation REST 与外层事务本地 acceptance，B9 已完成独立关系 Gate、后端 final acceptance、traceability 与范围审查。O-STATE-001/O-FAIL-001/O-PRESERVE-001 的 Service 两操作 proof 及 SYS-WRITE-001/O-TX-001/O-EVENT-001 最终 REST integration proof 已通过；Task 7 后端 final gate 已通过；本轮证据见 `../archive/task-7/2026-10-03-task-7-batch-9-acceptance.md`。未执行真实 NAS/物理 DAC 验收，未 PR/merge main。B8 fresh evidence 见 `../archive/task-7/2026-10-02-task-7-batch-8-acceptance.md`。执行证据：`../archive/task-7/2026-10-02-task-7-batch-1-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-2-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-3-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-4-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-5-acceptance.md`、`../archive/task-7/2026-10-02-task-7-batch-6-acceptance.md`；后续窗口仍须核对真实 Git/代码/测试。
 - 规划审计环境曾返回 `No module named pytest`，未跑测试。B1 使用现有 `.venv` 完成本地验证，未安装/修改依赖、未访问真实 NAS；fresh evidence 见上述归档，不沿用规划环境结论。
 
 ### Global Constraints
@@ -101,7 +101,7 @@ B5 pre-flight 对当前实现与 §5 冻结接口复核后确认：B4 已提供 
 - **修改已有 rows**：不修改历史 row 的业务语义；TX-ROLLBACK-001 的实现机制会增加最外层提交钩子，故作为 affected/modified implementation row；TX-IDEMP-001 扩展到 system 路由的使用场景，必须回归。PB rows 的 wrapper 补齐只保护原行为。
 - **仅历史 regression**：PB-STOP-001、PB-INSERT-001、PB-REORDER-001、PB-DELETE-PENDING-001、PB-DELETE-CURRENT-001、PB-NEXT-UNAVAILABLE-001、PB-HISTORY-001、PL-REP-001、PL-COLLECTION-001；其唯一原 row 在 Task 5 active plan §3.6，不复制/重定义原业务。
 
-每 row 下显式列出全部 required fields。`Unchanged=PRESERVE` 指：服务端 Queue snapshot/revision/item identity/order、PlaybackState 的歌曲/状态/Context/AutoPlay、History persisted/active/session、MPD execution/current occurrence 与 repeat/random/volume 保持；position 按 O §6.2。`Proof F#` 的完整 TO CREATE 路径/函数与 owner 在 §6，不是现有测试。
+每 row 下显式列出全部 required fields。`Unchanged=PRESERVE` 指：服务端 Queue snapshot/revision/item identity/order、PlaybackState 的歌曲/状态/Context/AutoPlay、History persisted/active/session、MPD execution/current occurrence 与 repeat/random/volume 保持；position 按 O §6.2。`Proof F#` 的路径/函数与 owner 在 §6；原 TO CREATE 表示创建时归属，B9 已核对现存测试并重新执行。
 
 ### 4.2 新增 rows
 
@@ -227,7 +227,7 @@ B5 pre-flight 对当前实现与 §5 冻结接口复核后确认：B4 已提供 
 
 ## 5. 冻结接口、数据表示与最小文件结构
 
-接口在此规划中冻结；B1 模型、只读/拒绝 Service 和 F1 已存在，其余新增接口仍为未来实现目标。各 row 的最终 proof 阶段不因 B1 局部 GREEN 提前完成。
+接口在此冻结；B1–B8（含 B4.5）的实现和最终 proof 已由 B9 在当前 checkout 重新核对并执行。后续消费者继续遵循下列接口，不改变原 implementation owner。
 
 - B1 `server/app/models/output.py`：`OutputMode(NAS_DAC, CLIENT_STREAM)`；`OutputState` 包含 mode/status、stream 预留字段、error_code/error_message、updated_at、stale；`OutputRequestState` 包含 mode/enabled/status(PREPARING/SUCCEEDED/SWITCH_FAILED)/error/time；`OutputSnapshot(states: tuple[OutputState, ...], last_request: OutputRequestState | None)`。observed 只用三个事实状态，五种原规定状态分布在 observed/request 两个维度。API aliases 使用 O §5.2 的 camelCase。
 - 读取仅要求对应读取能力；actual ACTIVE 不等于具备控制权限。B5/B6 在任何写命令前检查 `outputs`、`set_output_enabled`、`status`、`queue_entries` 所需能力，不能在副作用后才发现无法确认。
@@ -267,6 +267,8 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 ## 7. Batch Execution Plan
 
 ### 共同执行与验收规则
+
+B1–B8 的局部验收段及 pending 标记记录各 Batch 当时的边界，不覆盖 §1/B9 的最终状态。
 
 每 Batch 先读取：M Task 7/相关 gates、O 本 Batch 引用段、下列 Contract rows、直接 production/test dependencies；无需读整个项目历史。
 
@@ -380,7 +382,7 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - 允许 production：system.py/system_schemas.py；output_manager.py 仅 outer transaction 集成缺口，不能新增输出语义。若需修改通用 idempotency/database 超出 B4 冻结接口，先报告 concrete failed invariant，另开最小 corrective，不顺带扩张本 Batch。
 - 禁止：重写已有幂等协议、让 API 导入 Repository、在 API 直接 publish/调用 MPD、新增状态机/持久表、Task 6。
 - Acceptance：F8/F9 GREEN，publisher 看到 committed terminal；failed terminal 后 MPD 可保持已变，读取不伪装 rollback；retry 先观察；成功 replay 不再控制/发事件。R-TX/R-STOP/R-PLAY/R-PL/R-ARCH 全部 GREEN；此时所有新增 row 最终 executable proof 都已存在并通过。
-- 当前局部验收：PUT typed validation/error、F8 确认/无变化/失败表示与播放保留、F9 terminal/schema/outer/commit/cancel-after-effect、commit 后发布异常/取消、retry/replay、F1–F7/F4L 及全部历史 rows regression 已通过；fresh evidence、独立审查和 traceability 见 `../archive/task-7/2026-10-02-task-7-batch-8-acceptance.md`。无通用 middleware/database 改动；B9 Task final gate 仍未执行。
+- 当前局部验收：PUT typed validation/error、F8 确认/无变化/失败表示与播放保留、F9 terminal/schema/outer/commit/cancel-after-effect、commit 后发布异常/取消、retry/replay、F1–F7/F4L 及全部历史 rows regression 已通过；fresh evidence、独立审查和 traceability 见 `../archive/task-7/2026-10-02-task-7-batch-8-acceptance.md`。无通用 middleware/database 改动；B8 当时尚未执行 B9 final gate；当前最终状态见 B9。
 - Complexity：3 高相关 rows，4 边界，**不新增设备转换**，2–3 files，约 80–180 行；主要工作是故障注入关系测试，生产事务/设备行为已由前面 Batch 实现。若生产改动超 300–400 行说明前置合同未闭合，回到对应最小 Batch 修正。
 
 ### B9 — Task final gate / handoff（不新增 production/test 功能）
@@ -393,9 +395,11 @@ F5/F6 使用 Mock 的有效 ALSA outputs 注入和局部 fault-port；不改变�
 - Acceptance：§8 所有命令/覆盖复核、diff 范围、远端 commit/ref 二次验证；Task 7 Step 1–9 按真实完成勾选。未运行真实 NAS 不宣称物理 DAC 验收。PR/merge 不等于实现 gate，本计划不授权自动合入 main。
 - Complexity：0 新行为、0 production files/LOC；full backend suite 与 scoped review，不能用 full suite 替代 F1–F9 明确执行。
 
+- 当前 B9 验收：§8 的 focused、历史回归、独立 invariants、全后端、compile/Ruff、逐文件范围与 traceability 已通过；证据仅保存于 `../archive/task-7/2026-10-03-task-7-batch-9-acceptance.md`。无新增 production/test、Contract Gap 或未关闭 blocker。最终提交及远端 ref 由提交后的 Git 二次核对确认。
+
 ## 8. 验证命令与 Coverage Review
 
-命令从 repo root 执行；`python` 为已安装 `server/requirements.txt` 的目标虚拟环境，不要求 Docker。当前已核实 Makefile 使用 `PYTHONPATH=. python -m pytest server/tests`、ruff/compileall 可按以下形式运行；工具本次不可用，不把命令列举写成执行成功。
+命令从 repo root 执行；`python` 为已安装 `server/requirements.txt` 的目标虚拟环境，不要求 Docker。Makefile 使用 `PYTHONPATH=. python -m pytest server/tests`；本地以现有 `.venv/bin/python` 执行下列命令。B9 fresh 结果保存在唯一 acceptance 归档。
 
 ### 8.1 已存在最小前置/历史回归命令
 
@@ -407,7 +411,7 @@ python -m pytest -q server/tests/integration/test_task3_events_and_mpd.py
 
 各 Batch 使用上面命令中的实际直接相关路径，不强制每小步全量跑。B3/B4/B4.5 扩共享基础必须跑表列历史关系。
 
-### 8.2 未来 Batch 命令（全部测试目标 TO CREATE；创建后才可执行）
+### 8.2 Batch focused / final Gate 命令（B9 已核对测试目标真实存在）
 
 | Batch | focused / explicit invariant command（均 `python -m pytest -q` 后的参数） |
 |---|---|
@@ -457,4 +461,4 @@ Coverage review results:
 - Contract/interface freeze 在本计划 §4/5；B4.5 只补显式 lifecycle capability，不改变 12 个业务 rows；跨 Batch 的 foundation→lifecycle bridge→behavior→final proof 已逐 row 列明，中间阶段不可标 COMPLETE。
 - 无 Task 6 snapshot schema/reconnect/WebSocket fan-out、Task 8 store/UI、Task 10 config/backup 或 CLIENT_STREAM transport 语义混入 Matrix。
 - 未把 probe 样本当 runtime、未把计划 tests 当现有证据、未把 Task 5 历史 GREEN 当新验证。
-- 当前完成的是规划，后续 fresh GREEN/远端实现提交仍待各 Batch。若发现新 Contract Gap，先回到唯一 Spec，再更新对应 row/最小 Batch；不得扩大某 Batch 掩盖缺口。
+- B9 已完成 12 新 rows、5 继承 rows、9 regression-only rows 的 fresh proof 与完整 traceability。若后续发现新 Contract Gap，先回到唯一 Spec，再更新对应 row/最小 corrective；不得扩大 final gate 掩盖缺口。

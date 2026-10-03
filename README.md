@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories → MPD/SQLite`。
 
-当前 `main` 已完成 Task 0–5；`feature/task-7-output-manager` 已完成 Task 7 Contract Audit / Batch Planning，实际实现 Batch 尚未开始。按照主 Implementation Plan 的依赖顺序，Task 7 先于 Task 6。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
+当前 `main` 已完成 Task 0–5；`feature/task-7-output-manager` 已完成 Task 7 实现及后端 final acceptance，尚未合入 main。按照主 Implementation Plan 的依赖顺序，Task 7 先于 Task 6。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
 
 ## 当前状态
 
@@ -14,8 +14,8 @@ Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories →
 | 3 | 已完成 | 元数据、歌词、扫描、watch/scheduler、artwork lifecycle |
 | 4 | 已完成 | Queue、PlaybackContext、History、AutoPlay、PlaybackService |
 | 5 | 已完成并合入 main | Collection、Library/Playlist Service、REST API、idempotency 与跨模块 invariant |
-| 7 | Contract Audit / Batch Plan 已完成；实现未开始 | Output Manager、NAS_DAC 状态/控制、MPD About |
-| 6 | 未开始；等待 Task 7 | WebSocket、完整状态快照与重连恢复 |
+| 7 | 分支实现及后端验收完成，未合入 main；物理 DAC 验收留待 Task 12 | Output Manager、NAS_DAC 状态/控制、MPD About |
+| 6 | 未开始；可进行独立 pre-flight | WebSocket、完整状态快照与重连恢复 |
 | 8–12 | 未开始 | Web/PWA、配置、部署及最终实机验收 |
 
 当前实施入口：
