@@ -8,6 +8,7 @@ from typing import Concatenate, ParamSpec, TypeVar
 
 from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
+from server.app.models.realtime import PlaybackObservation
 from server.app.player.models import PlayerState, PlayerStatus
 from server.app.player.ports import PlayerPort
 from server.app.repositories.database import (
@@ -23,6 +24,7 @@ from server.app.services.autoplay import AutoPlay
 from server.app.services.events import EventPublisher, PlaybackChangedEvent
 from server.app.services.history_service import HistoryService
 from server.app.services.output_operation import OutputOperationLifecycle
+from server.app.services.playback_observation import PlaybackObservations
 from server.app.services.queue_manager import QueueItemNotFoundError, QueueManager
 from server.app.services.realtime_coordinator import RealtimeCoordinator
 
@@ -132,6 +134,7 @@ class PlaybackService:
         library_repository: LibraryRepository,
         event_publisher: EventPublisher | None = None,
         coordinator: RealtimeCoordinator | None = None,
+        observation_clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.queue_manager = queue_manager
         self.history_service = history_service
@@ -140,12 +143,22 @@ class PlaybackService:
         self.library_repository = library_repository
         self._event_publisher = event_publisher
         self._coordinator = coordinator
+        self._observations = PlaybackObservations(self, observation_clock)
         self._transport_changes: dict[object, list[dict[str, object]]] = {}
+
+    async def observe(self) -> PlaybackObservation:
+        return await self._observations.observe()
+
+    async def get_observation(self) -> PlaybackObservation:
+        return await self._observations.get()
 
     async def _transport_content(self) -> dict[str, object]:
         state = await self.queue_manager.get_playback_state()
         return {
-            "playback": state.model_dump(exclude={"updated_at"}) if state else None,
+            "playback": (
+                state.model_dump(exclude={"updated_at"}) if state else None,
+                self._observations.cache.model_dump(exclude={"observed_at"}),
+            ),
             "history": (
                 await self.history_service.list_history(),
                 self.history_service.active_event,
@@ -424,6 +437,7 @@ class PlaybackService:
                     status=status,
                     autoplay_enabled=state.autoplay_enabled if state else True,
                 )
+                await self._observations.confirmed(status)
                 await self.history_service.start_track(promoted.song_id)
             self._stage_transport(before, await self._current_content())
             return promoted
@@ -448,6 +462,7 @@ class PlaybackService:
             raise PlaybackReconciliationError("Queue mutation changed actual playback state")
         if expected != PlayerState.STOPPED:
             await self._confirm_current_occurrence(status)
+            await self._observations.confirmed(status)
 
     async def _confirm_current_occurrence(self, status: PlayerStatus) -> None:
         entries = await self.player.queue_entries()
@@ -832,6 +847,7 @@ class PlaybackService:
             autoplay_enabled=autoplay_enabled,
             updated_at=datetime.now(timezone.utc),
         )
+        await self._observations.changed()
         return await self.queue_manager.set_playback_state(saved)
 
     async def _song_id_for_uri(self, song_uri: str | None) -> str | None:
