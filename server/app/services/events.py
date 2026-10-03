@@ -24,6 +24,13 @@ class PlaylistChangedEvent(DomainEvent):
     event_type: Literal["playlist.changed"] = "playlist.changed"
 
 
+class PlaybackChangedEvent(DomainEvent):
+    model_config = ConfigDict(frozen=True)
+
+    event_type: Literal["playback.changed"] = "playback.changed"
+    domains: frozenset[str]
+
+
 class OutputChangedEvent(DomainEvent):
     model_config = ConfigDict(frozen=True)
 
@@ -42,6 +49,8 @@ def invalidation_domains(event: DomainEvent) -> frozenset[str]:
         return frozenset({"library"})
     if isinstance(event, PlaylistChangedEvent):
         return frozenset({"playlist"})
+    if isinstance(event, PlaybackChangedEvent):
+        return event.domains
     if isinstance(event, OutputChangedEvent):
         return frozenset({"output"})
     return frozenset()

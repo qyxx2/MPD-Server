@@ -13,14 +13,18 @@ from server.app.player.ports import PlayerPort
 from server.app.repositories.database import (
     on_transaction_commit,
     on_transaction_rollback,
+    on_transaction_visible,
     run_transaction,
+    transaction_identity,
 )
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.queue_repository import QueueRevisionConflictError
 from server.app.services.autoplay import AutoPlay
+from server.app.services.events import EventPublisher, PlaybackChangedEvent
 from server.app.services.history_service import HistoryService
 from server.app.services.output_operation import OutputOperationLifecycle
 from server.app.services.queue_manager import QueueItemNotFoundError, QueueManager
+from server.app.services.realtime_coordinator import RealtimeCoordinator
 
 logger = logging.getLogger(__name__)
 P = ParamSpec("P")
@@ -64,6 +68,21 @@ def _atomic_history_transition(
     return wrapped
 
 
+def _transport_change(operation):
+    """Stage only transport producers, never the shared Output operation runner."""
+    @wraps(operation)
+    async def wrapped(self, *args, **kwargs):
+        if self._coordinator is None and self._event_publisher is None:
+            return await operation(self, *args, **kwargs)
+        before = await self._transport_content()
+        result = await operation(self, *args, **kwargs)
+        after = await self._transport_content()
+        self._stage_transport(before, after)
+        return result
+
+    return wrapped
+
+
 class PlaybackSongNotFoundError(ValueError):
     """A requested Song identity is absent from the library."""
 
@@ -87,12 +106,54 @@ class PlaybackService:
         autoplay: AutoPlay,
         player: PlayerPort,
         library_repository: LibraryRepository,
+        event_publisher: EventPublisher | None = None,
+        coordinator: RealtimeCoordinator | None = None,
     ) -> None:
         self.queue_manager = queue_manager
         self.history_service = history_service
         self.autoplay = autoplay
         self.player = player
         self.library_repository = library_repository
+        self._event_publisher = event_publisher
+        self._coordinator = coordinator
+        self._transport_changes: dict[object, list[dict[str, object]]] = {}
+
+    async def _transport_content(self) -> dict[str, object]:
+        state = await self.queue_manager.get_playback_state()
+        return {
+            "playback": state.model_dump(exclude={"updated_at"}) if state else None,
+            "history": (
+                await self.history_service.list_history(),
+                self.history_service.active_event,
+                self.history_service.session_id,
+            ),
+        }
+
+    def _stage_transport(self, before: dict[str, object], after: dict[str, object]) -> None:
+        path = self.queue_manager.queue_repository.path
+        if self._coordinator is not None:
+            for domain, content in before.items():
+                self._coordinator.stage_change(
+                    frozenset({domain}), content, after[domain],
+                )
+        if self._event_publisher is None:
+            return
+        owner = transaction_identity(path)
+        delta = self._transport_changes.get(owner)
+        if delta is None:
+            delta = [before, after]
+            self._transport_changes[owner] = delta
+
+            async def committed():
+                first, last = delta
+                domains = frozenset(domain for domain in first if first[domain] != last[domain])
+                if domains:
+                    await self._event_publisher.publish(PlaybackChangedEvent(domains=domains))
+
+            on_transaction_commit(path, committed)
+            on_transaction_visible(path, lambda: self._transport_changes.pop(owner, None))
+            on_transaction_rollback(path, lambda: self._transport_changes.pop(owner, None))
+        delta[1] = after
 
     @_atomic_history_transition
     async def run_output_operation(
@@ -441,6 +502,7 @@ class PlaybackService:
         return await self.queue_manager.get_playback_state()
 
     @_atomic_history_transition
+    @_transport_change
     async def pause(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
@@ -455,6 +517,7 @@ class PlaybackService:
         )
 
     @_atomic_history_transition
+    @_transport_change
     async def seek(self, seconds: float) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
@@ -470,6 +533,7 @@ class PlaybackService:
         )
 
     @_atomic_history_transition
+    @_transport_change
     async def stop(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
 
