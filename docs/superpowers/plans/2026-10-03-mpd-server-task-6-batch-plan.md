@@ -259,13 +259,13 @@ Complexity：2rows/scan→DB→publisher 3边界/commit与update失败2转换；
 
 Owned RT-PLAYLIST-001、RT-REVISION-001 final；Relied TX-*；Regression PL-REP/PL-COLLECTION-001。
 
-白名单：`services/playlist_service.py`、`repositories/playlist_repository.py`、`services/events.py`。新增 `PlaylistService.revision_content() -> tuple[object, ...]`，以存在性/名称/成员/顺序比较；注入coordinator/publisher；新增 `PlaylistChangedEvent`。所有直接Service mutation与API outer事务加入同一unit-of-work，save_queue一次提交；不改变CRUD错误或REST schema。
+白名单：`services/playlist_service.py`、`repositories/playlist_repository.py`、`services/events.py`；用户于2026-10-03批准最小扩展 `services/queue_manager.py`，仅限既有 `save_as_playlist` 的 outer transaction 接线，覆盖直接Service调用，不改保存范围、Queue播放规则或API。新增 `PlaylistService.revision_content() -> tuple[object, ...]`，以存在性/名称/成员/顺序比较；注入coordinator/publisher；新增 `PlaylistChangedEvent`。所有直接Service mutation与API outer事务加入同一unit-of-work，save_queue一次提交；不改变CRUD错误或REST schema。
 
-**TO CREATE** `invariants/test_realtime_playlist.py`；RED `test_playlist_versions_follow_outer_delta_and_replay`：真实CRUD/Favorites/save queue、同名/同收藏no-op、重复添加错误、rollback/replay；两个域同outer事务各增一次，重启新coordinator epoch不同计数0、持久数据不丢；Library变更不增Playlist但保留成员。
+**TO CREATE** `invariants/test_realtime_playlist.py`；RED `test_playlist_versions_follow_outer_delta_and_replay`：真实CRUD/Favorites/save queue、同名/同收藏no-op、重复添加错误、rollback/replay；两个域同outer事务各增一次，重启新coordinator epoch不同计数0、持久数据不丢；Library变更不增Playlist但保留成员。`test_direct_queue_save_never_exposes_partial_playlist` 覆盖既有 QueueManager 直接保存入口：一次提交/完整成员/单次版本，以及发布后取消仍保留完整已提交资源。
 
 验证：selector → 全文件+B1/B2新proof文件 → R-PL/R-TX。验收：RT-REVISION生产级proof闭环，不能只验证计数器单测。
 
-Complexity：2rows/Service→DB→publisher 3边界/有效delta/no-op/rollback3转换；persistence/runtime/API；3生产文件约100–220LOC；可独立审阅。
+Complexity：2rows/Service→DB→publisher 3边界/有效delta/no-op/rollback3转换；persistence/runtime/API；4生产文件约100–220LOC（含已批准的保存事务接线）；可独立审阅。
 
 ### Batch 4 — Playback transport 提交传播
 

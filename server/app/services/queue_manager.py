@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
+from server.app.repositories.database import run_transaction
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import (
@@ -240,16 +241,19 @@ class QueueManager:
         return await self.queue_repository.get_item(queue_item_id)
 
     async def save_as_playlist(self, name: str):
-        up_next = await self.queue_repository.list_up_next()
-        song_ids = [item.song_id for item in up_next]
-        if len(song_ids) != len(set(song_ids)):
-            raise ValueError("Queue Up Next contains duplicate songs")
+        async def operation(_):
+            up_next = await self.queue_repository.list_up_next()
+            song_ids = [item.song_id for item in up_next]
+            if len(song_ids) != len(set(song_ids)):
+                raise ValueError("Queue Up Next contains duplicate songs")
 
-        playlist = await self.playlist_repository.create_playlist(name)
-        for position, song_id in enumerate(song_ids):
-            await self.playlist_repository.add_song(
-                playlist.playlist_id,
-                song_id,
-                position=position,
-            )
-        return playlist
+            playlist = await self.playlist_repository.create_playlist(name)
+            for position, song_id in enumerate(song_ids):
+                await self.playlist_repository.add_song(
+                    playlist.playlist_id,
+                    song_id,
+                    position=position,
+                )
+            return playlist
+
+        return await run_transaction(self.queue_repository.path, operation)
