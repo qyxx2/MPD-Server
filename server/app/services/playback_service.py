@@ -10,16 +10,43 @@ from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
 from server.app.player.models import PlayerState, PlayerStatus
 from server.app.player.ports import PlayerPort
-from server.app.repositories.database import run_transaction
+from server.app.repositories.database import (
+    on_transaction_commit,
+    on_transaction_rollback,
+    run_transaction,
+)
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.queue_repository import QueueRevisionConflictError
 from server.app.services.autoplay import AutoPlay
 from server.app.services.history_service import HistoryService
+from server.app.services.output_operation import OutputOperationLifecycle
 from server.app.services.queue_manager import QueueItemNotFoundError, QueueManager
 
 logger = logging.getLogger(__name__)
 P = ParamSpec("P")
 T = TypeVar("T")
+
+
+class _OutputOperationLifecycle:
+    """Bind public database hooks without exposing transaction resources."""
+
+    __slots__ = ("_active", "_path")
+
+    def __init__(self, path: str) -> None:
+        self._path = path
+        self._active = True
+
+    def _require_active(self) -> None:
+        if not self._active:
+            raise RuntimeError("lifecycle registration requires an active output invocation")
+
+    def on_commit(self, callback: Callable[[], object | Awaitable[object]]) -> None:
+        self._require_active()
+        on_transaction_commit(self._path, callback)
+
+    def on_rollback(self, callback: Callable[[], None]) -> None:
+        self._require_active()
+        on_transaction_rollback(self._path, callback)
 
 
 def _atomic_history_transition(
@@ -66,6 +93,17 @@ class PlaybackService:
         self.autoplay = autoplay
         self.player = player
         self.library_repository = library_repository
+
+    @_atomic_history_transition
+    async def run_output_operation(
+        self, operation: Callable[[OutputOperationLifecycle], Awaitable[T]],
+    ) -> T:
+        """Serialize output work with playback in the owning database transaction."""
+        lifecycle = _OutputOperationLifecycle(self.queue_manager.queue_repository.path)
+        try:
+            return await operation(lifecycle)
+        finally:
+            lifecycle._active = False
 
     @_atomic_history_transition
     async def start_track(self, song_id: str) -> PlaybackContext:
@@ -151,6 +189,7 @@ class PlaybackService:
         await self._confirm_preserved_state()
         return selected
 
+    @_atomic_history_transition
     async def play_next(self, song_id: str) -> QueueItem:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.play_next(song.song_id)
@@ -158,6 +197,7 @@ class PlaybackService:
         await self._confirm_preserved_state()
         return item
 
+    @_atomic_history_transition
     async def add_to_queue(self, song_id: str) -> QueueItem:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.add_to_queue(song.song_id)
@@ -400,6 +440,7 @@ class PlaybackService:
         await self._confirm_preserved_state()
         return await self.queue_manager.get_playback_state()
 
+    @_atomic_history_transition
     async def pause(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
@@ -413,6 +454,7 @@ class PlaybackService:
             autoplay_enabled=state.autoplay_enabled,
         )
 
+    @_atomic_history_transition
     async def seek(self, seconds: float) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":

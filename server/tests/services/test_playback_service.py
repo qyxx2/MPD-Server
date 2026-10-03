@@ -305,12 +305,22 @@ def test_mpd_queue_sync_failure_keeps_server_queue_authoritative(components):
     before = run(components["state"].get_state())
     assert before is not None
 
+    queue_before = run(components["queue"].get_snapshot())
+    history_before = run(components["history"].list_history())
+    active_before = components["history_service"].active_event
+    session_before = components["history_service"].session_id
     player.fail_next("queue_add", "injected queue sync failure")
     with pytest.raises(PlayerCommandError, match="injected queue sync failure"):
         run(service.add_to_queue("g"))
 
+    # PB-INSERT-001/TX-ROLLBACK-001: the whole Service operation owns
+    # the transaction; failed synchronization cannot commit an insertion.
+    assert run(components["queue"].get_snapshot()) == queue_before
+    assert run(components["history"].list_history()) == history_before
+    assert components["history_service"].active_event == active_before
+    assert components["history_service"].session_id == session_before
     items = run(components["queue"].list_up_next())
-    assert [item.song_id for item in items] == list("bcdefg")
+    assert [item.song_id for item in items] == list("bcdef")
     assert run(components["state"].get_state()) == before
     assert [entry.song_uri for entry in run(player.queue_entries())] == [
         "music/a.mp3",

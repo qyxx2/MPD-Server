@@ -11,6 +11,8 @@ from server.app.api.history import router as history_router
 from server.app.api.library import router as library_router
 from server.app.api.playback import router as playback_router
 from server.app.api.playlists import router as playlists_router
+from server.app.api.system import router as system_router
+from server.app.player.capabilities import MPDCapabilities
 from server.app.player.mpd_adapter import MPDAdapter
 from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
@@ -28,6 +30,8 @@ from server.app.services.library_service import (
     CollectionSourceNotFoundError,
     LibraryService,
 )
+from server.app.services.mpd_info_service import MPDInfoService
+from server.app.services.output_manager import OutputManager
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
 from server.app.services.queue_manager import QueueManager
@@ -72,6 +76,20 @@ async def lifespan(app: FastAPI):
         player=player,
         library_repository=library_repository,
     )
+
+    # Capability loading belongs to Task 10. Until verification is explicitly
+    # injected, system reads report unavailable facts without running a probe.
+    capabilities = getattr(app.state, "mpd_capabilities", None)
+    if capabilities is None:
+        capabilities = MPDCapabilities.from_commands(set())
+    app.state.output_manager = OutputManager(
+        player=player,
+        capabilities=capabilities,
+        operation_runner=playback_service.run_output_operation,
+        selector=getattr(app.state, "output_selector", None),
+        event_publisher=getattr(app.state, "event_publisher", None),
+    )
+    app.state.mpd_info_service = MPDInfoService(player=player, capabilities=capabilities)
 
     app.state.library_service = library_service
     app.state.library_scanner = library_scanner
@@ -209,6 +227,7 @@ app.include_router(history_router)
 app.include_router(library_router)
 app.include_router(playlists_router)
 app.include_router(playback_router)
+app.include_router(system_router)
 
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"

@@ -6,6 +6,8 @@ from server.app.services.collection_service import CollectionService
 from server.app.services.history_service import HistoryService
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
+from server.app.services.mpd_info_service import MPDInfoService
+from server.app.services.output_manager import OutputManager
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
 from server.app.services.queue_manager import QueueManager
@@ -86,3 +88,17 @@ async def resolve_library_scanner(request: Request) -> LibraryScanner:
 
 async def get_library_scanner(request: Request) -> LibraryScanner:
     return await resolve_library_scanner(request)
+
+
+async def get_output_manager(request: Request) -> OutputManager:
+    manager = getattr(request.app.state, "output_manager", None)
+    if manager is None:
+        raise RuntimeError("output manager is not configured")
+    return manager
+
+
+async def get_mpd_info_service(request: Request) -> MPDInfoService:
+    service = getattr(request.app.state, "mpd_info_service", None)
+    if service is None:
+        raise RuntimeError("MPD info service is not configured")
+    return service

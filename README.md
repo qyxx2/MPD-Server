@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories → MPD/SQLite`。
 
-当前 `main` 已完成 Task 0–4；`feature/task-5-library-api` 已完成 Task 5 final acceptance，待 PR/main merge 审查。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
+当前 `main` 已完成 Task 0–5 和 Task 7 实现及后端 final acceptance。按照主 Implementation Plan 的依赖顺序，下一项为 Task 6；合同与 Batch 规划在独立 Task 6 分支维护，功能尚未实现。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
 
 ## 当前状态
 
@@ -13,14 +13,18 @@ Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories →
 | 2 / 2R | 已完成 | SQLite、Library/Playlist/Favorites/History、reconciliation persistence |
 | 3 | 已完成 | 元数据、歌词、扫描、watch/scheduler、artwork lifecycle |
 | 4 | 已完成 | Queue、PlaybackContext、History、AutoPlay、PlaybackService |
-| 5 | 分支验收完成，未合并 main | Collection、Library/Playlist Service、REST API；Batch 6 final acceptance 已通过 |
-| 6–12 | 未开始 | Realtime、Output、Web/PWA、配置/部署及最终实机验收 |
+| 5 | 已完成并合入 main | Collection、Library/Playlist Service、REST API、idempotency 与跨模块 invariant |
+| 7 | 已完成并合入 main；物理 DAC 验收留待 Task 12 | Output Manager、NAS_DAC 状态/控制、MPD About |
+| 6 | 功能未开始；合同与 Batch 规划在独立分支维护 | WebSocket、完整状态快照与重连恢复 |
+| 8–12 | 未开始 | Web/PWA、配置、部署及最终实机验收 |
 
-Task 5 当前 Gate 只看：
-- `docs/superpowers/plans/2026-09-29-mpd-server-task-5-batch-plan.md`
-- `docs/superpowers/plans/2026-10-01-task-5-contract-architecture-corrective-acceptance.md`
+当前实施入口：
+- `docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md`
+- Task 6 合同与执行计划分支：`feature/task-6-realtime-state`
 
-已完成 Task 的长篇 Batch/acceptance/corrective 记录已归档到 `docs/superpowers/archive/`，作为历史证据，不作为新实现的默认输入。文档读取规则见 `docs/superpowers/README.md`。
+Task 7 后端验收证据见 `docs/superpowers/archive/task-7/2026-10-03-task-7-batch-9-acceptance.md`；本地后端验收不代表已完成真实 NAS/物理 DAC 验收。
+
+Task 5 的 Batch/acceptance/corrective 文档已归档到 `docs/superpowers/archive/task-5/`，作为历史证据，不再作为当前实现入口。文档读取规则见 `docs/superpowers/README.md`。
 
 ## 核心架构约束
 

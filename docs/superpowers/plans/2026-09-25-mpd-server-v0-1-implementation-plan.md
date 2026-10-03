@@ -870,6 +870,11 @@ Rules:
 
 ## Task 7：Output Manager 与 MPD About
 
+Active Contract Matrix / Batch Execution Plan:
+`docs/superpowers/plans/2026-10-02-mpd-server-task-7-batch-plan.md`.
+Contract Audit authority clarification: Chapter 3 §6.1–6.3, §7.3 (2026-10-02).
+Task 7 Steps 1–9 已按真实实现、提交历史和 B9 fresh acceptance 核对。最终本地验收见 `../archive/task-7/2026-10-03-task-7-batch-9-acceptance.md`；物理 NAS/DAC 验收仍属 Task 12。
+
 Dependencies:
 - Task 1R completed.
 - Task 4 completed.
@@ -882,6 +887,13 @@ Files:
 - Create: server/tests/services/test_output_manager.py
 - Create: server/tests/services/test_mpd_info_service.py
 
+Necessary Task 7 support scope (only as assigned by the active Batch Plan):
+- Create: server/app/models/output.py, server/app/models/mpd_info.py, server/app/api/system_schemas.py.
+- Modify: server/app/services/playback_service.py (shared output/playback serialization only), server/app/repositories/database.py (outer-commit notification lifecycle only), server/app/services/events.py (Output event only).
+- Modify: server/app/api/dependencies.py, server/app/main.py (minimal Service injection/router registration; final configuration remains Task 10).
+- Create/extend: focused tests under server/tests/services/, server/tests/api/, server/tests/repositories/ and reusable relationship tests under server/tests/invariants/; exact files/owners are in the active plan, all absent ones marked TO CREATE.
+- Existing Task 5 idempotency machinery is consumed on the current baseline, not reimplemented. Task 7 core remains independent of Task 5 API and Task 6; current REST integration must preserve the already-present Task 5 contracts.
+
 Rules:
 - Identify NAS_DAC by verified MPD output characteristics, never a fixed MPD output ID. When multiple ALSA outputs exist, use an injected selector; do not guess.
 - CLIENT_STREAM is reserved and unavailable in v0.1.
@@ -891,16 +903,18 @@ Rules:
 - Output state is reconciled from MPD before publishing final service state.
 - Switching output preserves current Song, Queue, PlaybackContext and best-effort position.
 - About values come from verified capability/stat contracts. Unsupported/unavailable values stay null and are never fabricated as zero.
+- NAS_DAC enable/disable targets only the selected output; other outputs remain unchanged. Actual state and request outcome are distinct. SQLite failure does not imply MPD rollback; retry re-reads actual output and success events wait for the outermost commit (Chapter 3 §6.1–6.3).
+- These support changes are split into separate small Batches; Step 5 is not permission to implement all infrastructure, behavior and APIs at once.
 
-- [ ] Step 1: RED tests for NAS_DAC states.
-- [ ] Step 2: RED tests for CLIENT_STREAM reserved/unavailable behavior.
-- [ ] Step 3: RED tests for failed switch preserving the old usable output.
-- [ ] Step 4: RED tests for preserving playback context, Queue and position.
-- [ ] Step 5: Implement capability-gated output management.
-- [ ] Step 6: Implement MPD About using MPDCapabilities version and runtime stats/status.
-- [ ] Step 7: Test unknown-field behavior.
-- [ ] Step 8: Run focused tests, required OutputManager/PlayerPort/playback-preservation relationship invariants, compile/lint and diff review.
-- [ ] Step 9: Commit: feat: add output manager and mpd info api.
+- [x] Step 1: RED tests for NAS_DAC states.
+- [x] Step 2: RED tests for CLIENT_STREAM reserved/unavailable behavior.
+- [x] Step 3: RED tests for failed switch preserving the old usable output.
+- [x] Step 4: RED tests for preserving playback context, Queue and position.
+- [x] Step 5: Implement capability-gated output management.
+- [x] Step 6: Implement MPD About using MPDCapabilities version and runtime stats/status.
+- [x] Step 7: Test unknown-field behavior.
+- [x] Step 8: Run focused tests, required OutputManager/PlayerPort/playback-preservation relationship invariants, compile/lint and diff review.
+- [x] Step 9: Commit: feat: add output manager and mpd info api.
 
 
 
