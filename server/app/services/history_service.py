@@ -6,7 +6,8 @@ from typing import Literal
 
 from server.app.models.history import HistoryEvent
 from server.app.models.queue import QueueItem
-from server.app.repositories.database import on_transaction_rollback
+from server.app.models.realtime import HistoryAvailability
+from server.app.repositories.database import on_transaction_rollback, run_transaction
 from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.queue_repository import QueueRepository
 
@@ -51,6 +52,15 @@ class HistoryService:
 
     async def list_history(self, limit: int | None = None) -> list[HistoryEvent]:
         return await self.history_repository.list_history(limit=limit)
+
+    async def get_availability(self) -> HistoryAvailability:
+        async def read(_):
+            entries = await self.list_history(limit=1)
+            return HistoryAvailability(
+                has_entries=bool(entries), active_event=self._active, session_id=self._session_id,
+            ).model_copy(deep=True)
+
+        return await run_transaction(self.history_repository.path, read)
 
     async def start_track(
         self,

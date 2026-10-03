@@ -3,7 +3,12 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
+from server.app.models.queue import (
+    PlaybackContext,
+    PlaybackState,
+    QueueItem,
+    QueueSnapshot,
+)
 from server.app.repositories.database import run_transaction
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
@@ -236,6 +241,9 @@ class QueueManager:
 
     async def list_items(self) -> list[QueueItem]:
         return await self.queue_repository.list_items()
+
+    async def get_snapshot(self) -> QueueSnapshot:
+        return await self.queue_repository.get_snapshot()
 
     async def get_item(self, queue_item_id: str) -> QueueItem | None:
         return await self.queue_repository.get_item(queue_item_id)
