@@ -471,6 +471,14 @@ class _ScannerFakeRepository:
         return ScanResult(added_song_ids=("new",))
 
 
+@pytest.fixture(autouse=True)
+def scanner_fake_transaction_path(tmp_path, monkeypatch):
+    """Parser doubles participate in the scanner's real outer commit boundary."""
+    path = str(tmp_path / "scanner-fake.db")
+    _run(initialize_database(path))
+    monkeypatch.setattr(_ScannerFakeRepository, "path", path, raising=False)
+
+
 def _run(coro):
     return asyncio.run(coro)
 

@@ -7,10 +7,13 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from server.app.models.library import ScanBatch, ScanResult, Song
+from server.app.repositories.database import on_transaction_commit, run_transaction
 from server.app.repositories.library_repository import LibraryRepository
 
 from .events import EventPublisher, LibraryChangedEvent, MPDDatabaseUpdater
+from .library_service import LibraryService
 from .media_metadata import MediaMetadataError, ParsedSongMetadata, parse_media_file
+from .realtime_coordinator import RealtimeCoordinator
 
 _SUPPORTED_SUFFIXES = {".flac", ".mp3"}
 _HASH_CHUNK_SIZE = 1024 * 1024
@@ -111,10 +114,14 @@ class LibraryScanner:
         repository: LibraryRepository,
         event_publisher: EventPublisher | None = None,
         mpd_updater: MPDDatabaseUpdater | None = None,
+        *,
+        coordinator: RealtimeCoordinator | None = None,
     ) -> None:
         self.repository = repository
         self.event_publisher = event_publisher
         self.mpd_updater = mpd_updater
+        self.coordinator = coordinator
+        self._library_service = LibraryService(repository)
 
     async def _match_song_id(
         self,
@@ -251,6 +258,25 @@ class LibraryScanner:
             )
         return result
 
+    async def _apply_batch(self, batch: ScanBatch) -> ScanResult:
+        async def operation(_):
+            before = (
+                await self._library_service.revision_content()
+                if self.coordinator is not None else None
+            )
+            result = await self.repository.apply_scan_batch(batch)
+            if self.coordinator is not None:
+                self.coordinator.stage_change(
+                    frozenset({"library"}), before,
+                    await self._library_service.revision_content(),
+                )
+            on_transaction_commit(
+                self.repository.path, lambda: self._finalize(result),
+            )
+            return result
+
+        return await run_transaction(self.repository.path, operation)
+
     async def scan_full(self, root: Path) -> ScanResult:
         root = root.resolve()
         if not root.is_dir():
@@ -263,8 +289,7 @@ class LibraryScanner:
             batch = batch.model_copy(
                 update={"reconciled_root_uri_prefix": _root_prefix(root)}
             )
-        result = await self.repository.apply_scan_batch(batch)
-        return await self._finalize(result)
+        return await self._apply_batch(batch)
 
     async def scan_paths(self, paths: list[Path]) -> ScanResult:
         expanded: list[Path] = []
@@ -323,5 +348,4 @@ class LibraryScanner:
                     )
                 ),
             )
-        result = await self.repository.apply_scan_batch(batch)
-        return await self._finalize(result)
+        return await self._apply_batch(batch)
