@@ -289,6 +289,21 @@ Queue）。星形控件是独立操作区域，点击星形不得误触歌曲条
 -   不允许把文件路径变化直接视为歌曲内容变化并无条件生成新的 Song
     ID；匹配策略将在实现设计中明确。
 
+### 7.1 Library / Playlist revision 合同（Task 6，2026-10-03）
+
+本节来自当前对话人工决策 G6-02 / A；revision 是缓存失效标识，不是事件重放游标或业务 CAS token，不改变既有 Queue revision。
+
+- **Preconditions**：单个服务进程提供 Library/Playlist 的业务写入口与读取；系统初始化及持久数据载入后开始对外服务。
+- **Authority / Source of Truth**：领域 Service 确定可观察内容变化，事务 owner 确定提交；Library/Playlist 数据仍由其持久模型拥有。每次进程启动生成新 `epoch`，两个非负整数计数 `library_revision`、`playlist_revision` 从 0 开始；不把时间戳当版本。
+- **Expected State Delta**：一个最外层事务成功提交时，对最终内容相对事务前确有变化的每个域最多递增一次。Library 内容包括 Song 身份、定位、availability、元数据、分类、歌词及 artwork reference 等可观察资源；仅扫描时间、内部审计时间或错误日志变化不递增。Playlist 内容包括列表存在性、名称、成员和顺序，Favorites 属于同域。事务中改后又恢复原内容属于 no-op。
+- **Must Remain Unchanged**：未变化域计数不变；业务的 Queue/History/播放状态及 Playlist 成员保留语义不因版本机制改变。歌曲元数据或 availability 改变只递增 Library 域，不伪造 Playlist 成员变化；Playlist 展示缓存必须同时关注 Library revision。
+- **Transaction Boundary**：计数与最外层提交后的业务数据按架构 Spec §12.1 同时可见；嵌套操作、批量扫描、save Queue 的逐成员操作不对外暴露中间版本。禁止在已可读取新数据之后异步补增版本。网络交付在该边界外。
+- **Failure / Rollback**：失败、提交前取消、outer rollback 不消耗版本且无成功变更通知。提交后的发送失败/取消不能撤销数据或版本。进程崩溃后用新 epoch 开始，不尝试恢复旧进程计数。
+- **Retry / Idempotency**：未提交失败可正常重试；提交成功的同请求 replay 不重复修改版本。无变化扫描、同名重命名、重复设置同一收藏状态等 no-op 不递增；本身属于验证错误的操作仍按原错误合同处理，不能改成成功 no-op。
+- **Revision / Ordering**：同 epoch 内各域单调不减，变化事务 +1；跨 epoch 不比较大小，客户端必须废弃旧版本判断并整体刷新。Library/Playlist/Queue 的数字互不比较。内部时间戳不计入内容变化；直接承担资源语义的业务字段仍计入。
+- **Observable Result**：snapshot 与领域失效通知携带相应 epoch/revisions；无内容变化扫描仍保留原有扫描完成事件及 MPD update error 可见性，不能用“revision 未增”吞掉扫描结果。原 Library 扫描 commit → optional MPD update → completion event 顺序不变。
+- **Executable Invariant Proof**：新增真实 Repository/Service/outer transaction 测试，比较提交前后资源、计数和事件，覆盖成功、no-op、改后恢复、双域事务、嵌套/批量、terminal failure、rollback、取消、retry/replay、发布失败及重启 epoch。用 barrier 验证新数据不可搭配旧 revision；availability 改变不丢 Playlist/Favorites/History 引用。测试由 Task 6 Batch Plan 分配，当前仅为待执行证明义务。
+
 ## 8. 与第一章播放模型的接口
 
 建议以统一的服务端接口概念连接浏览层与播放服务：

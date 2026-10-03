@@ -125,10 +125,10 @@ Required mechanics:
 | Task 1R | Extended Queue/Output/Stats transport contract remains behaviorally consistent across MockMPD, MPDAdapter and VerifiedPlayerPort. |
 | Task 2R | Migration/reconciliation ↔ LibraryRepository preserves Song identity plus Playlist/Favorites/History references across availability changes and rollback. |
 | Task 3 | media parser/filesystem → scanner → Repository atomic persistence → post-commit event/optional MPD update ordering; source media remains read-only. |
-| Task 4 | QueueRepository/PlaybackState ↔ QueueManager/PlaybackService ↔ PlayerPort ↔ History/AutoPlay remain mutually consistent across mutations and transitions. |
+| Task 4 | QueueRepository/PlaybackState ↔ QueueManager/PlaybackService ↔ PlayerPort ↔ History/AutoPlay remain mutually consistent across mutations and transitions. D6-RECOVERY adds a targeted corrective acceptance obligation for natural-completion/explicit-Stop/external-drift confirmation and History rollback/retry before Task 6 automatic recovery/final acceptance; historical acceptance is not blanket-reopened. |
 | Task 5 | API ↔ Service ↔ Repository/PlayerPort; Playlist persisted membership ↔ all REST representations; Collection playable split remains distinct; idempotency rollback restores persisted and in-memory session state. |
 | Task 7 | OutputManager ↔ PlayerPort output state while preserving current Song/Queue/PlaybackContext/best-effort position and reconciling actual MPD state. |
-| Task 6 | authoritative Services → FullStateSnapshot/event publication → WebSocket delivery/reconnect; events occur post-commit and reconnect recovers from full state. |
+| Task 6 | RT-SNAPSHOT-001: committed local/runtime/revision cut and explicit failure/staleness; RT-REVISION-001: delta/no-op/rollback/replay/restart; RT-LIBRARY/PLAYLIST/PLAYBACK/OUTPUT-001: producer → outer commit → invalidation without changing frozen domain rules; RT-HISTORY-001: persistent events survive Song unavailability, active/session separate; RT-OBSERVE-001: PlayerPort → Service observation bound to current occurrence, no domain mutation; RT-CONNECT/DELIVERY/RECOVER-001: barrier-proven handoff, ordered invalidation, bounded-client isolation and full reconnect recovery. Proof owners and exact commands: active Task 6 plan. |
 | Task 8 | REST/WebSocket state → typed client/store → Player UI; client never becomes Queue/AutoPlay authority and reconnect replaces stale local state. |
 | Task 9 | server-authoritative Queue/Library/Playlist/Favorites/Search ↔ Web actions/views; UI state must not reimplement conflicting business semantics. |
 | Task 10 | config → composition root; backup/restore write gate ↔ Repository writes; health reports FastAPI/SQLite/MPD independently. |
@@ -831,17 +831,29 @@ Idempotency:
 
 ## Task 6：WebSocket 与完整状态恢复
 
+Active Contract Audit / Batch Execution Plan:
+`docs/superpowers/plans/2026-10-03-mpd-server-task-6-batch-plan.md`.
+2026-10-03 Contract Gap Resolution: G6-01–G6-05 closed by the user's
+explicit A/A/A/A/A decisions plus G6-01 Context clarification A in the current conversation; authority is A
+§12.1–12.3, L §7.1 and P §2.2.1/§8.8. Contract Gap = 0; contract-freeze
+blocked status is removed. No implementation Step is accepted by this audit.
+The rebuilt Batch Plan is executable in dependency order; independent Batch 1
+has no new implementation prerequisite. Automatic recovery activation and final
+Task 6 acceptance retain the explicit D6-RECOVERY prerequisite below.
+
 Dependencies:
 - Task 3 completed and provides DomainEvent contract.
 - Task 4 completed.
 - Task 5 completed.
 - Task 7 completed.
-- Task 6 implements realtime transport only and does not redefine domain business rules.
+- Task 6 owns snapshot/read facades, committed change/revision propagation, WebSocket delivery and read-only Service observation lifecycle. It does not redefine playback/Queue/History recovery transitions.
+- D6-RECOVERY: before automatic recovery activation or final Task 6 acceptance, Task 4 corrective must prove natural completion versus explicit Stop, external drift confirmation, History exactly-once per confirmed transition and rollback/retry against P §6/§7/§8.8 and PB-HISTORY-001. Existing reconcile_external_status is not sufficient evidence. This is an implementation/acceptance dependency, not an unresolved Task 6 semantic. Independent foundation/observation Batches can proceed; this documentation-only task does not execute the corrective or declare it complete.
 
 Files:
 - Create: server/app/services/state_service.py
 - Create: server/app/api/realtime.py
 - Create: server/tests/api/test_realtime.py
+- Additional precise producer/coordinator/observer/schema files and invariant tests are assigned by the active Task 6 Batch Plan; no production changes in this resolution.
 
 Interfaces:
 ~~~python
@@ -857,6 +869,10 @@ Rules:
 - Reconnect always obtains a complete snapshot; missed incremental events are not the consistency mechanism.
 - Snapshot includes Playback, Queue, History availability, Output and necessary Library/Playlist revisions.
 - WebSocket code never accesses MPD directly.
+- GET /api/state and WS /api/realtime obey A §12.1–12.3: initial snapshot, live invalidation, bounded overflow/timeout disconnect and full reconnect.
+- Local data/runtime/revisions form one committed cut; local required read failures fail the snapshot, external failure is explicit stale/unknown/error.
+- Library/Playlist versions use L §7.1 process epoch and actual-delta counters; no-op/rollback/replay do not increment.
+- Read-only observer reports MPD facts and reconciliation_required without changing Queue/History or treating STOPPED as user Stop.
 
 - [ ] Step 1: Define and test FullStateSnapshot.
 - [ ] Step 2: Test post-commit event semantics for Library/Playlist/Playback/Output mutations.
@@ -1192,7 +1208,7 @@ Before Task completion:
 | Task 4 | Task 1R + Task 2R + Task 3 |
 | Task 5 | Task 3 + Task 4 |
 | Task 7 | Task 1R + Task 4 |
-| Task 6 | Task 3 + Task 4 + Task 5 + Task 7 |
+| Task 6 | Task 3 + Task 4 + Task 5 + Task 7; D6-RECOVERY Task 4 corrective acceptance before automatic recovery activation/final Task 6 acceptance, not before independent foundation Batches |
 | Task 8 | Task 5 + Task 6 + Task 7 |
 | Task 9 | Task 5 + Task 6 + Task 8 |
 | Task 10 | Task 3 + Task 4 + Task 5 + Task 6 + Task 7 |
@@ -1224,6 +1240,7 @@ Task numbers are historical identifiers. Execution order is defined by the depen
 Why Task 7 precedes Task 6:
 - FullStateSnapshot contains Output state, so Output Manager must exist before the final realtime snapshot is assembled.
 - Task 6 consumes the Output Service contract; it does not create it.
+- D6-RECOVERY is a stage-specific addition approved in G6-05/A: Task 4 retains domain recovery ownership, Task 6 owns observation/propagation. Historical Task numbers and overall execution order are unchanged; no dependency on Task 8+ is introduced.
 
 Why Task 10 is late:
 - Earlier Tasks use constructor injection and explicit defaults.
