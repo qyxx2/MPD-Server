@@ -83,6 +83,18 @@ def _transport_change(operation):
     return wrapped
 
 
+def _queue_change(operation):
+    """Capture a pending mutation inside its owning playback transaction."""
+    @wraps(operation)
+    async def wrapped(self, *args, **kwargs):
+        before = await self._queue_content()
+        result = await operation(self, *args, **kwargs)
+        self._stage_transport(before, await self._queue_content())
+        return result
+
+    return wrapped
+
+
 class PlaybackSongNotFoundError(ValueError):
     """A requested Song identity is absent from the library."""
 
@@ -129,6 +141,11 @@ class PlaybackService:
             ),
         }
 
+    async def _queue_content(self) -> dict[str, object]:
+        if self._coordinator is None and self._event_publisher is None:
+            return {}
+        return {"queue": await self.queue_manager.queue_repository.get_snapshot()}
+
     def _stage_transport(self, before: dict[str, object], after: dict[str, object]) -> None:
         path = self.queue_manager.queue_repository.path
         if self._coordinator is not None:
@@ -153,7 +170,9 @@ class PlaybackService:
             on_transaction_commit(path, committed)
             on_transaction_visible(path, lambda: self._transport_changes.pop(owner, None))
             on_transaction_rollback(path, lambda: self._transport_changes.pop(owner, None))
-        delta[1] = after
+        for domain, content in before.items():
+            delta[0].setdefault(domain, content)
+        delta[1].update(after)
 
     @_atomic_history_transition
     async def run_output_operation(
@@ -251,6 +270,7 @@ class PlaybackService:
         return selected
 
     @_atomic_history_transition
+    @_queue_change
     async def play_next(self, song_id: str) -> QueueItem:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.play_next(song.song_id)
@@ -259,6 +279,7 @@ class PlaybackService:
         return item
 
     @_atomic_history_transition
+    @_queue_change
     async def add_to_queue(self, song_id: str) -> QueueItem:
         song = await self._require_available_song(song_id)
         item = await self.queue_manager.add_to_queue(song.song_id)
@@ -274,6 +295,7 @@ class PlaybackService:
         expected_revision: int | None = None,
     ) -> list[QueueItem]:
         async def operation(_connection):
+            before = await self._queue_content()
             previous_items = await self.queue_manager.list_items()
             items = await self.queue_manager.reorder(
                 queue_item_id,
@@ -282,6 +304,7 @@ class PlaybackService:
             )
             await self._sync_player_queue(previous_items=previous_items)
             await self._confirm_preserved_state()
+            self._stage_transport(before, await self._queue_content())
             return items
 
         return await run_transaction(
@@ -290,10 +313,12 @@ class PlaybackService:
 
     async def clear(self, *, expected_revision: int | None = None) -> None:
         async def operation(_connection):
+            before = await self._queue_content()
             await self.queue_manager.clear(expected_revision=expected_revision)
             await self._refill_empty_pending()
             await self._sync_player_queue()
             await self._confirm_preserved_state()
+            self._stage_transport(before, await self._queue_content())
 
         await run_transaction(self.queue_manager.queue_repository.path, operation)
 
@@ -313,6 +338,7 @@ class PlaybackService:
             state = await self.queue_manager.get_playback_state()
             self.history_service.preserve_active_on_rollback()
             if selected.position != 0:
+                before = await self._queue_content() if selected.position > 0 else None
                 await self.queue_manager.delete(
                     queue_item_id,
                     expected_revision=expected_revision,
@@ -321,6 +347,8 @@ class PlaybackService:
                 await self._refill_empty_pending()
                 await self._sync_player_queue(previous_items=snapshot.items)
                 await self._confirm_preserved_state()
+                if before is not None:
+                    self._stage_transport(before, await self._queue_content())
                 return None
 
             # Resolve availability before promoting a successor. Played is independent.
