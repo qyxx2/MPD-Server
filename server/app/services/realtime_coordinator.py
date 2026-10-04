@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import uuid4
 
 from server.app.models.realtime import Invalidation, StateMarker
@@ -17,10 +18,20 @@ from server.app.services.events import DomainEvent, EventPublisher, invalidation
 
 @dataclass(eq=False)
 class RealtimeSubscription:
-    """In-memory invalidation obligation; network delivery belongs to later Batches."""
+    """Bounded obligations; registration never waits for a network sender."""
 
     pending: Invalidation | None = None
     valid: bool = True
+    queue: asyncio.Queue[Invalidation] = field(default_factory=lambda: asyncio.Queue(maxsize=64))
+    changed: asyncio.Event = field(default_factory=asyncio.Event)
+
+    async def receive(self) -> Invalidation:
+        while self.valid:
+            self.changed.clear()
+            if not self.queue.empty():
+                return self.queue.get_nowait()
+            await self.changed.wait()
+        raise RuntimeError("realtime subscription invalidated")
 
 
 class RealtimeCoordinator:
@@ -50,6 +61,24 @@ class RealtimeCoordinator:
         subscription = RealtimeSubscription()
         self._subscriptions.add(subscription)
         return subscription
+
+    async def subscribe_committed(self) -> RealtimeSubscription:
+        # Preserve the synchronous producer API; connection registration uses
+        # the same Service/DB serialization boundary as snapshot capture.
+        def register(_):
+            subscription = self.subscribe()
+            on_transaction_rollback(self.path, lambda: self.unsubscribe(subscription))
+            return subscription
+
+        return await run_transaction(self.path, register)
+
+    def unsubscribe(self, subscription: RealtimeSubscription) -> None:
+        self._subscriptions.discard(subscription)
+        subscription.valid = False
+        subscription.pending = None
+        while not subscription.queue.empty():
+            subscription.queue.get_nowait()
+        subscription.changed.set()
 
     def stage_change(
         self, domains: frozenset[str], before: object, after: object,
@@ -94,10 +123,8 @@ class RealtimeCoordinator:
 
     def _fail_closed(self) -> None:
         self._trusted = False
-        for subscription in self._subscriptions:
-            subscription.valid = False
-            subscription.pending = None
-        self._subscriptions.clear()
+        for subscription in tuple(self._subscriptions):
+            self.unsubscribe(subscription)
 
     def close(self) -> None:
         self._fail_closed()
@@ -119,8 +146,13 @@ class RealtimeCoordinator:
                 "playlist": self._marker.playlist_revision,
             },
         )
-        for subscription in self._subscriptions:
+        for subscription in tuple(self._subscriptions):
             pending_domains = subscription.pending.domains if subscription.pending else frozenset()
             subscription.pending = notification.model_copy(
                 update={"domains": domains | pending_domains}, deep=True,
             )
+            try:
+                subscription.queue.put_nowait(notification.model_copy(deep=True))
+            except asyncio.QueueFull:
+                self.unsubscribe(subscription)
+            subscription.changed.set()
