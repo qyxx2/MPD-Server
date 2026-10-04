@@ -712,8 +712,8 @@ def test_direct_playback_sync_failure_restores_transaction(
     assert service.history_service.session_id == session
 
 
-@pytest.mark.parametrize("stopped", [False, True])
-def test_reconciliation_outer_rollback_restores_history(real_client, stopped):
+@pytest.mark.parametrize("drift", ["stop", "foreign", "pause"])
+def test_reconciliation_outer_rollback_restores_history(real_client, drift):
     from server.app.repositories.database import run_transaction
 
     client, _, player, service = real_client
@@ -721,10 +721,13 @@ def test_reconciliation_outer_rollback_restores_history(real_client, stopped):
     state = run(service.queue_manager.get_playback_state())
     active = service.history_service.active_event
     session = service.history_service.session_id
-    if stopped:
+    queue = run(service.queue_manager.get_snapshot())
+    if drift == "stop":
         run(player.stop())
-    else:
+    elif drift == "foreign":
         run(player.play("b.flac"))
+    else:
+        run(player.pause())
 
     async def fail_after_reconcile(_connection):
         await service.reconcile_external_status()
@@ -740,11 +743,16 @@ def test_reconciliation_outer_rollback_restores_history(real_client, stopped):
     assert run(service.history_service.list_history()) == []
     assert service.history_service.active_event == active
     assert service.history_service.session_id == session
-    run(service.reconcile_external_status())
-    assert [
-        (event.song_id, event.reason)
-        for event in run(service.history_service.list_history())
-    ] == [("a", "STOP" if stopped else "SWITCH_AWAY")]
+    result = run(service.reconcile_external_status())
+    assert result.outcome == ("APPLIED" if drift == "pause" else "UNKNOWN")
+    assert run(service.history_service.list_history()) == []
+    assert service.history_service.active_event == active
+    assert service.history_service.session_id == session
+    assert run(service.queue_manager.get_snapshot()) == queue
+    if drift == "pause":
+        assert result.playback.state == "PAUSED"
+    else:
+        assert run(service.queue_manager.get_playback_state()) == state
 
 
 @pytest.mark.parametrize("failure", ["play", "disconnected", "confirmation"])

@@ -40,6 +40,15 @@ class QueueManager:
         self.playback_state_repository = playback_state_repository
         self.playlist_repository = playlist_repository
 
+    async def complete_current(
+        self, queue_item_id: str, *, pending: tuple[QueueItem, ...],
+        successor_id: str | None, expected_revision: int,
+    ) -> QueueSnapshot:
+        return await self.queue_repository.complete_current(
+            queue_item_id, pending=pending, successor_id=successor_id,
+            expected_revision=expected_revision,
+        )
+
     async def start_track(
         self,
         song_id: str,

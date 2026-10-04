@@ -797,3 +797,40 @@ class QueueRepository:
             return [self._item_from_row(row) for row in rows]
 
         return await run_transaction(self.path, operation)
+
+    async def complete_current(
+        self, queue_item_id: str, *, pending: tuple[QueueItem, ...],
+        successor_id: str | None, expected_revision: int,
+    ) -> QueueSnapshot:
+        """Complete exactly one current, retaining Played and pending identities."""
+        async def operation(connection):
+            items = self._list_from_connection(connection)
+            current = next((i for i in items if i.position == 0), None)
+            if current is None or current.queue_item_id != queue_item_id:
+                raise ValueError("Completion does not identify the current occurrence")
+            ids = [i.queue_item_id for i in pending]
+            if len(set(ids)) != len(ids) or successor_id != (ids[0] if ids else None):
+                raise ValueError("Completion successor must be the first planned pending item")
+            existing = {i.queue_item_id: i for i in items}
+            retained = []
+            for item in pending:
+                old = existing.get(item.queue_item_id)
+                if old is not None:
+                    if old.position <= 0 or old != item:
+                        raise ValueError("Completion cannot overwrite an existing occurrence")
+                    retained.append(item.queue_item_id)
+                elif item.source != "AUTOPLAY" or item.position <= 0:
+                    raise ValueError("New completion candidates must be AutoPlay pending")
+            if retained != [i.queue_item_id for i in items if i.position > 0 and i.queue_item_id in retained]:
+                raise ValueError("Completion cannot reorder retained pending")
+            self._reserve_mutation(connection, expected_revision)
+            connection.execute("DELETE FROM queue_items WHERE position > 0")
+            connection.execute("UPDATE queue_items SET position = position - 1 WHERE position < 0")
+            connection.execute("UPDATE queue_items SET position = -1 WHERE queue_item_id = ?", (queue_item_id,))
+            for position, item in enumerate(pending):
+                connection.execute(
+                    "INSERT INTO queue_items(queue_item_id,song_id,position,source,playback_context_id) VALUES(?,?,?,?,?)",
+                    (item.queue_item_id, item.song_id, position, item.source, item.playback_context_id),
+                )
+            return QueueSnapshot(revision=self._current_revision(connection), items=tuple(self._list_from_connection(connection)))
+        return await run_transaction(self.path, operation)

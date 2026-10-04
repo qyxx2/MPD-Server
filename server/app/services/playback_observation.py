@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -15,7 +15,7 @@ from server.app.repositories.database import (
 )
 
 if TYPE_CHECKING:
-    from server.app.player.models import PlayerStatus
+    from server.app.player.models import PlayerQueueEntry, PlayerStatus
     from server.app.services.playback_service import PlaybackService
 
 
@@ -77,9 +77,21 @@ class PlaybackObservations:
             self.binding = None
         await self._set(PlaybackObservation())
 
-    async def confirmed(self, status: PlayerStatus) -> None:
+    async def confirmed(
+        self, status: PlayerStatus, *, entries: Sequence[PlayerQueueEntry] | None = None,
+    ) -> None:
         self._preserve()
-        self.binding = (*await self._identity(), status.song_id, status.song_uri)
+        if entries is None:
+            entries = await self.service.player.queue_entries()
+        execution = sorted(
+            (i for i in await self.service.queue_manager.list_items() if i.position >= 0),
+            key=lambda i: i.position,
+        )
+        self.binding = (
+            *await self._identity(), status.song_id, status.song_uri,
+            tuple((i.queue_item_id, e.mpd_song_id, e.song_uri)
+                  for i, e in zip(execution, entries, strict=True)),
+        )
 
     async def get(self) -> PlaybackObservation:
         async def read(_):

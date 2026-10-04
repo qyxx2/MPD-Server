@@ -228,15 +228,24 @@ def test_reconcile_external_status_updates_service_state_but_not_server_queue(
     run(service.start_track("a"))
     run(player.play("music/b.mp3"))
 
-    run(service.reconcile_external_status())
-
-    state = run(components["state"].get_state())
-    assert state is not None
-    assert state.song_id == "b"
-    assert state.state == "PLAYING"
+    before = (
+        run(components["state"].get_state()),
+        run(service.queue_manager.get_snapshot()),
+        run(components["history"].list_history()),
+        components["history_service"].active_event,
+        components["history_service"].session_id,
+    )
+    result = run(service.reconcile_external_status())
+    assert result.outcome == "UNKNOWN" and result.reconciliation_required
+    assert (
+        run(components["state"].get_state()),
+        run(service.queue_manager.get_snapshot()),
+        run(components["history"].list_history()),
+        components["history_service"].active_event,
+        components["history_service"].session_id,
+    ) == before
+    assert before[0].song_id == "a"
     assert current_song_id(components["queue"]) == "a"
-    assert components["history_service"].active_event is not None
-    assert components["history_service"].active_event.song_id == "b"
 
 
 def test_successful_next_promotes_server_queue_and_records_switch(

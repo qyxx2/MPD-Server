@@ -114,10 +114,12 @@ class HistoryService:
         *,
         ended_at: datetime | None = None,
     ) -> HistoryEvent | None:
-        return await self._finish_active(
+        completed = await self._finish_active(
             reason=self.STOP,
             ended_at=ended_at,
         )
+        self._session_id = None
+        return completed
 
     async def switch_away(
         self,

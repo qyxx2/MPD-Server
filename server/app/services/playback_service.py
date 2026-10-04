@@ -9,6 +9,12 @@ from typing import Concatenate, ParamSpec, TypeVar
 from server.app.models.library import Song
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
 from server.app.models.realtime import PlaybackObservation
+from server.app.models.recovery import (
+    CompletionEvidence,
+    CompletionValidator,
+    RecoveryBaseline,
+    RecoveryResult,
+)
 from server.app.player.models import PlayerState, PlayerStatus
 from server.app.player.ports import PlayerPort
 from server.app.repositories.database import (
@@ -25,6 +31,7 @@ from server.app.services.events import EventPublisher, PlaybackChangedEvent
 from server.app.services.history_service import HistoryService
 from server.app.services.output_operation import OutputOperationLifecycle
 from server.app.services.playback_observation import PlaybackObservations
+from server.app.services.playback_recovery import RecoveryJournal
 from server.app.services.queue_manager import QueueItemNotFoundError, QueueManager
 from server.app.services.realtime_coordinator import RealtimeCoordinator
 
@@ -70,6 +77,19 @@ def _atomic_history_transition(
     return wrapped
 
 
+def _recovery_change(operation):
+    """Track business identity only for operations that can change current."""
+    @wraps(operation)
+    async def wrapped(self, *args, **kwargs):
+        identity = await self._recovery_current_identity()
+        result = await operation(self, *args, **kwargs)
+        if identity != await self._recovery_current_identity():
+            self._recovery.advance()
+        return result
+
+    return wrapped
+
+
 def _transport_change(operation):
     """Stage only transport producers, never the shared Output operation runner."""
     @wraps(operation)
@@ -106,7 +126,7 @@ def _current_change(operation):
         self._stage_transport(before, await self._current_content())
         return result
 
-    return wrapped
+    return _recovery_change(wrapped)
 
 
 class PlaybackSongNotFoundError(ValueError):
@@ -136,6 +156,7 @@ class PlaybackService:
         coordinator: RealtimeCoordinator | None = None,
         observation_clock: Callable[[], datetime] | None = None,
         observation_max_age: float = 6,
+        completion_validator: CompletionValidator | None = None,
     ) -> None:
         self.queue_manager = queue_manager
         self.history_service = history_service
@@ -145,7 +166,21 @@ class PlaybackService:
         self._event_publisher = event_publisher
         self._coordinator = coordinator
         self._observations = PlaybackObservations(self, observation_clock, observation_max_age)
+        self._recovery = RecoveryJournal(queue_manager.queue_repository.path)
+        self._completion_validator = completion_validator
         self._transport_changes: dict[object, list[dict[str, object]]] = {}
+
+    async def _recovery_current_identity(self):
+        state = await self.queue_manager.get_playback_state()
+        current = next((i for i in await self.queue_manager.list_items() if i.position == 0), None)
+        active = self.history_service.active_event
+        return (
+            current.queue_item_id if current else None,
+            state.song_id if state else None,
+            state.playback_context_id if state else None,
+            active.started_at if active else None,
+            self.history_service.session_id,
+        )
 
     async def observe(self, read_timeout: float | None = None) -> PlaybackObservation:
         return await self._observations.observe(read_timeout=read_timeout)
@@ -356,6 +391,8 @@ class PlaybackService:
 
         await run_transaction(self.queue_manager.queue_repository.path, operation)
 
+    @_atomic_history_transition
+    @_recovery_change
     async def delete(
         self,
         queue_item_id: str,
@@ -601,6 +638,7 @@ class PlaybackService:
         )
 
     @_atomic_history_transition
+    @_recovery_change
     @_transport_change
     async def stop(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
@@ -619,50 +657,187 @@ class PlaybackService:
 
     @_atomic_history_transition
     @_current_change
-    async def reconcile_external_status(self) -> PlaybackState:
+    async def reconcile_external_status(
+        self, *, evidence: CompletionEvidence | None = None,
+    ) -> RecoveryResult:
+        if evidence is not None:
+            try:
+                receipt = self._recovery.get_receipt(self._recovery.identity(evidence), evidence)
+            except ValueError as error:
+                raise PlaybackReconciliationError(str(error)) from error
+            if receipt is not None:
+                return receipt
+            if self._recovery.quarantined or evidence.service_epoch != self._recovery.service_epoch:
+                return RecoveryResult(
+                    "UNKNOWN", await self.queue_manager.get_playback_state(),
+                    reconciliation_required=True,
+                )
         status = await self.player.status()
+        entries = await self.player.queue_entries()
         previous = await self.queue_manager.get_playback_state()
-        queue_items = await self.queue_manager.list_items()
-        current_item = next(
-            (item for item in queue_items if item.position == 0),
-            None,
+        if evidence is not None:
+            return await self._reconcile_completion(evidence, previous, status, entries)
+        binding = self._observations.binding
+        execution = sorted(
+            (item for item in await self.queue_manager.list_items() if item.position >= 0),
+            key=lambda item: item.position,
         )
-
-        song_id = await self._song_id_for_uri(status.song_uri)
-        context_id = None
+        songs = [await self.library_repository.get_song(item.song_id) for item in execution]
+        matched = (
+            previous is not None and previous.state in {"PLAYING", "PAUSED"}
+            and binding is not None
+            and binding[:4] == await self._observations._identity()
+            and status.state in {PlayerState.PLAYING, PlayerState.PAUSED}
+            and status.song_id == binding[4] and status.song_uri == binding[5]
+            and status.song_position == 0 and bool(entries)
+            and entries[0].mpd_song_id == binding[4]
+            and len(binding) == 7
+            and tuple((item.queue_item_id, entry.mpd_song_id, entry.song_uri)
+                      for item, entry in zip(execution, entries)) == binding[6]
+            and [entry.position for entry in entries] == list(range(len(execution)))
+            and [entry.song_uri for entry in entries] == [song.file_uri if song else None for song in songs]
+        )
+        if not matched:
+            return RecoveryResult("UNKNOWN", previous, reconciliation_required=True)
+        if status.state.value == previous.state.lower():
+            return RecoveryResult("UNCHANGED", previous)
+        confirmation = await self.player.status()
+        confirmed_entries = await self.player.queue_entries()
         if (
-            current_item is not None
-            and song_id is not None
-            and current_item.song_id == song_id
+            (confirmation.state, confirmation.song_id, confirmation.song_uri, confirmation.song_position)
+            != (status.state, status.song_id, status.song_uri, status.song_position)
+            or confirmed_entries != entries
         ):
-            context_id = current_item.playback_context_id
-        elif previous is not None and song_id == previous.song_id:
-            context_id = previous.playback_context_id
-
-        autoplay_enabled = (
-            False
-            if status.state == PlayerState.STOPPED
-            else (
-                previous.autoplay_enabled
-                if previous is not None
-                else True
-            )
-        )
+            raise PlaybackReconciliationError("External transport changed during confirmation")
         confirmed = await self._save_confirmed_status(
-            status,
-            song_id=song_id,
-            context_id=context_id,
-            autoplay_enabled=autoplay_enabled,
+            confirmation, song_id=previous.song_id,
+            context_id=previous.playback_context_id,
+            autoplay_enabled=previous.autoplay_enabled,
         )
+        return RecoveryResult("APPLIED", confirmed)
 
-        if status.state == PlayerState.STOPPED:
-            await self.history_service.stop()
-        elif song_id is not None:
-            active = self.history_service.active_event
-            if active is None or active.song_id != song_id:
-                await self.history_service.start_track(song_id)
-
-        return confirmed
+    async def _reconcile_completion(self, evidence, previous, status, entries) -> RecoveryResult:
+        unknown = RecoveryResult("UNKNOWN", previous, reconciliation_required=True)
+        journal = self._recovery
+        identity = journal.identity(evidence)
+        try:
+            receipt = journal.get_receipt(identity, evidence)
+        except ValueError as error:
+            raise PlaybackReconciliationError(str(error)) from error
+        if receipt is not None:
+            return receipt
+        binding = self._observations.binding
+        queue = await self.queue_manager.get_snapshot()
+        history = await self.history_service.get_availability()
+        current = next((i for i in queue.items if i.position == 0), None)
+        active = history.active_event
+        if (
+            previous is None or current is None or active is None or history.session_id is None
+            or binding is None or len(binding) != 7
+            or binding[:4] != await self._observations._identity()
+            or tuple(i.queue_item_id for i in queue.items if i.position >= 0)
+            != tuple(item_id for item_id, _, _ in binding[6])
+            or evidence.service_epoch != journal.service_epoch
+            or evidence.business_generation != journal.business_generation
+            or evidence.queue_revision != queue.revision
+            or evidence.queue_item_id != current.queue_item_id
+            or evidence.mpd_song_id != binding[4]
+            or active.song_id != current.song_id or previous.song_id != current.song_id
+            or not evidence.transition_id
+        ):
+            return unknown
+        try:
+            valid_time = evidence.ended_at >= active.started_at
+        except TypeError:
+            valid_time = False
+        if not valid_time or self._completion_validator is None:
+            return unknown
+        baseline = RecoveryBaseline(queue, previous, history, journal.business_generation, binding[4])
+        if not await self._completion_validator.validate(evidence, baseline):
+            return unknown
+        plan = journal.pending.get(identity)
+        if plan is not None and plan.baseline != baseline:
+            return unknown
+        if plan is None:
+            available = []
+            for item in queue.items:
+                if item.position <= 0:
+                    continue
+                song = await self.library_repository.get_song(item.song_id)
+                if song is not None and song.availability_status == "AVAILABLE":
+                    available.append(item)
+                else:
+                    logger.warning("Skipping unavailable completion candidate %s", item.queue_item_id)
+            pending = tuple(available)
+            if not pending:
+                filtered = queue.model_copy(update={"items": tuple(i for i in queue.items if i.position <= 0)})
+                pending = await self.autoplay.plan_refill(await self._queue_playback_context(previous), filtered)
+            plan = journal.prepare(evidence, baseline, pending)
+        actual = tuple((e.mpd_song_id, e.song_uri) for e in entries)
+        original = tuple((mpd_id, uri) for _, mpd_id, uri in binding[6])
+        planned_execution = journal.execution.get(identity)
+        final = tuple((mpd_id, uri) for _, mpd_id, uri in planned_execution) if planned_execution is not None else None
+        target_id = next((mpd_id for item_id, mpd_id, _ in (planned_execution or binding[6]) if item_id == plan.successor_id), None)
+        if actual != original and actual != final:
+            return unknown
+        if status.state != PlayerState.STOPPED and not (
+            status.state == PlayerState.PLAYING and status.song_id == target_id
+            and status.song_position == next((e.position for e in entries if e.mpd_song_id == target_id), None)
+            and status.song_uri == next((e.song_uri for e in entries if e.mpd_song_id == target_id), None)
+        ):
+            return unknown
+        if planned_execution is None:
+            old_ids = {item_id: mpd_id for item_id, mpd_id, _ in binding[6]}
+            planned = []
+            for item in plan.pending:
+                song = await self._require_available_song(item.song_id)
+                mpd_id = old_ids.get(item.queue_item_id)
+                if mpd_id is None:
+                    mpd_id = await self.player.queue_add(song.file_uri)
+                planned.append((item.queue_item_id, mpd_id, song.file_uri))
+            planned_execution = tuple(planned)
+            journal.execution[identity] = planned_execution
+        retained_ids = {mpd_id for _, mpd_id, _ in planned_execution}
+        for entry in entries:
+            if entry.mpd_song_id not in retained_ids:
+                await self.player.queue_delete(entry.mpd_song_id)
+        target_id = planned_execution[0][1] if planned_execution else None
+        if target_id is not None and status.state == PlayerState.STOPPED:
+            await self.player.queue_play(target_id)
+        confirmed = await self.player.status()
+        confirmed_entries = await self.player.queue_entries()
+        if (
+            (target_id is not None and (
+                confirmed.state != PlayerState.PLAYING or confirmed.song_id != target_id
+                or confirmed.song_position != 0 or confirmed.song_uri != planned_execution[0][2]
+            ))
+            or (target_id is None and confirmed.state != PlayerState.STOPPED)
+            or [(e.mpd_song_id, e.song_uri, e.position) for e in confirmed_entries]
+            != [(mpd_id, uri, index) for index, (_, mpd_id, uri) in enumerate(planned_execution)]
+        ):
+            raise PlaybackReconciliationError("MPD did not confirm the fixed completion target and Queue")
+        await self.queue_manager.complete_current(
+            evidence.queue_item_id, pending=plan.pending, successor_id=plan.successor_id,
+            expected_revision=queue.revision,
+        )
+        await self.history_service.complete_naturally(ended_at=evidence.ended_at)
+        if plan.pending:
+            target = plan.pending[0]
+            await self.history_service.start_track(target.song_id, started_at=max(datetime.now(timezone.utc), evidence.ended_at))
+            saved = await self._save_confirmed_playing(
+                target.song_id, context_id=previous.playback_context_id, status=confirmed,
+                autoplay_enabled=previous.autoplay_enabled,
+            )
+            await self._observations.confirmed(confirmed, entries=confirmed_entries)
+        else:
+            saved = await self.queue_manager.set_playback_state(PlaybackState(
+                state="STOPPED", song_id=None, position_seconds=None, autoplay_enabled=True,
+                playback_context_id=previous.playback_context_id, updated_at=datetime.now(timezone.utc),
+            ))
+            await self._observations.changed()
+        result = RecoveryResult("APPLIED", saved, evidence.transition_id)
+        journal.commit(identity, result)
+        return result
 
     async def _prepare_play(self, song: Song) -> PlayerStatus:
         entries = await self.player.queue_entries()

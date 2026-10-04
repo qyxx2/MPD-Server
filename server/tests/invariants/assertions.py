@@ -46,7 +46,12 @@ def assert_execution_relationship(service, player, *, current_id=None):
         assert status.song_uri == entry.song_uri
     if state.state == "STOPPED":
         assert service.history_service.active_event is None
-        assert service.history_service.session_id is None
+        if state.autoplay_enabled:
+            assert state.song_id is None and state.position_seconds is None
+            assert current is None and entries == []
+            assert service.history_service.session_id is not None
+        else:
+            assert service.history_service.session_id is None
     else:
         assert service.history_service.active_event.song_id == current.song_id
     return bindings

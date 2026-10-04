@@ -138,6 +138,8 @@ def test_explicit_reconciliation_propagates_only_committed_existing_delta(real_c
             events.append(event)
 
     service = wire(playback, Publisher(), coordinator)
+    # Reuse the committed occurrence binding; construction alone proves none.
+    service._observations.binding = playback._observations.binding
     before = server_snapshot(service)
     run(player.stop() if stopped else player.pause())
 
@@ -150,21 +152,25 @@ def test_explicit_reconciliation_propagates_only_committed_existing_delta(real_c
         run(run_transaction(library.path, failing))
     assert server_snapshot(service) == before
     assert coordinator.marker().sequence == 0 and subscriber.pending is None and events == []
-    run(service.reconcile_external_status())
-    assert subscriber.pending is not None, "explicit reconciliation delta was not registered"
-    domains = frozenset({"playback", "history"} if stopped else {"playback"})
-    assert subscriber.pending.domains == domains
-    assert [e.domains for e in events] == [domains]
+    result = run(service.reconcile_external_status())
     final = server_snapshot(service)
     assert final[0] == before[0]
-    assert final[1].state == ("STOPPED" if stopped else "PAUSED")
+    assert final[2:] == before[2:]
     if stopped:
-        assert [(e.song_id, e.reason) for e in final[2]] == [("a", "STOP")]
-        assert final[3:] == (None, None)
+        assert result.outcome == "UNKNOWN" and result.reconciliation_required
+        assert final == before
+        assert coordinator.marker().sequence == 0
+        assert subscriber.pending is None and events == []
     else:
-        assert final[2:] == before[2:]
+        assert result.outcome == "APPLIED"
+        assert final[1].state == "PAUSED"
+        assert subscriber.pending is not None, "explicit reconciliation delta was not registered"
+        assert subscriber.pending.domains == frozenset({"playback"})
+        assert [e.domains for e in events] == [frozenset({"playback"})]
+        assert coordinator.marker().sequence == 1
     run(service.reconcile_external_status())
-    assert coordinator.marker().sequence == 1 and len(events) == 1
+    assert coordinator.marker().sequence == (0 if stopped else 1)
+    assert len(events) == (0 if stopped else 1)
     assert server_snapshot(service)[2:] == final[2:]
 
 

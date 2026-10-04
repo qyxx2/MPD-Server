@@ -128,3 +128,21 @@ Declined项目逐一裁定：
 consumer合同已闭合但未实施；自然完成生产因果证据来源仍缺机制/验证，D6-SOURCE BLOCKED。专项unknown STOPPED selector本窗口重复 **1 failed**；Stop/observation/History/playback基线 **57 passed**，仅基线，旧reconciliation成功断言需后续按新Spec迁移。未修改两个Batch13 Python proof，未运行本批最终sequence；历史GREEN不能解除当前RED/来源能力门禁。
 
 **最新状态：D6 consumer definition CLOSED / implementation NOT COMPLETE；Relationship Gate FAILED；完整Contract Matrix验收及D6-SOURCE BLOCKED；Batch13与Task6 final acceptance继续BLOCKED。** 允许下一窗口从D6 Step2.1保守consumer TDD开始，不启用自动恢复，不扩展Task8，不将Fake completion输入当作生产来源proof。无commit/push/PR/merge。
+
+
+## 2026-10-04 D6 consumer 实施后（最新 blocker）
+
+实际 branch=`feature/task-6-realtime-state`，起始/结束 HEAD=`6b05d7f434024488a736db5be83ada82bb0abf91`；起始 clean。上文 consumer 未实施 / UNKNOWN RED 属历史状态。完整逐行为 TDD、修复、审查及验收只记录于[唯一 D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。
+
+Step2.1 已闭合；Step2.2–2.7 可执行 consumer 实现/证明 GREEN，Step3 consumer PASSED。最终 D6+只读系统112 cases（其中 D6 98）、计划直接 focused/R-PB/R-H/R-TX/R-O/R-ARCH union355、额外 native `server/tests` 全套1087 passed；scoped Ruff/compileall/diff 检查通过。首次全套的两个本轮只读回归及独立审查的执行绑定 finding 已修复并 targeted 重验；既有 Starlette/httpx warning，无环境失败。两个 Batch13 Python proofs 实际 diff --exit-code unchanged。
+
+**D6-SOURCE BLOCKED；完整 D6 验收 NOT COMPLETE；Step4、Batch13 与 Task6 final acceptance 继续 BLOCKED。** Fake completion validator 是 consumer 测试输入，不能验证生产因果来源、断线/重启 continuity 或真实重复 occurrence。额外全套 GREEN 不是“完整 D6 通过后”的最终验收序列；不解除 blocker，不具备以 Task6 完成为前提进入 Task8 的条件。
+
+本轮未实施 producer，未启用 loop/API 恢复接线，未扩展 Task6/Task8；物理 MPD/NAS/DAC/reverse proxy、Docker/live MPD 均未执行。只用既有 .venv，未改依赖/环境，未 commit/push/PR/merge。
+
+
+## 2026-10-04 S0 基线同步（最新 blocker）
+
+branch=`feature/task-6-realtime-state`，HEAD=`6b05d7f434024488a736db5be83ada82bb0abf91`；已有未提交 consumer 修改全部保留。仅核对基线与同步 P/E/B，未修改生产或测试。用户指定 D6/realtime recovery/API 三文件本次 fresh **112 passed，1 warning，11.61s**（D6 98 + 本批 14），两份 Batch13 Python proof 无 diff；仅既有 Starlette/httpx warning，无测试/环境失败。完整依据见[唯一 D6 acceptance 的 S0 节](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。
+
+consumer Step2.1–Step3 已实施/验收，P 的旧时态/checklist 已同步；历史 RED 保留。生产因果来源/validator 尚未接线，D6-SOURCE 继续 BLOCKED，完整 D6/Batch13/Task6 final NOT COMPLETE。未进入 T §5/Batch13 最终序列；355/1087 等仅是前次记录，本次未重跑，不以三文件 GREEN 解除来源门禁。S1 及后续未执行，未启用恢复 loop，未 commit/push/PR/merge。

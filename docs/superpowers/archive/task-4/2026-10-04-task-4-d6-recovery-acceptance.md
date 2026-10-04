@@ -1,8 +1,8 @@
 # Task4 D6-RECOVERY专项验收 — BLOCKED
 
-日期：2026-10-04（Asia/Shanghai）。本轮唯一专项 acceptance。**D6 未完成；Relationship Gate FAILED，Contract Matrix Gate BLOCKED；Batch13 最终 acceptance 未满足。**
+日期：2026-10-04（Asia/Shanghai）。本轮唯一专项 acceptance。**consumer Step2.1–Step3 已验收；完整 D6 未完成，D6-SOURCE BLOCKED；Batch13 最终 acceptance 未满足。**
 
-> 最新结论见文末「Contract Gap Resolution / 人工 A」；前文保留首次诊断历史，不再将其未决合同状态作为当前实施指令。
+> 最新结论见文末「S0 基线核对与文档同步」；首次诊断 RED、人工 A 与逐行 consumer 实施记录均保留。历史 FAILED/未实施状态不再作为当前实施指令。
 
 ## Actual baseline / scope
 
@@ -157,3 +157,94 @@ D6未完成，因此“D6完成后”才执行的最终门禁未进入：全部r
 
 
 本轮文档检查：既有3个冲突selectors经AST核对存在；计划引用的直接测试文件均存在；新增selectors明确TO CREATE。相对文档链接与未跟踪文档逐行whitespace检查通过，tracked `git diff --check` exit0；实际tracked diff及未跟踪plan/acceptance/test内容均审阅。`git diff --exit-code -- server/app server/tests` exit0（tracked production/tests零delta；专项untracked test另行核对原有内容）。结束status为5份tracked文档M + 3份原有untracked（D6 plan/acceptance/test），HEAD仍82391fcf6bb02a8bb480e99ea5be4a93ec43746b。`git diff --stat`不包含untracked文件，不能将其5-file统计当作全部工作区范围。
+
+
+## 2026-10-04 Step2.1–Step3 consumer 实施（最新验收状态）
+
+本节取代上文“consumer 未实施 / UNKNOWN RED 未修复”的当前状态；上文保留为历史证据。实际开工先执行 `git status --short`、`git branch --show-current`、`git rev-parse HEAD`、`git log -5 --oneline`：工作区 clean，branch=`feature/task-6-realtime-state`，HEAD=`6b05d7f434024488a736db5be83ada82bb0abf91`。人工 A 已生效，没有重复决策。重读 Playback Spec §7/§8.8–8.9/§10、corrective plan、既有 acceptance、冻结架构/事务/Task6 合同及当前实现和 tests。
+
+### 实现及逐行为证据
+
+自然完成 consumer 只能接收明确证据；生产 `completion_validator` 默认拒绝，测试 validator 仅模拟可信输入。STOPPED、elapsed、URI、Mock 事件都不提供完成因果性。UNKNOWN 不写业务、不控制播放器、不创建 receipt；typed 来源失败继续抛出。绑定同 occurrence 且完整 execution 一致的 pause/resume 经二次确认才保存 transport；重复同态是 no-op。
+
+journal 的 epoch/业务代次独立于 observation 样本；完整 baseline、完成身份、固定 pending 及精确 MPD ID 在同进程 retry 保持。自然完成使用一次 Queue CAS，保留已完成 Played occurrence，选择首个可用 pending 或一次纯 AutoPlay plan；只有目标和完整 execution 确认后才写 NATURAL_COMPLETION/new active。无候选保持 STOPPED/null/null/AutoPlay=true、原 session/context，后续显式 Stop 才结束 session。receipt 在 outer commit 可见；旧 receipt 可离线返回原结果而不覆盖新 current；visibility 故障无可信 receipt 时隔离 journal。
+
+下列 selector 均位于 `server/tests/invariants/test_d6_recovery.py`，除另注文件。每次真实 production RED 后先最小修改、同 selector GREEN，再直接回归和 diff 检查；没有用全套替代 targeted gate。
+
+| Step / row | 实际 RED → 同 selector GREEN → 直接回归 |
+|---|---|
+| 2.1 UNKNOWN / SOURCE | 原样 `test_unclassified_external_stop_does_not_fabricate_history` **1 failed → 1 passed**；unknown/source 参数 **8 failed / 2 已 GREEN → 10 passed**；专项11、R-PB+observation+transitions169 passed |
+| 2.2 identity / evidence | `test_recovery_rejects_stale_evidence` **7 failed / restart 已 GREEN → 8 passed**；`test_recovery_business_generation_follows_committed_current` **7 failed → 7 passed**；专项26、R-PB/R-TX/R-ARCH127 passed |
+| 2.3 TRANSPORT | `test_bound_external_pause_resume_preserves_history` 与 pending duplicate **7 failed → 7 passed**；专项33、Stop/observation/transitions/Output serialization130 passed |
+| 2.4 NATURAL / HISTORY | successor/refill/duplicate **9 failed / invalid occurrence 已 GREEN → 10 passed**；专项43、Queue/AutoPlay/R-PB/R-H/R-TX/transitions214 passed |
+| 2.5 EMPTY / STOP | `test_natural_completion_without_candidates_retains_session` **UNKNOWN RED → empty 实现后 explicit Stop session RED → 1 passed**；专项44、R-PB/R-H/Queue/AutoPlay/snapshot165 passed |
+| 2.6 RETRY / TX | `test_recovery_rollback_retry_keeps_identity` successor/autoplay/empty × 8 failures：**21 首次 GREEN，3 terminal fixture str/bytes 失败**；修正 harness bytes 后同3及完整24 GREEN。drift retry3 GREEN；专项71、R-TX/R-PB/R-H139 passed |
+| 2.7 receipt / commit | replay/postcommit **2 production RED / 5 已 GREEN → 7 passed**；专项78、hooks/delivery/transitions/R-TX/R-ARCH78 passed |
+| 3 additional proofs | unbound local pending **1 RED → 1 GREEN**；纯 planner duplicate-context golden test（`services/test_autoplay.py`）**1 RED → 1 GREEN**；source failures/CAS invalid plans/retained Played12 GREEN；完整 U、真实 commit fault、concurrent barriers GREEN |
+
+Step2.6 的 rollback/intent 行为已随前面 natural RED→GREEN 实现，新增故障注入首先验证了已有行为。terminal bytes、History DESC 顺序及测试 service 绑定接线错误都是 test/fixture 修正，不能计作 production RED。本轮不声称每个参数都有独立 RED，不人为破坏实现制造 RED。完整 U 测试检查真实 Library/Playlist/Favorites SQL、revision、Output runtime/physical outputs、所有旧 REST terminals；barrier 证明 receipt 不提前可见、合法新 current 优先、晚证据不能覆盖新 current。
+
+三个旧冲突 selectors 已按 Spec 最小迁移：外部 foreign→UNKNOWN；stop/foreign 的 outer rollback/retry 保留；pause 的 outer rollback、唯一提交通知、重复 no-op 保留。通用 helper 只拆分显式 Stop 与自然 empty 的 session 断言。两个 Batch13 Python proofs 未修改。
+
+白名单仅扩展 `HistoryService.stop` 的等待 session 清理：上表 empty→后续显式 Stop 的实际 RED 证明原 public Stop 在 active=None 时漏清 session；实施前在 corrective plan 增补许可，未修改 `_finish_active`/reason/finalizer。代价是一份必要依赖文件。
+
+### 独立审查及本轮发现的回归
+
+独立 reviewer 初审 **Critical 0 / Important 1 / Minor 0**，独立专项 **97 passed**。Important：自然完成已确认 execution 后 binding 又无校验重读 MPD Queue，可能把同 URI 新 MPD ID 错绑旧 occurrence。新增 `test_recovery_binding_uses_the_confirmed_execution_sample` 真实 **1 failed**（binding ID 与 journal execution ID 不同），改为使用已确认样本。
+
+首次全套 **2 failed / 1084 passed**：`test_system_read_relationships.py::test_system_composition_uses_injected_capabilities_without_probe[False/True]`。根因是本轮通用事务 wrapper 的代次追踪读取 Queue，导致只读 Output 请求惰性创建 queue_state；精确重跑仍2 failed。将追踪限于可变 current 入口，不改只读测试。上述两个 selectors 与新 binding selector 同次 **3 passed**；随后专项+只读系统文件 **112 passed**、计划直接 union **355 passed**。两项修复在最终 review 后的一次修复回合完成，没有再扩展审查范围。
+
+审查未实施项裁定：生产 causal source、真实 MPD continuity/重复 occurrence conformance 归 D6-SOURCE（代价：生产自然完成仍未验收）；跨进程 durable receipt/恢复日志不在本合同（代价：进程重启不能重放旧证据）；loop/API/Task6/Task8/Batch13 final 未授权且前置未满足（代价：自动恢复与最终阶段继续阻塞）；物理 MPD 多命令不可宣称原子，本轮仅承诺确认失败时业务 rollback、同进程固定目标 retry。按用户要求使用原 checkout，代价是无额外 worktree 隔离；没有 deferred minor。
+
+### 最终 fresh 验证命令
+
+既有 `.venv`：Python3.14.4 / pytest9.1.1 / Ruff0.16.9；`server/requirements.txt` 已读取，未改依赖/环境。测试只见既有 Starlette/httpx deprecation warning，无环境失败。下方属于 consumer/direct 与额外本地 regression，不是 Step4 最终序列。
+
+```text
+.venv/bin/python -m pytest -q server/tests/invariants/test_d6_recovery.py::test_recovery_binding_uses_the_confirmed_execution_sample server/tests/invariants/test_system_read_relationships.py::test_system_composition_uses_injected_capabilities_without_probe
+# 3 passed
+.venv/bin/python -m pytest -q server/tests/invariants/test_d6_recovery.py server/tests/invariants/test_system_read_relationships.py
+# 112 passed, 1 warning（D6 98 cases + system read 14 cases）
+.venv/bin/python -m pytest -q server/tests/services/test_queue_manager.py server/tests/repositories/test_task2_steps_5_7.py server/tests/services/test_autoplay.py server/tests/invariants/test_realtime_observation.py server/tests/invariants/test_realtime_transitions.py server/tests/invariants/test_realtime_snapshot.py server/tests/invariants/test_output_serialization.py server/tests/invariants/test_playback_relationships.py server/tests/invariants/test_stop_confirmation.py server/tests/api/test_pre_batch6_corrective.py server/tests/services/test_playback_service.py server/tests/services/test_history_service.py server/tests/api/test_history_api.py server/tests/repositories/test_transaction_commit_hooks.py server/tests/invariants/test_transaction_relationships.py server/tests/api/test_idempotency.py server/tests/invariants/test_output_event_transactions.py server/tests/invariants/test_output_observation.py server/tests/invariants/test_output_lifecycle_injection.py server/tests/invariants/test_architecture_relationships.py server/tests/api/test_api_contracts.py::test_api_does_not_import_repositories
+# Step3 focused + R-PB/R-H/R-TX/R-O/R-ARCH union: 355 passed, 1 warning
+.venv/bin/python -m ruff check server/app/models/recovery.py server/app/services/playback_recovery.py server/app/repositories/queue_repository.py server/app/services/autoplay.py server/app/services/history_service.py server/app/services/playback_observation.py server/app/services/playback_service.py server/app/services/queue_manager.py server/tests/api/test_pre_batch6_corrective.py server/tests/invariants/assertions.py server/tests/invariants/test_d6_recovery.py server/tests/invariants/test_realtime_transitions.py server/tests/services/test_autoplay.py server/tests/services/test_playback_service.py
+# All checks passed
+.venv/bin/python -m compileall -q server
+# exit0
+git diff --exit-code -- server/tests/invariants/test_realtime_recovery.py server/tests/api/test_realtime.py
+# exit0, Batch13 proofs unchanged
+.venv/bin/python -m pytest -q server/tests
+# 1087 passed, 1 warning, 55.82s（两项本轮回归修复后的 fresh 全套）
+git diff --check
+# exit0
+```
+
+### Gate / scope / 剩余阻塞
+
+**Step2.1 CLOSED；Step2.2–2.7 实现与可执行 consumer proofs GREEN；Step3 consumer acceptance PASSED。PB-RECOVERY-UNKNOWN/TRANSPORT、PB-NATURAL/EMPTY、PB-RECOVERY-RETRY 与 PB-HISTORY consumer 扩展已验证。D6-SOURCE BLOCKED；完整 D6 Relationship/Contract Matrix 验收 NOT COMPLETE，Step4、Batch13、Task6 final acceptance 继续 BLOCKED。** Fake validator GREEN 不等于生产来源 GREEN。
+
+剩余前置：明确真实因果 producer/Port/Adapter 能力；验证断线/重启 continuity 与重复 occurrence；按计划修改白名单及建立真实生产来源 proof。当前没有可运行的 SOURCE selector，不虚构通过或用 status reason 替代。未实施来源 producer、未启用恢复 loop/API 接线、未扩展 Task6/Task8；物理 MPD/NAS/DAC/reverse proxy、Docker/live MPD 全未执行。
+
+范围为8份 production（含2份新文件）、6份 tests、3份文档（唯一 acceptance、必要 Batch13 blocker、plan 白名单一行）。无 schema、依赖、环境、本地数据库或机器配置变更；起始无用户修改。保留工作区供审阅，未 commit/push/PR/merge。
+
+最终实际 diff（包含2份新增源码）、whitespace/stat/status 已检查，未发现无关格式化、调试代码、生成文件、数据库/环境/依赖修改；结束 HEAD 与 branch 保持上述起始值。`git diff --stat` 不包含2份 untracked 源码，不能将其15-file统计当作完整17-file范围。
+
+
+## 2026-10-04 S0 基线核对与文档同步（最新状态）
+
+仅执行 P 的 S0。实际 branch=`feature/task-6-realtime-state`，HEAD=`6b05d7f434024488a736db5be83ada82bb0abf91`；起始即有 15 tracked modifications + 2 untracked recovery 源码，全部保留。已读 P/E/B 最新节、T §3/§5/Batch13 及 F §8.9/A §12.3/M 的 D6 依赖/C 原始能力记录；核对 consumer 源码、未提交 diff、专项 selectors 与三项旧 proof 迁移。当前实现范围为 UNKNOWN/typed error、绑定 transport、身份/代次拒绝、natural successor/refill/empty、同进程固定意图 retry、outer receipt/replay/commit 边界；不能把这些解释为生产来源能力。
+
+```text
+.venv/bin/python -m pytest -q server/tests/invariants/test_d6_recovery.py server/tests/invariants/test_realtime_recovery.py server/tests/api/test_realtime.py
+# 112 passed, 1 warning in 11.61s, exit0（D6 98 + Batch13 14）
+```
+
+本次无测试失败/环境失败；只有既有 Starlette/httpx warning。既有 .venv 环境 Python3.14.4/pytest9.1.1/Ruff0.16.9 与 requirements 已核对。前次 355/1087 GREEN、Ruff/compileall 及逐行 RED→GREEN 属上一实施节，本次未重跑；本次 112 并非上一节 D6+system-read 的同名计数，而是用户指定 D6+recovery/API 三文件。不重写首次 RED，也不伪造新的 RED→GREEN。
+
+SOURCE blocker 按实际源码保留：main 未注入 completion_validator，默认 None 拒绝自然证据；生产代码尚无 CompletionEvidence producer 或 reconcile 调用，Port/Adapter/目标 MPD0.23.5 的 9 项 verified_operations 无因果完成能力。测试 validator 仅认可 test-only 来源/固定 continuity，不能证明真实 EOF 原因、连续性、重复 occurrence、实际 ended_at 或来源 ACK。S1 来源可行性、S2 来源合同、S3–S6 proof/联合门禁均未执行；部分 MPD 多命令执行边界仍待 S4 补证，自动 runner 接线仍属 S7。
+
+P 的旧“TO CREATE/未实施/从 Step2.1 开始”已同步为 consumer 已实现状态，Step2.1–Step3 与 S0 checklist 更新；SOURCE 新 selectors 继续 TO CREATE。B 仅追加本次 fresh 基线及 blocker。历史诊断和逐行实施证据均保留。
+
+**S0 COMPLETE；consumer 已实施/验收，指定范围 fresh GREEN；完整 D6 Relationship/Contract Matrix 验收 NOT COMPLETE，D6-SOURCE BLOCKED；Step4/Batch13/Task6 final 继续 BLOCKED。** 本步仅修改 P/E/B；production/tests（含两个 untracked recovery 文件）字节比对保持一致，两份 Batch13 Python proof 无 diff，git diff --check/stat/status 已核对。未改环境/依赖/schema/本地数据库，未用 Docker/live MPD/外部服务，未 commit/push/PR/merge。S1 及后续工作未执行。
+
+文档辅助核对曾因正则把 test_*.py 文件名当作函数而触发 AssertionError；完整缺失列表均为文件名/通配符，是核对脚本假设错误，不是 pytest、环境或 consumer 失败。收窄到 consumer selector 区域并排除文件 stem 后精确重验 exit0：16 个引用函数均存在，P/E/B 本地链接有效，148 个 production/test Python 文件与 S0 编辑前 SHA256 全部一致。未因此修改生产或测试。
