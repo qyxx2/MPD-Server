@@ -47,6 +47,7 @@ Design mobile-first. The narrow-screen hierarchy is the canonical hierarchy; lar
 - Keep primary actions reachable on touch screens and preserve clear focus treatment for keyboard input.
 - On wider viewports, do not scale a phone mockup indefinitely. Bound reading width and artwork size, then use available space to improve grouping.
 - Task 9 owns the responsive bottom navigation and Player-as-default application navigation defined by the Implementation Plan. Safe-area padding is part of that navigation shell.
+- Persistent navigation, focused inputs, overlays, and primary controls must remain reachable as mobile browser chrome or the on-screen keyboard changes the usable viewport. Layout must not depend on one fixed viewport height.
 
 Exact breakpoints, dimensions, and component metrics are implementation details unless accessibility or an existing Spec requires otherwise.
 
@@ -66,8 +67,9 @@ The Player is Task 8's primary visual surface. Its information hierarchy is:
 
 - Artwork is the dominant visual object and remains square when artwork is shown.
 - Artwork and lyrics occupy the same primary media stage; switching between them should not create a second competing content hierarchy.
+- Artwork and lyrics use one explicit two-state selector associated with that shared media stage. The selected mode must be visually apparent; the selector does not define playback or timing semantics.
 - Missing artwork uses a neutral, deliberate placeholder that preserves layout and contrast. Do not stretch low-information placeholders or fabricate cover art.
-- LRC retains server-provided timestamps and may highlight the active line. Plain text lyrics remain plain text and must not imply synchronized timing.
+- LRC retains server-provided timestamps. When authoritative playback/timing state identifies a current LRC line, that line should receive distinct visual emphasis while nearby context remains readable. Plain text lyrics remain plain text and must not imply synchronized timing.
 - Lyrics should prioritize the current line while retaining nearby context. Text remains selectable/readable where practical.
 - The visual spec does not define how playback time is predicted, confirmed, or reconciled; it only defines presentation once authoritative state is available.
 
@@ -91,16 +93,17 @@ The Player is Task 8's primary visual surface. Its information hierarchy is:
 
 - Output is a compact, lower-hierarchy status/control region: recognizable, readable, and not visually confused with source-file metadata.
 - Unavailable, stale, unknown, disconnected, or error states use text/icon treatment in addition to color.
+- When authoritative data exposes both a confirmed output fact and transient operation/request feedback, keep them as distinct visual layers. Transient progress or failure feedback must not visually masquerade as, or replace, the confirmed output fact.
 - This spec does not define output switching semantics or reconnection behavior; it only requires their existing authoritative states to be visually distinguishable.
 
 ## 5. Task 9 page mapping
 
 The concept board contains Library, Queue, Search, Playlist, and Settings views. Task 9 may use their composition as the visual reference while keeping existing business rules authoritative.
 
-- **Queue:** use the compact artwork/list-row language from the concept, while preserving the required Now Playing / Played / Up Next structure. Played is visually collapsible according to the Task 9 Plan. Reorder handles appear only where reorder is actually allowed.
+- **Queue:** use the compact artwork/list-row language from the concept, while preserving the required Now Playing / Played / Up Next structure. Played is visually collapsible according to the Task 9 Plan. Reorder handles appear only where reorder is actually allowed. When authoritative state exposes MANUAL/AUTOPLAY provenance, present it as compact secondary metadata or a badge; it must remain distinguishable without color alone and must not compete with song identity.
 - **Library:** use artwork-forward responsive grids/lists, restrained segmented filters, and clear collection hierarchy. The actual collection types/tabs come from existing Library contracts, not from every tab drawn in the concept.
-- **Search:** place the query field prominently, with compact filters and predictable result rows. Empty query, no results, and unavailable/index-updating states must be visually different.
-- **Playlists/Favorites:** use consistent list/card surfaces and overflow actions. Favorite state remains the business-Spec star control, independent from the SongRow playback action.
+- **Search:** place the query field prominently and use predictable result rows. Expose filters or result categories only when they are authorized and represented by the authoritative contract/API. Empty query, no results, and unavailable/index-updating states must be visually different.
+- **Playlists/Favorites:** use consistent list/card surfaces and overflow actions. Favorite state remains the business-Spec star control, independent from the SongRow playback action. FavoriteStar is a domain-specific exception to the general accent rule: its selected/unselected appearance follows the authoritative Favorites specification rather than the general cyan accent.
 - **Settings:** use simple grouped glass rows. Only settings/features authorized by the Plan/Specs are shown. The concept's Account/login row is excluded from v0.1. `Settings → About` follows the existing MPD information contract and must preserve unknown/disconnected presentation.
 - **Bottom navigation:** Task 9 provides the responsive app navigation with Player as the default view. The concept's exact labels/order are reference material, not a new routing contract.
 
@@ -157,7 +160,7 @@ Every major Task 8/9 surface must have deliberate visual treatment for these sta
 - **No lyrics / lyrics read failure:** visually distinct when the underlying API distinguishes them; do not manufacture lyrics.
 - **Long text:** Player may wrap important identity text; dense rows truncate with ellipsis while preserving access to the full value through normal accessible UI techniques.
 - **Disconnected / stale / unknown:** use a persistent but non-obscuring status treatment and visibly distinguish stale/unknown data. Whether cached data is retained, controls are disabled, or reconnect occurs is governed by existing/future Task 8 contracts, not this visual document.
-- **Operation error:** show local, actionable feedback near the affected control/surface when possible without replacing authoritative state with optimistic fiction.
+- **Operation error:** show local, specific feedback near the affected control/surface when possible without replacing authoritative state with optimistic fiction. Recovery actions appear only when already authorized by the authoritative Specs/Plan.
 
 ## 9. Accessibility and interaction quality
 
@@ -167,7 +170,13 @@ Every major Task 8/9 surface must have deliberate visual treatment for these sta
 - Glass/blur effects must have a contrast-safe fallback.
 - Content must remain usable with text scaling and narrow mobile widths.
 
-## 10. Task boundary summary
+## 10. Visual acceptance
+
+Task 8/9 visual review should exercise representative narrow-mobile and wider-viewport layouts, reduced-motion mode, a contrast-safe no-`backdrop-filter` fallback, long or scaled text, and the major loading/empty/disconnected states that authoritative data can expose.
+
+Compare implementation with the reference for hierarchy, density, surface language, and composition rather than pixel equality. Visual acceptance must not invent missing business states, routes, controls, or recovery actions merely to make a screenshot match the concept.
+
+## 11. Task boundary summary
 
 **Task 8** owns the typed Web state layer and the Player visual surface: shared visual foundations/styles, Player layout, artwork/lyrics stage, player metadata, progress presentation, playback controls, output/status presentation, responsive Player composition, and reduced-motion behavior.
 
@@ -175,7 +184,7 @@ Every major Task 8/9 surface must have deliberate visual treatment for these sta
 
 This split is visual ownership only. It does not move, invent, or freeze any server/client contract and does not change the dependency order in the Implementation Plan.
 
-## 11. Reference-use rule
+## 12. Reference-use rule
 
 During Task 8/9 implementation, treat `docs/ui/web-pwa-mobile-reference.png` as the baseline for **mood, density, surface treatment, hierarchy, and mobile composition**. Do not trace it pixel-for-pixel, and do not use it to override authoritative semantics.
 
