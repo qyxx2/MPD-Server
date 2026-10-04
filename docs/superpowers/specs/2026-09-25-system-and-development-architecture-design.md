@@ -440,7 +440,7 @@ WebSocket 是实时状态同步通道。
 
 ### 12.3 观察生命周期与完整 DTO
 
-继承人工决策 G6-04/G6-05 / A；History 与播放观察的领域 authority 分别为第一章 §2.2.1/§8.8，不在 gateway 重定义。Task4 D6 的保守恢复及 STOPPED/AutoPlay/session 组合只由第一章 §7/§8.9 定义；本节观察循环仍不调用恢复，完整验收另需其生产因果证据能力门禁。
+继承人工决策 G6-04/G6-05 / A；History 与播放观察的领域 authority 分别为第一章 §2.2.1/§8.8，不在 gateway 重定义。Task4 D6 的保守恢复及 STOPPED/AutoPlay/session 组合只由第一章 §7/§8.9 定义；本节观察循环仍不调用恢复，完整验收依赖第一章 §8.9 修订后的绑定/当前接纳/提前执行/未知历史与只读展示联合门禁；严格自然 SOURCE 已被替换，未被证明通过。
 
 **生命周期合同**：前提是 composition root 已注入 PlaybackService observation facade、OutputManager、传播协调器和可控时钟。每个服务进程仅启动一个观察循环，首次启动立即采样，以每轮完成后 1 秒为默认间隔，无重叠采样；单轮外部读取预算默认 5 秒，可注入以便测试，不引入 Task 10 配置系统。PlayerPort 的既有 typed timeout/error 保留。采样不依赖客户端数量；失败后按同一有界间隔重试，不忙循环。关闭应用取消并 await observer/senders、注销订阅，不把关停取消解释成 Stop 或 rollback 已提交业务。MPD 不可达不阻止服务启动。
 
@@ -451,6 +451,27 @@ Playback 和 Output 观察分域处理，一域失败不丢弃另一域成功事
 `playback_observation` 包含 nullable `actual_state`、nullable `matches_current`（true/false/null=未确认）、nullable `position_seconds`/`duration_seconds`（只属已验证匹配的本地 current）、nullable `observed_at`、`freshness`（fresh/stale/unknown）、`reconciliation_required`、nullable `error_code`/`error_message`。从未采样不推断外部漂移，matches_current=null、reconciliation_required=false；发现确定漂移则 false/reconciliation_required=true；绑定无法确认时 null/reconciliation_required=true。连接读取失败或样本过期时，有最后匹配样本可保留其位置，但必须stale且绑定仍属同一current；已明确state/current漂移或绑定无法确认时，position_seconds/duration_seconds为null，不在该DTO复用旧位置。Output 原 observed/request/error 字段完整保留，并在外层提供 `output_observation {observed_at, freshness, error_code, error_message}` 描述采样状态，不拿旧 request 回执作 fresh observation。
 
 **保留、失败与证明**：生命周期只改变观察缓存/订阅资源/传播 sequence；保持持久数据、History、Queue、Library/Playlist revisions、MPD 控制事实不变。FakeClock 和受控 PlayerPort 需证明单循环、预算超时、无重叠、独立域降级、周期重试、关停资源释放和读操作无业务副作用；进程重启清空观察可信度并更换 epoch。自动恢复不得接入未通过第一章 §8.8 前置验收的 reconciliation 路径。以上新增代码及测试仍未实现。
+
+### 12.3.1 原版 MPD 实际身份与页面恢复补充（2026-10-04，RT-ACTUAL-001）
+
+本节仅定义表示；领域转移由第一章 §8.9 决定。服务/MPD重启后业务重新接管体验沿用 F §8.9.2 的 R1 已接受合同（2026-10-04）：自动恢复实际状态显示，明确播放操作经确认重建业务绑定；仅刷新/换浏览器不丢失有效服务绑定，实际状态/unknown 必须准确表示。当前实现 `StateService.get_full_snapshot()` 通过持久 PlaybackState.song_id 读取 `current_song`；该字段是**最后已提交业务歌曲**，不保证是 MPD 当前曲目。保留旧字段语义，不把它悄悄改为陌生曲目的 Song，也不为陌生 URI 建 Library 行。
+
+最小 additive DTO：在 `playback_observation` 新增 `actual_current`（nullable 对象，字段 `entry_id:int|null, uri:str|null, position:int|null`）、`actual_freshness: fresh|stale|unknown`、`bound_queue_item_id:str|null`、`sync_status: CONFIRMED|UNBOUND|EXTERNAL_DRIFT|UNCONFIRMED_STOP|SYNC_FAILED|NO_CANDIDATES`。沿用 `actual_state/observed_at/error_code/error_message`；actual_current 仅是最近一致 MPD 样本，STOPPED 中有 entry 不表示仍在播放。无成功样本为 null/unknown；断线保留最后样本但 actual_freshness=stale。fresh 的未绑定 actual 可以与旧业务 current 不同。
+
+原 `freshness/matches_current/position_seconds/duration_seconds` 保持原绑定进度合同。bound_queue_item_id 只在当前有效绑定被验证时非 null；丢绑定、样本过期或当前漂移时为 null。`CONFIRMED` 需实际与业务 current/transport/完整执行一致；空候选但仍播放时允许 `NO_CANDIDATES` 且 matches_current=true。诊断优先级：无样本/绑定失效 UNBOUND → 可确认未知停止 UNCONFIRMED_STOP → 意外执行漂移 EXTERNAL_DRIFT → 已归属计划失败 SYNC_FAILED → 无候选 NO_CANDIDATES → CONFIRMED。Stop 的已确认业务终态可 CONFIRMED，不套未知停止规则。
+
+authority：MPD 提供实际 identity/state，PlaybackService 提供绑定及同步诊断，Library 提供本地 Song 元数据，StateService 只聚合。queue.items 的 position=0 与 current_song 在不同步时是最后业务 current，客户端不得把它渲染为已确认实际 Now Playing。实际陌生项可显示 URI/entry 与“未绑定”；没有观测则显示未知，不能以旧歌曲代填。实际 progress 不另增字段，未匹配时保持 null；本轮不扩展任意外部 metadata/完整 Context/History active 重建。
+
+兼容：保留 protocol_version=1、所有原字段与 REST mutation 回执；只新增上述观察字段，旧消费者可忽略未知字段。新消费者缺字段时按 actual unknown、绑定未确认处理，不因服务降级回旧版本而误认 current。GET 与 WS 首帧必须用同一扩展模型；Task4 corrective 拥有 Service 数据，Task6 表示 owner 修改 domain/public realtime DTO 和聚合映射；Task8 将来实现展示，此计划不实现前端。
+
+| 验收场景 | 必须得到 | 不能声称恢复 |
+|---|---|---|
+| 浏览器刷新/全新浏览器（服务未重启） | 无旧内存的 initial full snapshot，与 GET/Service 全字段相同；有效绑定时已确认 actual 与业务一致 | 不依赖旧消息补出状态 |
+| WebSocket 重连 | 新完整快照，订阅/capture 无缝交接，epoch/sequence 水位及迟到 GET 拒绝仍成立 | 不重放业务/History，不以 socket ACK 当播放确认 |
+| 服务进程重启 | 新 realtime epoch；持久 Queue/History/Playback 保留；actual 经新只读采样可 fresh，绑定 UNBOUND、runtime active/session 不虚构 | 不把旧 Queue ID/URI 自动认回 MPD ID；业务接管须明确动作 |
+| MPD 重启/断线重连 | 实际先 stale/unknown，成功一致采样后恢复 actual；旧 connection binding 失效，显示不同步 | 不沿用复用 ID、不追补断线期间原因 |
+
+有效绑定情况下 runner 的成功领域提交最终使业务 current 与 actual 一致，联合失效通知在 outer commit 后传播；失效绑定情况下按第一章 §8.9.2 明确接管。读路径始终不控制、不丢弃 active、不同步执行队列。所有新表示的序列变化与 snapshot 同一可见性边界；旧样本不能覆盖新绑定，fresh actual 的变化也不得静默漏通知。新增字段和上述验收均未实现/未执行；不改变历史 Task6 只读 proof 的意义，不解除 final gate。
 
 ## 13. Output Manager
 

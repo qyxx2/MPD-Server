@@ -2,7 +2,9 @@
 
 日期：2026-10-04（Asia/Shanghai）。仅本轮执行证据，不新增/修改合同语义。
 
-**状态：重连恢复 proof 已执行并 GREEN；Batch13 / Task6 最终 acceptance BLOCKED（D6-RECOVERY）。**
+**最新状态：既有重连恢复 proof 的历史 GREEN 保留；原版 MPD 新合同已定义，新实现/联合验收未执行；Batch13 / Task6 final BLOCKED（D6-RECOVERY）。**
+
+> 下文各轮结果均有各自基线；最新门禁见文末“原版 MPD 合同迁移”，不把历史状态作为新实施指令。
 
 ## 真实基线与 scope
 
@@ -146,3 +148,15 @@ Step2.1 已闭合；Step2.2–2.7 可执行 consumer 实现/证明 GREEN，Step3
 branch=`feature/task-6-realtime-state`，HEAD=`6b05d7f434024488a736db5be83ada82bb0abf91`；已有未提交 consumer 修改全部保留。仅核对基线与同步 P/E/B，未修改生产或测试。用户指定 D6/realtime recovery/API 三文件本次 fresh **112 passed，1 warning，11.61s**（D6 98 + 本批 14），两份 Batch13 Python proof 无 diff；仅既有 Starlette/httpx warning，无测试/环境失败。完整依据见[唯一 D6 acceptance 的 S0 节](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。
 
 consumer Step2.1–Step3 已实施/验收，P 的旧时态/checklist 已同步；历史 RED 保留。生产因果来源/validator 尚未接线，D6-SOURCE 继续 BLOCKED，完整 D6/Batch13/Task6 final NOT COMPLETE。未进入 T §5/Batch13 最终序列；355/1087 等仅是前次记录，本次未重跑，不以三文件 GREEN 解除来源门禁。S1 及后续未执行，未启用恢复 loop，未 commit/push/PR/merge。
+
+## 2026-10-04 原版 MPD 合同迁移（最新 gate）
+
+当前HEAD=`651aade83d0df52601f4555e0a682c9f16afd25e`，branch=`feature/task-6-realtime-state`。本轮文档修订；两份Batch13 Python proofs未改、未运行。旧源码/consumer存在已核对，历史GREEN不作为本轮执行证据。
+
+用户授权由严格自然SOURCE迁移为[F §8.9](../../specs/2026-09-24-playback-model-queue-semantics-design.md)的原版MPD合同，补充[A §12.3.1](../../specs/2026-09-25-system-and-development-architecture-design.md)实际identity/未绑定表示。SOURCE是SUPERSEDED而非PASSED；原strict natural/empty proof仅历史consumer。原有11 RT rows的切面、只读、epoch/sequence、完整首帧和迟到响应拒绝继续保留，新增RT-ACTUAL以及D6 binding/current/提前执行/History真实性/部分执行/runner验收。
+
+唯一实施计划[P S0–S12](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据[E最新节](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。S2–S9未实施，S10新本地联合proof未创建/执行，S11目标运行时未执行，S12本批最终序列未执行。正常刷新/换浏览器取得真实完整状态；服务/MPD重启后actual可重新采样，业务binding不得按URI认回，不能把旧current_song显示为已确认实际歌曲。
+
+**Relationship Gate REQUIRED / BLOCKED；Contract Matrix新合同DEFINED / acceptance BLOCKED；D6、Batch13、Task6 final仍BLOCKED。** 不具备以Task6完成为前提进入Task8的验收条件。没有新实现完成、目标能力通过或新pytest GREEN声明；未commit/push/PR。
+
+R1 同步（2026-10-04）：用户已接受重启后“恢复 actual 显示、明确播放操作经确认重建业务绑定”；仅刷新/换浏览器不丢失有效服务绑定。当前合同已定义，旧计划历史已从 P 移入 task-4 归档，当前执行仍仅 P 的 S0–S12。新实现/自动测试/目标运行时未完成，final 仍 BLOCKED。

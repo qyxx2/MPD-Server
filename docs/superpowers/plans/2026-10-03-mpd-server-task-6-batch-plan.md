@@ -1,6 +1,6 @@
 # MPD-Server Task 6 Contract Audit / Batch Execution Plan
 
-> **For agentic workers:** 后续执行使用 `superpowers:executing-plans`；本轮仅 Contract Gap Resolution / planning。所有 Batch 未执行。没有 commit/push/PR 授权；不得因下列实施白名单而在本轮修改 production code。
+> **For agentic workers:** 后续执行使用 `superpowers:executing-plans`；原计划记录保留；最新状态见下方2026-10-04修订。当前仅文档，旧Batch实现/proof不等于新D6验收。没有 commit/push/PR 授权；不得因下列实施白名单而在本轮修改 production code。
 
 **Goal:** 传播已确认的权威状态，以完整快照恢复客户端，同时保持既有 Playback/Queue/History/Library/Playlist/Output 业务合同。
 
@@ -20,7 +20,17 @@
 - T7：`2026-10-02-mpd-server-task-7-batch-plan.md` §4；O-* 合同保持。
 - T1–3：M Task 1/1R/2/2R/3；`../archive/task-3/2026-09-27-task3-corrective-followup-plan.md`；`../archive/integration/2026-09-29-mpd-server-task-0-4-integration-gate-acceptance.md`；`../../mpd-0.23.5-capabilities.md`。
 
-## 1. 状态与范围
+## 2026-10-04 当前 D6 依赖修订
+
+当前HEAD 651aade已有Task6 snapshot/observer/WS与旧D6 consumer，不能继续把下文2026-10-03“尚不存在/未实施”审计表当当前源码。B1–B13各次执行记录保留在archive；最终Task6仍BLOCKED。本节覆盖下文旧时态及严格SOURCE依赖，未重做原Batch。
+
+唯一领域authority为P（Playback Spec）§8.9原版MPD修订：提前同步后续项、确认当前occurrence、不认证未知原因；严格D6-SOURCE SUPERSEDED，不是能力通过。新增RT-ACTUAL-001由A §12.3.1定义，D6计划S8是Task6表示owner的窄修改；core runner仍由Task4 PlaybackService编排。原RT-SNAPSHOT/OBSERVE/PLAYBACK/HISTORY/RECOVER继承新事实边界，原RT-REVISION/CONNECT/DELIVERY及其他rows的事务/只读/顺序不变。
+
+最终Batch13前置改为[D6唯一计划](2026-10-04-task-4-d6-recovery-corrective-plan.md)S2–S9实现及focused proof、S10显式Adapter联合、S11目标能力、S12全部R与本批复验。新History不写未经认证永久事件，绝不要求stock producer证明natural。原生产源码与旧proof只是基线；新实现/新自动测试/目标运行时均未完成，D6/Batch13/Task6 final **BLOCKED**。只读observer/GET/WS不承担恢复控制，Task8未实现。
+
+R1 状态同步（2026-10-04）：用户已接受服务/MPD 重启后恢复 actual 显示、明确播放操作经确认重建业务绑定；仅刷新/换浏览器不丢失有效服务绑定。见 Playback Spec §8.9.2；合同接受不等于实现或验收通过，final 继续 BLOCKED。
+
+## 1. 状态与范围（2026-10-03 原计划记录）
 
 **CONTRACT FREEZE COMPLETE / Contract Gap = 0 / BATCH PLAN READY IN DEPENDENCY ORDER / IMPLEMENTATION NOT STARTED。**
 
@@ -82,9 +92,9 @@ T1/1R verified capability record 只证明已验证命令，不证明外部自�
 
 **Dependency Matrix 变化**：基础 Task3+4+5+7 不变；新增阶段性 D6-RECOVERY（Task4 corrective → 自动恢复启用/Task6 final acceptance）。不新增 Task8+ 依赖，不把 corrective 混入 socket Batch。若专项审计暴露尚无 authority 的领域恢复策略，必须在该领域工作中按既有合同规则处理；本 Task6 已明确只报告漂移，不能凭此擅自恢复。
 
-D6-RECOVERY 的验收义务：真实 Services/Repository/MockPort 证明自然完成与显式 Stop 分别记录、AutoPlay/可用 successor 遵循原合同、无法确定原因不伪造 History、外部状态转移经确认且历史恰一次、失败恢复 persisted/runtime、retry/replay 无重复。验收记录必须给出实际 test 路径/函数、命令和 fresh GREEN；方法存在、历史全套 GREEN 或新计划本身不算通过。
+D6-RECOVERY 当前验收义务：按P §8.9证明绑定current接纳、完整execution确认、提前AutoPlay、未知原因不写永久History、本服务明确操作保留原reason/确认、失败恢复persisted/runtime及安全retry/replay；新增A §12.3.1实际identity表示与独立runner proof。验收记录必须给出实际 test 路径/函数、命令和 fresh GREEN；方法存在、历史全套 GREEN 或新计划本身不算通过。
 
-2026-10-04 人工决策 A 的新增领域 authority 仅为 P §8.9。唯一执行入口：[D6 corrective plan](2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据：[D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。保守 consumer 合同已定义，生产因果完成证据来源仍 BLOCKED；consumer Fake GREEN 不能解除 D6/Batch13 final gate。G6-01–05 与本计划11 rows不重开，不新增Task6恢复接线。
+2026-10-04 人工决策 A 的新增领域 authority 仅为 P §8.9。唯一执行入口：[D6 corrective plan](2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据：[D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。该人工A属于旧合同历史；最新原版MPD修订见P §8.9及本文件当前依赖节。旧consumer Fake GREEN不能解除新D6/Batch13 gate；G6-01–05已实现只读基础保持，新增RT-ACTUAL窄表示义务，不在Task6 observer接恢复。
 
 ## 4. 冻结 Contract Matrix
 
@@ -402,6 +412,8 @@ Owned RT-DELIVERY-001 final；Relied RT-CONNECT/REVISION；Regression TX-IDEMP/R
 Complexity：1row/commit→queue→sender3边界/overflow-timeout-cancel3失败转换；runtime/API；3文件约80–180LOC，可独立审查。
 
 ### Batch 13 — 重连恢复与最终 Task-level acceptance
+
+2026-10-04修订：下述两个proof文件已存在，须复验而非重复创建；另外继承D6 S8的RT-ACTUAL与S10–S12联合义务。严格SOURCE不再前置，stock新合同验收仍BLOCKED。
 
 依赖B1–12；**最终验收另需 D6-RECOVERY 的 fresh proof**。原Step5/6；Step7提交仍须用户授权。读取所有11 rows及D6验收记录，不能拿旧全套结果代替。
 

@@ -119,7 +119,8 @@ PYTHONPATH=. python -m server.app.player.capabilities \
 - NAS：Synology DS920
 - DSM：7.1.1
 - MPD TCP：192.168.3.94:6600
-- Probe JSON 文件：`mpd-0.23.5-probe-2026-09-26-091948.json`
+- Probe JSON 文件：[原始记录](/home/Gold/Downloads/mpd-0.23.5-probe-2026-09-26-091948.json)（机器本地来源，不复制进仓库）。
+- 2026-10-04 只读核对 SHA-256：`6c4036572314b38d822481c28fa25652bab29a26ab8ec6e74a076cbe815d0d40`；105 commands、17 status_fields，与下列数据逐项核对。此 JSON **没有 verified_operations 字段**，不能用作第二轮 transport 原始证据。
 - 实测时间：2026-09-26 09:19:48（按 probe 文件时间命名记录）
 
 ### MPD version
@@ -245,13 +246,14 @@ swap
 swapid
 tagtypes
 toggleoutput
+unmount
 unsubscribe
 update
 urlhandlers
 volume
 ```
 
-共 104 个命令。
+共 105 个命令（2026-10-04 对照原始 JSON 纠正，旧摘录遗漏 `unmount`）。
 
 其中与当前 PlayerPort / Adapter 直接相关的命令均出现在真实 `commands` 返回中，包括：
 
@@ -416,6 +418,8 @@ message: No such song
 代码层也已实现与真实行为对应的隔离探测和断线恢复：未知命令不会使整个 capability probe 崩溃，后续探测可以使用新的 TCP 连接继续完成。
 
 ### Task1R 运行时 Transport 验证（2026-09-27）
+
+> 以下为既有第二轮验收摘录，保留其历史结论；2026-10-04 未取得该轮原始 JSON。新取得的 2026-09-26 JSON 不支持复核这里的九项 verified_operations。本次没有重新运行 probe，也不新增运行时结论。
 
 本次在真实 NAS 环境重新执行：
 

@@ -125,7 +125,7 @@ Required mechanics:
 | Task 1R | Extended Queue/Output/Stats transport contract remains behaviorally consistent across MockMPD, MPDAdapter and VerifiedPlayerPort. |
 | Task 2R | Migration/reconciliation ↔ LibraryRepository preserves Song identity plus Playlist/Favorites/History references across availability changes and rollback. |
 | Task 3 | media parser/filesystem → scanner → Repository atomic persistence → post-commit event/optional MPD update ordering; source media remains read-only. |
-| Task 4 | QueueRepository/PlaybackState ↔ QueueManager/PlaybackService ↔ PlayerPort ↔ History/AutoPlay remain mutually consistent across mutations and transitions. D6-RECOVERY adds a targeted corrective acceptance obligation for natural-completion/explicit-Stop/external-drift confirmation and History rollback/retry before Task 6 automatic recovery/final acceptance; historical acceptance is not blanket-reopened. |
+| Task 4 | QueueRepository/PlaybackState ↔ QueueManager/PlaybackService ↔ PlayerPort ↔ History/AutoPlay remain mutually consistent across mutations and transitions. D6-RECOVERY now follows Playback Spec §8.9 stock-MPD current-occurrence binding/adoption, pre-synchronized execution, uncertified-History suppression, partial-command retry and independent runner proof before final Task 6 acceptance; strict causal SOURCE is superseded, not passed. Historical consumer acceptance is not new-route proof. |
 | Task 5 | API ↔ Service ↔ Repository/PlayerPort; Playlist persisted membership ↔ all REST representations; Collection playable split remains distinct; idempotency rollback restores persisted and in-memory session state. |
 | Task 7 | OutputManager ↔ PlayerPort output state while preserving current Song/Queue/PlaybackContext/best-effort position and reconciling actual MPD state. |
 | Task 6 | RT-SNAPSHOT-001: committed local/runtime/revision cut and explicit failure/staleness; RT-REVISION-001: delta/no-op/rollback/replay/restart; RT-LIBRARY/PLAYLIST/PLAYBACK/OUTPUT-001: producer → outer commit → invalidation without changing frozen domain rules; RT-HISTORY-001: persistent events survive Song unavailability, active/session separate; RT-OBSERVE-001: PlayerPort → Service observation bound to current occurrence, no domain mutation; RT-CONNECT/DELIVERY/RECOVER-001: barrier-proven handoff, ordered invalidation, bounded-client isolation and full reconnect recovery. Proof owners and exact commands: active Task 6 plan. |
@@ -276,7 +276,7 @@ class PlayerPort(Protocol):
 - [x] Step 9: Commit: feat: add mpd adapter and verified capabilities.
 **Task 1 verification record (2026-09-25, Steps 6-9):**
 - Step 6: Added a real localhost TCP server test covering MPD greeting, command exchange, status/current-song parsing, song URI to MPD song ID lookup, playback controls, seek, volume, repeat/random, update and outputs. The test passes.
-- Step 7: Completed against the real Synology DS920 MPD 0.23.5 endpoint on 2026-09-26. Recorded the full `commands` list (104 commands), 17 `status_fields`, two real outputs (USB DAC/ALSA enabled and HTTPD disabled), seven `stats` fields, `update_response: {"updating_db":"2"}`, and two error outcomes. The unknown-command probe produced a real connection close; the ACK probe returned error code 50 / "No such song". The probe result was saved on NAS as `mpd-0.23.5-probe-2026-09-26-091948.json`.
+- Step 7: Completed against the real Synology DS920 MPD 0.23.5 endpoint on 2026-09-26. Recorded the full `commands` list (historically transcribed as 104; 2026-10-04 raw JSON reconciliation corrects this to 105, including `unmount`), 17 `status_fields`, two real outputs (USB DAC/ALSA enabled and HTTPD disabled), seven `stats` fields, `update_response: {"updating_db":"2"}`, and two error outcomes. The unknown-command probe produced a real connection close; the ACK probe returned error code 50 / "No such song". The probe result was saved on NAS as `mpd-0.23.5-probe-2026-09-26-091948.json`.
 - Step 8: Added MPDCapabilities and VerifiedPlayerPort; operations whose required MPD commands were not verified are rejected before reaching the underlying PlayerPort. Song-URI playback additionally requires playlistinfo and playid; status requires status and currentsong.
 - Step 9: This branch is committed with message feat: add mpd adapter and verified capabilities.
 
@@ -713,6 +713,8 @@ Task 3 corrective follow-up is therefore accepted and the repository is READY FO
 
 ## Task 4：Queue、Playback Context、History、AutoPlay、Playback Service
 
+2026-10-04 D6 migration: current HEAD 651aade contains the old conservative consumer. The current authority is [Playback Spec §8.9](../specs/2026-09-24-playback-model-queue-semantics-design.md); remaining work is only the [existing D6 corrective plan S0–S12](2026-10-04-task-4-d6-recovery-corrective-plan.md). PB-NATURAL-001/PB-NATURAL-EMPTY-001 are historical consumer rows. New PB-BINDING/CURRENT/QUEUE-ADOPT/HISTORY-UNCERTIFIED/AUTOPLAY-EXEC/RECOVERY-RUNNER and RT-ACTUAL obligations are not implemented or accepted. No automatic commit or backend extension is authorized by this migration. R1 was accepted by the user on 2026-10-04: service/MPD restart restores actual-state display, while business occurrence rebinding requires an explicitly requested playback operation and confirmation. Browser refresh/new browser does not discard a valid service binding. Acceptance of this contract is not implementation or gate acceptance; final remains BLOCKED.
+
 Dependencies:
 - Task 1R and Task 2R completed.
 - Task 3 completed, including available-library queries and the DomainEvent contract.
@@ -760,12 +762,12 @@ MPD Queue mapping:
 - [ ] Step 3: RED tests for Play Next and Add to Queue insertion order.
 - [ ] Step 4: RED tests for reorder/delete/clear/save-as-playlist and current-song deletion.
 - [ ] Step 5: RED tests for Played view versus persistent History.
-- [ ] Step 6: RED tests for natural completion, skip, stop and switch-away reasons.
+- [ ] Step 6: Historical consumer reason tests remain; stock D6 follows Playback Spec §8.9: only confirmed explicit-operation reasons, no inferred natural completion, and no fabricated missed History.
 - [ ] Step 7: Implement AutoPlay low-watermark 5/refill 5 using Task 3 available Songs while respecting PlaybackContext.
 - [ ] Step 8: Prevent AutoPlay from overwriting MANUAL items and mark every generated item source.
 - [ ] Step 9: Test empty library, one-song library, insufficient candidates and concurrent Queue mutation.
 - [ ] Step 10: Serialize Queue mutations using Repository transaction boundaries plus Queue revision/CAS.
-- [ ] Step 11: Test Pause keeps AutoPlay, Stop disables it, and Queue exhaustion is not terminal.
+- [ ] Step 11: Test Pause keeps AutoPlay, explicit confirmed Stop disables it, normal online playback preloads successors, and unknown STOPPED never auto-restarts or changes user intent (Playback Spec §8.9.5).
 - [ ] Step 12: Implement Playback Service as the sole orchestration layer between Queue/History/AutoPlay and PlayerPort.
 - [ ] Step 13: Test MPD failures do not falsely advance current-track service state and reconcile external status.
 - [ ] Step 14: Verify Queue/Playback persistence, MPD synchronization, compile/lint and diff.
@@ -847,7 +849,7 @@ Dependencies:
 - Task 5 completed.
 - Task 7 completed.
 - Task 6 owns snapshot/read facades, committed change/revision propagation, WebSocket delivery and read-only Service observation lifecycle. It does not redefine playback/Queue/History recovery transitions.
-- D6-RECOVERY: before automatic recovery activation or final Task 6 acceptance, Task 4 corrective must prove natural completion versus explicit Stop, external drift confirmation, History exactly-once per confirmed transition and rollback/retry against P §6/§7/§8.8–8.9 and PB-HISTORY-001. Existing reconcile_external_status is not sufficient evidence. This is an implementation/acceptance dependency, not an unresolved Task 6 semantic. Independent foundation/observation Batches can proceed; this documentation-only task does not execute the corrective or declare it complete. The 2026-10-04 user decision A defines conservative consumer semantics exclusively in P §8.9; the unique D6 corrective plan separates executable consumer steps from the still-blocked production causal-evidence source. Fake consumer proof does not satisfy that source gate or final D6 acceptance.
+- D6-RECOVERY: Playback Spec §8.9 (2026-10-04 stock MPD revision) replaces the strict natural-completion SOURCE requirement with occurrence binding/current confirmation, preserved Queue/manual order, pre-synchronized AutoPlay, no invented History, safe partial-command/transaction retry and a PlaybackService-owned runner. Architecture §12.3.1 adds RT-ACTUAL-001 for truthful full snapshots. The unique D6 corrective plan S0–S12 owns implementation/proofs and target-runtime validation; final Task 6/Batch13 remains BLOCKED until its gates and the Task 6 regression sequence pass. Existing consumer or Fake GREEN does not prove this route. No custom backend is planned; GET/WS/observer stay read-only.
 
 Files:
 - Create: server/app/services/state_service.py
@@ -1208,7 +1210,7 @@ Before Task completion:
 | Task 4 | Task 1R + Task 2R + Task 3 |
 | Task 5 | Task 3 + Task 4 |
 | Task 7 | Task 1R + Task 4 |
-| Task 6 | Task 3 + Task 4 + Task 5 + Task 7; D6-RECOVERY Task 4 corrective acceptance before automatic recovery activation/final Task 6 acceptance, not before independent foundation Batches |
+| Task 6 | Task 3 + Task 4 + Task 5 + Task 7; D6-RECOVERY Task 4 stock-MPD corrective S2–S12 acceptance (including independent runner and RT-ACTUAL-001), before target automatic activation/final Task 6 acceptance; strict SOURCE superseded, final BLOCKED; not before independent foundation Batches |
 | Task 8 | Task 5 + Task 6 + Task 7 |
 | Task 9 | Task 5 + Task 6 + Task 8 |
 | Task 10 | Task 3 + Task 4 + Task 5 + Task 6 + Task 7 |

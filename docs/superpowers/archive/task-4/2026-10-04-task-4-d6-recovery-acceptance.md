@@ -1,8 +1,8 @@
 # Task4 D6-RECOVERY专项验收 — BLOCKED
 
-日期：2026-10-04（Asia/Shanghai）。本轮唯一专项 acceptance。**consumer Step2.1–Step3 已验收；完整 D6 未完成，D6-SOURCE BLOCKED；Batch13 最终 acceptance 未满足。**
+日期：2026-10-04（Asia/Shanghai）。唯一专项 acceptance。**最新：原版 MPD 主体合同已定义，R1重启接管限制已接受；新实施/自动测试/目标运行时均未完成；D6、Batch13、Task6 final BLOCKED。**
 
-> 最新结论见文末「S0 基线核对与文档同步」；首次诊断 RED、人工 A 与逐行 consumer 实施记录均保留。历史 FAILED/未实施状态不再作为当前实施指令。
+> 最新有效状态见文末「原版 MPD 合同迁移」。下文所有旧 RED、GREEN、S0/S1、严格 SOURCE 裁定均是当时合同下的历史记录；不会因本次改合同而被追认为新合同通过。
 
 ## Actual baseline / scope
 
@@ -248,3 +248,77 @@ P 的旧“TO CREATE/未实施/从 Step2.1 开始”已同步为 consumer 已实
 **S0 COMPLETE；consumer 已实施/验收，指定范围 fresh GREEN；完整 D6 Relationship/Contract Matrix 验收 NOT COMPLETE，D6-SOURCE BLOCKED；Step4/Batch13/Task6 final 继续 BLOCKED。** 本步仅修改 P/E/B；production/tests（含两个 untracked recovery 文件）字节比对保持一致，两份 Batch13 Python proof 无 diff，git diff --check/stat/status 已核对。未改环境/依赖/schema/本地数据库，未用 Docker/live MPD/外部服务，未 commit/push/PR/merge。S1 及后续工作未执行。
 
 文档辅助核对曾因正则把 test_*.py 文件名当作函数而触发 AssertionError；完整缺失列表均为文件名/通配符，是核对脚本假设错误，不是 pytest、环境或 consumer 失败。收窄到 consumer selector 区域并排除文件 stem 后精确重验 exit0：16 个引用函数均存在，P/E/B 本地链接有效，148 个 production/test Python 文件与 S0 编辑前 SHA256 全部一致。未因此修改生产或测试。
+
+## 2026-10-04 S1 生产来源可行性调查（最新验收状态）
+
+**S1 调查与裁定 COMPLETE；裁定为「需要后端扩展」。当前原版 MPD 0.23.5 + Port/Adapter 无法满足严格 SOURCE 合同；D6-SOURCE BLOCKED，完整 D6/Step4、Batch13/Task6 final acceptance 继续 BLOCKED。** S1 完成不表示来源能力通过或 producer 已可实施；S2–S7 未执行。
+
+实际起始工作区 clean，branch=`feature/task-6-realtime-state`，HEAD=`651aade83d0df52601f4555e0a682c9f16afd25e`；consumer 已提交在此基线。本步只更新 P/E，未重做 consumer，不沿用 S0 未提交文件状态。已读用户指定全部八份文档及当前 PlayerPort/models/Adapter/capabilities/main/consumer；研究记录、逐场景矩阵、官方 tag 链接及五项必要决策均写入 [原 P 的 S1 裁定（现归档）](2026-10-04-task-4-d6-recovery-plan-history.md#2026-10-04-s1-生产来源可行性裁定调查完成能力-blocked)，不建立平行计划/Spec/验收。
+
+### 来源证据与拒绝边界
+
+- 官方版本限定 **v0.23.5**。[协议](https://github.com/MusicPlayerDaemon/MPD/blob/v0.23.5/doc/protocol.rst)与 [idle 位集合并实现](https://github.com/MusicPlayerDaemon/MPD/blob/v0.23.5/src/client/Idle.cxx)仅支持当前快照/子系统变化；没有终止原因、唯一完成 ID、实际结束时间或可重放事件序列。协议 greeting 也不足以认证 NAS daemon build；未取得目标 build/hash/补丁清单。
+- 已区分 EOF、Stop、Next/队尾、seek 终点、播放错误、外部换曲、重复 URI、断线/重启：status/idle/elapsed/URI/没有本服务 Stop 请求均不作为自然完成证据。当前 songid 可以区分同时入队槽位，不能区分同项重播、迟到/复用/重启。UNKNOWN 原则保持 F §8.9。
+- [player Thread](https://github.com/MusicPlayerDaemon/MPD/blob/v0.23.5/src/player/Thread.cxx)的排空、命令退出及错误路径最终可合流；played URI 日志也出现在统一清理路径。[decoder Thread](https://github.com/MusicPlayerDaemon/MPD/blob/v0.23.5/src/decoder/Thread.cxx)的普通返回与 [FLAC plugin](https://github.com/MusicPlayerDaemon/MPD/blob/v0.23.5/src/decoder/plugins/FlacDecoderPlugin.cxx)的 EOF/错误返回不是唯一自然原因。不能以 Drain 或空 status.error 新造可信 source。
+- C 的两轮记录及提交 `85a24f6`/`4453eb1` 已核对；原始 JSON 未在仓库 tracked/history、本地 WorkSpace/home 文件名搜索找到。M 记首份保存在 NAS；本步未连接 NAS，因此原始 probe **未取得**。不新增 C 实测结果，不把官方源码静态反例写成 NAS 实测；既有九项 verified_operations 无 SOURCE 能力。
+- 生产 Port 无事件/连续性/ACK；Adapter 未保留 error，无完成来源；main 不注入 validator，consumer 默认拒绝。M 的 Task4/Task6 依赖和 A/T 的 observer/read/reconnect 只读边界保持，不能借 Task6/Task8 生成原因。
+
+### 推荐与待决项
+
+推荐受控 MPD 扩展：在 decoder/plugin 原因丢失前保留 EOF/error/cancel，在控制/seek/播放输出边界保留每次播放代次，再提供带 source epoch、序号/transition ID、entry ID、时间与缺口标志的来源记录。Service 关联事件对应的已提交业务绑定；ACK 在 outer commit 后。同进程失败保留事件，重复走 receipt；断线/重启仍按 F 拒绝旧 continuity，不新增跨进程恢复承诺。仅改 Python Adapter 或 player drain 分支不足。
+
+必要决策：①能否部署维护可核验的 NAS 后端扩展；②decoder/媒体与 gapless/crossfade/范围支持边界；③seek 后余段及实际完成时间定义；④全客户端控制、来源 generation 与业务绑定/Queue revision 竞态；⑤留存/ACK/缺口与重新绑定规则。细项见 P。本次只是建议，未批准后端白名单、未冻结 S2 来源合同。若拒绝后端扩展且固定当前后端，则当前约束下无法满足；保持 BLOCKED，或由用户另行批准换后端/修订 F 与阶段门禁。不得自动降低为启发式自然识别。
+
+### 本步验证与局限
+
+本步为只读能力调查及文档更新，没有生产实现、SOURCE 自动测试或运行时能力验收。未运行 pytest/Ruff/compileall、未制造 RED→GREEN；旧 consumer GREEN 仍为前节历史证据。官方源码已读取并由主执行者核对关键控制/decoder 分支，研究子代理只读协助，不修改仓库。未运行新 capability probe、未访问 live MPD/NAS/DAC、未用 Docker，未改环境/依赖/schema/本地数据库。
+
+fresh 检查：`git diff --check` exit0；`.venv/bin/python` 辅助校验 **148 份 production/test 文件起止 SHA256 相同、P/E 3 个本地链接有效**；`git diff --exit-code --` C/B/F/A/T/M 与 server/app、server/tests exit0。已读取实际 diff，stat/status 仅 P/E 两份文档修改，无生成文件/环境/数据库变更。这些是文档及范围验证，不代替 SOURCE proof。未 commit/push/PR/merge。**consumer 实施/验收状态保持；来源能力验收未满足，手工目标部署/对照验证也未执行，完整联合验收仍 BLOCKED。**
+
+## 2026-10-04 原版 MPD 合同迁移（最新有效状态）
+
+用户明确保留原版 MPD 0.23.5，不采用后端扩展，授权收窄自然原因/精确结束时间/采样间及断线重启历史完整性，要求保留 Queue occurrence、手动顺序、AutoPlay核心、真实页面恢复、事务/确认/幂等与读取只读。本轮只编辑文档；没有把这些授权解释为新实现或验收通过。
+
+### 真实起点、原始材料与能力结论
+
+branch=`feature/task-6-realtime-state`，HEAD=`651aade83d0df52601f4555e0a682c9f16afd25e`；开始 P/E 已有未提交 S1 调查（2文件），完整保留。核对 `651aade` consumer 与 `6b05d7f` 合同提交、`82391fc` Batch13 proof、当前Port/Adapter/capabilities/PlaybackService/journal/Queue/AutoPlay/History/observation/StateService/完整snapshot/WS/main及关联测试。当前源码支持旧consumer存在，不支持新stock路线已完成；默认completion_validator=None，没有生产natural source或恢复runner。
+
+本轮取得 [2026-09-26 原始JSON](/home/Gold/Downloads/mpd-0.23.5-probe-2026-09-26-091948.json)，SHA-256=`6c4036572314b38d822481c28fa25652bab29a26ab8ec6e74a076cbe815d0d40`。commands=105，C旧摘录漏unmount；status_fields=17；outputs/stats/update/errors核对一致；没有verified_operations字段。只最小纠正C并补来源。第二轮JSON未取得，九项transport仍是历史摘录，未重跑实机probe。上文“当时未取得”是当时事实，不抹去。
+
+重新读取官方固定v0.23.5的protocol、PlayerCommands、Idle、Playlist/PlaylistControl、player Thread、IdTable；索引和逐条限制在[P的S0审计表](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。静态结论：可读当前entry/完整执行队列，不能认证上一项自然原因、准确ended_at或遗漏项播放；既有SOURCE调查的不可行结论对旧严格合同仍成立。没有认证NAS build/hash或新运行时组合。
+
+### 决定与门禁替换
+
+唯一authority [F §8.9](../../specs/2026-09-24-playback-model-queue-semantics-design.md)改为当前目标接纳与预同步；[A §12.3.1](../../specs/2026-09-25-system-and-development-architecture-design.md)定义最小actual identity/同步状态DTO。候选→业务提交→执行同步→当前接纳分开，顺序和提交确认不弱化。未知STOPPED不自动启动、不改AutoPlay意图、不造reason。
+
+History推荐并采用不记录未经认证离开的永久事件，保留现有reason/schema；新目标不凭观测时间创建active。A→C只把已确认A放Played，B留pending保留身份和手动顺序；代价是B可能再次播放。刷新/新浏览器通过完整快照恢复，服务/MPD重启先恢复actual显示，失效绑定需明确操作重建；不承诺未知过去/完整Context/runtime active还原。
+
+严格 `D6-SOURCE` 标记 **SUPERSEDED / NOT PROVEN**，不是删除阻塞后PASS。新增PB-BINDING/CURRENT/QUEUE-ADOPT/HISTORY-UNCERTIFIED/AUTOPLAY-EXEC/RECOVERY-RUNNER、RT-ACTUAL及修订UNKNOWN/RETRY义务全部待实施。旧natural/empty测试仅证明历史consumer；原UNKNOWN/Stop/TX/只读/水位proof仍适用或按P表精确迁移，历史112/355/1087不外推。
+
+| 层次 | 最新状态 |
+|---|---|
+| 新合同与执行计划 | DEFINED；唯一 P 保留当前 S0–S12；R1 重启后明确接管限制已由用户接受 |
+| 旧consumer Step2.1–Step3 | 当前代码存在，历史验收保留；本轮未重跑 |
+| 新stock实现（S2–S9） | NOT STARTED；含独立runner，非observer恢复 |
+| 新专项/联合自动proof | TO CREATE / NOT RUN；无新RED/GREEN声明 |
+| 当前本地Python | 既有.venv可执行，Python3.14.4；只用于文档/JSON校验，没有改环境 |
+| 目标MPD模式/预同步/新绑定运行时验收 | S11 NOT RUN；需另行授权；本轮禁止live/Docker |
+| D6 Relationship/Contract Matrix验收 | REQUIRED / BLOCKED（历史consumer PASSED不能抵扣） |
+| Batch13 / Task6 final | BLOCKED；S12最终复验未执行 |
+| Task8实际UI、Task12 DAC/反向代理 | 未实施/未验收，不包含于文档完成声明 |
+
+### 本轮验证边界
+
+没有运行pytest/Ruff/compileall、新probe或任何生产入口；没有写测试、schema、数据库、依赖或环境。文档事实验证：JSON解析/计数/摘要，当前源码与selector只读检查，实际diff、git diff --check、stat/status、相对链接检查及起始tracked文件SHA-256保全。最终检查结果记录在下方，不把文档校验冒充实现GREEN。未commit/push/PR/merge，HEAD保持651aade。
+
+### 最终文档核验结果
+
+`git diff --check` exit0；当前diff仅指定P/E/B/F/A/T/M/C八份Markdown。辅助脚本验证：相对/绝对本地Markdown链接31个（含1个heading anchor）均可解析；C完整commands/status_fields数组与原始JSON逐项一致（105/17）；新S0–S12编号连续；当前计划已有selector经AST核对存在，新21个test函数名称均为TO CREATE。148个tracked production/test文件与本轮起始SHA-256一致，全部其它非授权tracked文件也一致，无untracked新增。起始P/E调查保留在历史区；没有将旧SOURCE“需要扩展”意见作为当前行动指令。
+
+当次文档核验结束时 R1 尚待用户答复；该状态仅为历史记录，后续决定见下节。
+
+### R1 接受与 active plan 归档整理（2026-10-04 后续）
+
+用户已接受建议：服务/MPD 重启后恢复准确 actual 显示，明确播放操作经确认重建业务绑定；仅刷新/换浏览器不丢失有效服务绑定。F/A/P/B/T/M 已同步。P 中旧 consumer、旧 S0/S1、废止步骤和详细能力调查移入 [计划历史归档](2026-10-04-task-4-d6-recovery-plan-history.md)，保留原记录；P 保留当前源码基线、proof 迁移、S0–S12 与文档简称索引。上一节核验数字属于归档整理前的文档版本，不作为本次核验结果。合同已接受；新实现、新自动测试和目标运行时仍未完成，D6/Batch13/Task6 final 继续 BLOCKED。
+
+本次整理核验：active plan 从 587 行缩至 300 行，新增 321 行历史归档；脚本确认迁出的旧历史正文和详细能力复核逐字保留，当前 S0–S12 连续。九份工作区变更文档的 37 个本地 Markdown 链接（含锚点）可解析；已检查实际 diff、stat/status 和 git diff --check。相对本次整理起点只改七份 tracked 文档并新增上述归档；C、全部 production/tests 及其它 tracked 文件字节未变。未运行自动测试、未访问 live MPD、未修改环境、未提交。
