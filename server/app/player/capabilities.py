@@ -9,6 +9,7 @@ from typing import Any
 
 from server.app.player.models import (
     DatabaseUpdateStatus,
+    ExecutionSample,
     MPDStats,
     OutputInfo,
     PlayerQueueEntry,
@@ -34,6 +35,7 @@ ConnectionFactory = Callable[
 
 OPERATION_COMMANDS: dict[str, frozenset[str]] = {
     "status": frozenset({"status", "currentsong"}),
+    "read_execution_sample": frozenset({"status", "playlistinfo"}),
     "play": frozenset({"play"}),
     "play_song": frozenset({"playlistinfo", "playid"}),
     "pause": frozenset({"pause"}),
@@ -154,6 +156,10 @@ class VerifiedPlayerPort(PlayerPort):
     async def status(self) -> PlayerStatus:
         self._require("status")
         return await self._delegate.status()
+
+    async def read_execution_sample(self) -> ExecutionSample:
+        self._require("read_execution_sample")
+        return await self._delegate.read_execution_sample()
 
     async def play(self, song_uri: str | None = None) -> None:
         self._require("play_song" if song_uri is not None else "play")

@@ -322,3 +322,51 @@ History推荐并采用不记录未经认证离开的永久事件，保留现有r
 用户已接受建议：服务/MPD 重启后恢复准确 actual 显示，明确播放操作经确认重建业务绑定；仅刷新/换浏览器不丢失有效服务绑定。F/A/P/B/T/M 已同步。P 中旧 consumer、旧 S0/S1、废止步骤和详细能力调查移入 [计划历史归档](2026-10-04-task-4-d6-recovery-plan-history.md)，保留原记录；P 保留当前源码基线、proof 迁移、S0–S12 与文档简称索引。上一节核验数字属于归档整理前的文档版本，不作为本次核验结果。合同已接受；新实现、新自动测试和目标运行时仍未完成，D6/Batch13/Task6 final 继续 BLOCKED。
 
 本次整理核验：active plan 从 587 行缩至 300 行，新增 321 行历史归档；脚本确认迁出的旧历史正文和详细能力复核逐字保留，当前 S0–S12 连续。九份工作区变更文档的 37 个本地 Markdown 链接（含锚点）可解析；已检查实际 diff、stat/status 和 git diff --check。相对本次整理起点只改七份 tracked 文档并新增上述归档；C、全部 production/tests 及其它 tracked 文件字节未变。未运行自动测试、未访问 live MPD、未修改环境、未提交。
+
+## 2026-10-04 S2 一致执行样本与只读能力门禁
+
+本节取代上文“新stock实现 S2 NOT STARTED / 新专项 NOT RUN”中仅关于 S2 的当前状态；S3–S12 仍未执行。实际开工工作树 clean，branch=`feature/task-6-realtime-state`，HEAD=`9a6d1443343e337154017731926a4fad7c2359fd`。相对旧 consumer 基线 `651aade`，`server/app` 与 `server/tests` 无差异；`9a6d144` 的冻结合同文档与当前 P/F/A/T/M/C/E/B 一致，没有发现需要改写 S0/S1 或超出 S2 冻结接口的漂移。
+
+### execution-before baseline
+
+使用既有 `.venv`，Python 3.14.4、pytest 9.1.1、Ruff 0.16.9；`server/requirements.txt` 已读取，未改环境或依赖。S0 要求的 fresh baseline：
+
+```text
+.venv/bin/python -m pytest -q server/tests/invariants/test_d6_recovery.py::test_unclassified_external_stop_does_not_fabricate_history
+# 1 passed, 1 warning
+.venv/bin/python -m pytest -q server/tests/invariants/test_d6_recovery.py
+# 98 passed, 1 warning
+```
+
+仓库内原始 probe SHA-256=`6c4036572314b38d822481c28fa25652bab29a26ab8ec6e74a076cbe815d0d40`；105 commands、17 status fields、无 `verified_operations`，与 C/S0 记录一致。没有访问 live MPD、NAS、Docker 或外部服务。
+
+### S2 实现与 RED→GREEN
+
+仅修改 S2 白名单中的 Player 模型、Port、Adapter、能力 wrapper、Mock 和专用测试。新增不可变深复制 `ExecutionSample`，字段为 connection epoch、partition、playlist version、完整 status/entries、single/consume/error，不含 completion/reason。`PlayerPort`、`MockMPD` 和 `VerifiedPlayerPort` 暴露同一只读入口；能力门禁只要求 `status`/`playlistinfo` 命令，不把该读取自动加入 runtime `verified_operations`。
+
+真实 Adapter 在一次连接锁内执行 `status → playlistinfo → status`，每次读取核对 connection、partition、playlist version/length、current position/ID、完整连续 position 与唯一 MPD ID；最多两次 attempt。两次仍冲突抛 `PlayerCommandError(command="read_execution_sample", message="inconsistent execution sample")`；断线保留原 `PlayerUnavailable`，取消沿用弃连接逻辑，不返回半样本、不发送控制。连接成功 greeting/password 后生成本地 connection epoch，close/reconnect 更换代次。STOPPED 可保留 selected entry，只表示实际选择位置，不生成 reason。
+
+`test_sample_rejects_torn_current_and_queue` 的 current/version/length/duplicate-id/position 五参数首先均因入口缺失 RED，最小一致采样实现后同 selector **5 passed**；断言两次 playlist attempt、typed error、controls=[]。`test_sample_epoch_and_modes_are_not_completion_evidence` 修正一次测试 fixture 的空队列 length 后，真实 RED 暴露 Mock/wrapper 缺入口；补齐后嵌套 status/entry 仍可变再次 RED，冻结深复制后同 selector GREEN。最终 diff 审阅又发现公开 close 可在 await 间更换连接：新增同 selector 竞态 proof 取得 playlist attempt 1≠2 的 RED，采样固定并复核 attempt epoch 后同 selector **1 passed**。该 selector 同时覆盖 epoch 变化/中途重连、single/consume/error、空 error、空 STOPPED、selected STOPPED、单次断线、Mock 与能力允许/拒绝，且 `model_dump()` 无 reason。
+
+### fresh 验证与门禁
+
+```text
+.venv/bin/python -m pytest -q server/tests/player/test_execution_sample.py::test_sample_rejects_torn_current_and_queue
+# 5 passed
+.venv/bin/python -m pytest -q server/tests/player/test_execution_sample.py::test_sample_epoch_and_modes_are_not_completion_evidence
+# 1 passed
+.venv/bin/python -m pytest -q server/tests/player/test_execution_sample.py
+# 6 passed
+.venv/bin/python -m pytest -q server/tests/player/test_mpd_adapter_tcp.py
+# 1 passed
+.venv/bin/python -m pytest -q server/tests/player/test_mpd_adapter_errors.py
+# 3 passed
+.venv/bin/python -m pytest -q server/tests/player
+# 40 passed
+.venv/bin/python -m ruff check server/app/player/models.py server/app/player/ports.py server/app/player/mpd_adapter.py server/app/player/capabilities.py server/app/player/mock_mpd.py server/tests/player/test_execution_sample.py
+# All checks passed
+.venv/bin/python -m pytest -q server/tests
+# 1093 passed, 1 existing Starlette/httpx deprecation warning, 62.22s
+```
+
+S2 implementation、自动测试和本地环境验证 **PASSED**。这只证明本地协议模拟和只读能力门禁；目标 MPD 的新模式/组合运行时仍 **NOT VERIFIED**，S11 未授权/未运行。没有修改 schema、数据库、依赖、业务 Queue/History、observer/GET/WS 或 runner，没有进入 S3。完整 D6 Relationship/Contract Matrix、Batch13 与 Task6 final 继续 **BLOCKED**。

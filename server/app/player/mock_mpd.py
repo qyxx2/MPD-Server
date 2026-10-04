@@ -3,9 +3,11 @@ from __future__ import annotations
 import inspect
 import random
 from collections.abc import Awaitable, Callable, Sequence
+from uuid import uuid4
 
 from server.app.player.models import (
     DatabaseUpdateStatus,
+    ExecutionSample,
     MPDStats,
     OutputInfo,
     PlayerEvent,
@@ -39,6 +41,7 @@ class MockMPD(PlayerPort):
         ])
         self._random = random.Random(random_seed)
         self._connected = True
+        self._connection_epoch = uuid4().hex
         self._state = PlayerState.STOPPED
         self._current_index: int | None = None
         self._current_queue_id: int | None = None
@@ -49,6 +52,7 @@ class MockMPD(PlayerPort):
         self._fail_next: dict[str, str] = {}
         self._listeners: list[EventListener] = []
         self._queue: list[tuple[str, int]] = []
+        self._playlist_version = 0
         self._next_queue_id = 1
         self._stats = stats or MPDStats()
         self._updating_db = False
@@ -59,6 +63,7 @@ class MockMPD(PlayerPort):
 
     def reconnect(self) -> None:
         self._connected = True
+        self._connection_epoch = uuid4().hex
 
     def fail_next(self, command: str, message: str = "injected command failure") -> None:
         self._fail_next[command] = message
@@ -75,6 +80,19 @@ class MockMPD(PlayerPort):
     async def status(self) -> PlayerStatus:
         self._check("status")
         return self._status()
+
+    async def read_execution_sample(self) -> ExecutionSample:
+        self._check("read_execution_sample")
+        return ExecutionSample(
+            connection_epoch=self._connection_epoch,
+            partition="default",
+            playlist_version=self._playlist_version,
+            status=self._status(),
+            entries=tuple(await self.queue_entries()),
+            single="0",
+            consume=False,
+            error=None,
+        )
 
     async def play(self, song_uri: str | None = None) -> None:
         self._check("play")
@@ -196,7 +214,10 @@ class MockMPD(PlayerPort):
 
     async def queue_clear(self) -> None:
         self._check("queue_clear")
+        changed = bool(self._queue)
         self._queue.clear()
+        if changed:
+            self._playlist_version += 1
         if self._current_queue_id is not None:
             self._current_queue_id = None
             self._current_index = None
@@ -208,12 +229,14 @@ class MockMPD(PlayerPort):
         mpd_song_id = self._next_queue_id
         self._next_queue_id += 1
         self._queue.append((song_uri, mpd_song_id))
+        self._playlist_version += 1
         return mpd_song_id
 
     async def queue_delete(self, mpd_song_id: int) -> None:
         self._check("queue_delete")
         index = self._queue_index(mpd_song_id, "queue_delete")
         del self._queue[index]
+        self._playlist_version += 1
         if self._current_queue_id == mpd_song_id:
             self._current_queue_id = None
             self._current_index = None
@@ -226,12 +249,16 @@ class MockMPD(PlayerPort):
         item = self._queue.pop(source_index)
         if before_mpd_song_id is None:
             self._queue.append(item)
+            if source_index != len(self._queue) - 1:
+                self._playlist_version += 1
             return
         if before_mpd_song_id == mpd_song_id:
             self._queue.insert(source_index, item)
             return
         target_index = self._queue_index(before_mpd_song_id, "queue_move")
         self._queue.insert(target_index, item)
+        if source_index != target_index:
+            self._playlist_version += 1
 
     async def queue_play(self, mpd_song_id: int) -> None:
         self._check("queue_play")
