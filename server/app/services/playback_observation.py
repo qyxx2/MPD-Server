@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -21,10 +22,13 @@ if TYPE_CHECKING:
 class PlaybackObservations:
     """Runtime occurrence proof and observation cache; never controls the player."""
 
-    def __init__(self, service: PlaybackService, clock: Callable[[], datetime] | None) -> None:
+    def __init__(
+        self, service: PlaybackService, clock: Callable[[], datetime] | None, max_age: float = 6,
+    ) -> None:
         self.service = service
         self.path = service.queue_manager.queue_repository.path
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.max_age = max_age
         self.cache = PlaybackObservation()
         self.binding: tuple[object, ...] | None = None
         self.generation = 0
@@ -84,13 +88,13 @@ class PlaybackObservations:
                 self.binding = None
                 await self._set(PlaybackObservation())
             if (self.cache.freshness == 'fresh' and self.cache.observed_at is not None
-                    and (self.clock() - self.cache.observed_at).total_seconds() > 6):
+                    and (self.clock() - self.cache.observed_at).total_seconds() > self.max_age):
                 await self._set(self.cache.model_copy(update={'freshness': 'stale'}, deep=True))
             return self.cache.model_copy(deep=True)
 
         return await run_transaction(self.path, read)
 
-    async def observe(self) -> PlaybackObservation:
+    async def observe(self, read_timeout: float | None = None) -> PlaybackObservation:
         # A caller's pending owner cannot authorize an external sample as committed.
         try:
             transaction_identity(self.path)
@@ -109,8 +113,10 @@ class PlaybackObservations:
         player = self.service.player
         failure = None
         try:
-            status = await player.status()
-            entries = await player.queue_entries()
+            async def sample():
+                return await player.status(), await player.queue_entries()
+
+            status, entries = await asyncio.wait_for(sample(), read_timeout)
         except (PlayerUnavailable, PlayerCommandError, TimeoutError, ValueError) as error:
             failure = error
 

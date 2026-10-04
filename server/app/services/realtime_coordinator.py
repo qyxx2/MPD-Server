@@ -12,7 +12,7 @@ from server.app.repositories.database import (
     run_transaction,
     transaction_identity,
 )
-from server.app.services.events import DomainEvent, invalidation_domains
+from server.app.services.events import DomainEvent, EventPublisher, invalidation_domains
 
 
 @dataclass(eq=False)
@@ -24,12 +24,21 @@ class RealtimeSubscription:
 
 
 class RealtimeCoordinator:
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, event_publisher: EventPublisher | None = None) -> None:
         self.path = path
         self._marker = StateMarker(epoch=str(uuid4()))
         self._trusted = True
         self._subscriptions: set[RealtimeSubscription] = set()
         self._staged: dict[object, dict[str, tuple[object, object]]] = {}
+        self._observations: dict[str, object] = {}
+        self._event_publisher = event_publisher
+
+    def stage_observation(self, domain: str, content: object) -> None:
+        """Compare accepted runtime facts with the last visible committed content."""
+        self.stage_change(frozenset({domain}), self._observations.get(domain), content)
+        on_transaction_visible(
+            self.path, lambda: self._observations.__setitem__(domain, deepcopy(content)),
+        )
 
     def marker(self) -> StateMarker:
         if not self._trusted:
@@ -80,6 +89,8 @@ class RealtimeCoordinator:
             await run_transaction(
                 self.path, register,
             )
+        if self._event_publisher is not None:
+            await self._event_publisher.publish(event)
 
     def _fail_closed(self) -> None:
         self._trusted = False
@@ -87,6 +98,9 @@ class RealtimeCoordinator:
             subscription.valid = False
             subscription.pending = None
         self._subscriptions.clear()
+
+    def close(self) -> None:
+        self._fail_closed()
 
     def _register(self, domains: frozenset[str], *, revise: bool = True) -> None:
         self.marker()

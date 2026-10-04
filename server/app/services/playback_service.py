@@ -135,6 +135,7 @@ class PlaybackService:
         event_publisher: EventPublisher | None = None,
         coordinator: RealtimeCoordinator | None = None,
         observation_clock: Callable[[], datetime] | None = None,
+        observation_max_age: float = 6,
     ) -> None:
         self.queue_manager = queue_manager
         self.history_service = history_service
@@ -143,11 +144,11 @@ class PlaybackService:
         self.library_repository = library_repository
         self._event_publisher = event_publisher
         self._coordinator = coordinator
-        self._observations = PlaybackObservations(self, observation_clock)
+        self._observations = PlaybackObservations(self, observation_clock, observation_max_age)
         self._transport_changes: dict[object, list[dict[str, object]]] = {}
 
-    async def observe(self) -> PlaybackObservation:
-        return await self._observations.observe()
+    async def observe(self, read_timeout: float | None = None) -> PlaybackObservation:
+        return await self._observations.observe(read_timeout=read_timeout)
 
     async def get_observation(self) -> PlaybackObservation:
         return await self._observations.get()

@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -35,6 +36,9 @@ from server.app.services.output_manager import OutputManager
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
 from server.app.services.queue_manager import QueueManager
+from server.app.services.realtime_coordinator import RealtimeCoordinator
+from server.app.services.state_observer import StateObserver
+from server.app.services.state_service import StateService
 
 
 @asynccontextmanager
@@ -49,9 +53,14 @@ async def lifespan(app: FastAPI):
     history_repository = HistoryRepository(database_path)
     idempotency_repository = IdempotencyRepository(database_path)
 
+    coordinator = RealtimeCoordinator(database_path, getattr(app.state, 'event_publisher', None))
     library_service = LibraryService(library_repository)
-    library_scanner = LibraryScanner(library_repository)
-    playlist_service = PlaylistService(playlist_repository)
+    library_scanner = LibraryScanner(
+        library_repository, coordinator=coordinator, event_publisher=coordinator,
+    )
+    playlist_service = PlaylistService(
+        playlist_repository, coordinator=coordinator, event_publisher=coordinator,
+    )
     collection_service = CollectionService(library_service, playlist_service)
     queue_manager = QueueManager(
         queue_repository,
@@ -75,6 +84,7 @@ async def lifespan(app: FastAPI):
         autoplay=autoplay,
         player=player,
         library_repository=library_repository,
+        coordinator=coordinator, event_publisher=coordinator,
     )
 
     # Capability loading belongs to Task 10. Until verification is explicitly
@@ -87,7 +97,8 @@ async def lifespan(app: FastAPI):
         capabilities=capabilities,
         operation_runner=playback_service.run_output_operation,
         selector=getattr(app.state, "output_selector", None),
-        event_publisher=getattr(app.state, "event_publisher", None),
+        event_publisher=getattr(app.state, 'event_publisher', None) or coordinator,
+        coordinator=coordinator,
     )
     app.state.mpd_info_service = MPDInfoService(player=player, capabilities=capabilities)
 
@@ -100,7 +111,23 @@ async def lifespan(app: FastAPI):
     app.state.history_service = history_service
     app.state.idempotency_service = IdempotencyService(idempotency_repository)
 
-    yield
+    app.state.realtime_coordinator = coordinator
+    app.state.state_service = StateService(
+        coordinator=coordinator, queue_manager=queue_manager, history_service=history_service,
+        library_service=library_service, playback_service=playback_service,
+        output_snapshot=app.state.output_manager.get_cached_state,
+        output_observation=app.state.output_manager.get_observation,
+    )
+    observer = StateObserver(playback=playback_service, output=app.state.output_manager)
+    app.state.state_observer = observer
+    task = asyncio.create_task(observer.run(), name='state-observer')
+    app.state.state_observer_task = task
+    try:
+        yield
+    finally:
+        await observer.close()
+        await asyncio.gather(task, return_exceptions=True)
+        coordinator.close()
 
 
 app = FastAPI(title="MPD-Server", lifespan=lifespan)

@@ -190,6 +190,11 @@ class MPDAdapter(PlayerPort):
             ) from exc
         except PlayerCommandError:
             raise
+        except asyncio.CancelledError:
+            # An interrupted response cannot be used by the next command.
+            # Abandon transport only; cancellation never sends player Stop.
+            await self.close()
+            raise
         except (asyncio.TimeoutError, TimeoutError) as exc:
             await self.close()
             raise PlayerUnavailable(f"MPD command timed out: {command}") from exc

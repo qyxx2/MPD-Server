@@ -345,6 +345,12 @@ Owned RT-OBSERVE-001 final、RT-OUTPUT-001 final；Relied RT-DELIVERY core；Reg
 
 白名单：**TO CREATE** `services/state_observer.py`；修改 `services/output_manager.py`、`services/state_service.py`、`services/realtime_coordinator.py`、`main.py`。新增 `StateObserver.run() -> None` 与 `close() -> None`；OutputManager新增 `get_cached_state() -> OutputSnapshot`，复用既有get_state实际观察。composition root注入共享coordinator/publisher到各producer，启停一个observer，不因连接数增loop；输出控制原event bridge保留，非控制观察只失效。初始化未知Output结构沿用原空值/不支持合同。
 
+2026-10-04 B9 technical pre-flight correction：白名单另含 `services/playback_service.py`、`services/playback_observation.py`，仅补 `observe(read_timeout: float | None = None)` 的外部读取预算及可注入 observation max age。B8 facade 没有预算入口；在调用方取消整个 observe 不能由 Service 接受 timeout/error 样本。预算必须在 Service 的外部读取边界转为 TimeoutError，应用关停 CancelledError 仍传播。此修正落实 A §12.3 已冻结合同，不改变业务语义、不接领域恢复。两个观察域使用同轮剩余预算，超时仍分别接受降级；cache 接受/expiry 与 capture 共用原提交边界。
+
+B9 test harness 支持范围：`server/tests/conftest.py`。历史 TestClient fixtures 在不同线程/事件循环直接访问同库并替换 Services；在这些 fixtures 开始前关闭应用 sampler，避免引入后台竞态或 live MPD。独立 composition-root invariant 必须直接运行真实 lifespan 与 sampler，注入 MockPort，证明无客户端仍采样、共享接线与取消清理；不能以隔离 fixture 的 GREEN 代替 lifecycle gate。
+
+B9 budget/Port corrective 支持范围：`server/app/player/mpd_adapter.py`，仅取消正在进行的 MPD 读取时弃用连接并重新传播 CancelledError，不发 Stop/补偿。新可注入读取预算会取消早于 Adapter 自身 timeout 的请求；保留连接会使迟到响应被下一次读取误认作 fresh 事实。`invariants/test_realtime_output.py` 的本地确定性 TCP proof 必须证明 timeout 后重新读取当前响应；回归 `server/tests/player/`。这是 RT-OBSERVE/OUTPUT 的 External Confirmation / Retry 保护，不新增 Port 或播放业务语义。Output控制在共同边界内于开始和结束各推进观察代次；采样接受时重新核验，控制前或控制中开始的样本均不得覆盖控制后的确认态。保持既有每次 get_state 只调用一次 operation runner 的合同，网络采样在边界外；覆盖控制前、中、后及迟到响应。
+
 **TO CREATE** `invariants/test_realtime_observer_lifecycle.py` 与 `invariants/test_realtime_output.py`。RED `test_single_observer_retries_and_shutdown_preserves_playback`、`test_output_control_and_observation_share_delivery_without_history`。FakeClock验证1秒间隔/5秒预算/6秒freshness、无重叠、单域故障不抹另一域、无客户端也采样、shutdown取消清理；控制outerrollback/replay/发布失败不影响旧terminal。
 
 验证两个selector → 两文件+B8proof → R-O/R-TX/R-ARCH。验收：不在observer调用reconcile_external_status；没有自动恢复启用，D6未通过仍允许本只读Batch验收。
