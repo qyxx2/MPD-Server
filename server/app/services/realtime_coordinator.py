@@ -24,6 +24,7 @@ class RealtimeSubscription:
     valid: bool = True
     queue: asyncio.Queue[Invalidation] = field(default_factory=lambda: asyncio.Queue(maxsize=64))
     changed: asyncio.Event = field(default_factory=asyncio.Event)
+    invalidated: asyncio.Event = field(default_factory=asyncio.Event)
 
     async def receive(self) -> Invalidation:
         while self.valid:
@@ -35,8 +36,14 @@ class RealtimeSubscription:
 
 
 class RealtimeCoordinator:
-    def __init__(self, path: str, event_publisher: EventPublisher | None = None) -> None:
+    def __init__(
+        self, path: str, event_publisher: EventPublisher | None = None, *,
+        queue_capacity: int = 64,
+    ) -> None:
+        if queue_capacity <= 0:
+            raise ValueError("realtime queue capacity must be positive")
         self.path = path
+        self._queue_capacity = queue_capacity
         self._marker = StateMarker(epoch=str(uuid4()))
         self._trusted = True
         self._subscriptions: set[RealtimeSubscription] = set()
@@ -58,7 +65,7 @@ class RealtimeCoordinator:
 
     def subscribe(self) -> RealtimeSubscription:
         self.marker()
-        subscription = RealtimeSubscription()
+        subscription = RealtimeSubscription(queue=asyncio.Queue(maxsize=self._queue_capacity))
         self._subscriptions.add(subscription)
         return subscription
 
@@ -79,6 +86,7 @@ class RealtimeCoordinator:
         while not subscription.queue.empty():
             subscription.queue.get_nowait()
         subscription.changed.set()
+        subscription.invalidated.set()
 
     def stage_change(
         self, domains: frozenset[str], before: object, after: object,

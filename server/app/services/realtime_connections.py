@@ -39,6 +39,7 @@ class RealtimeConnections:
     async def connect(self, socket: WebSocket) -> None:
         connection_id = str(uuid4())
         tasks = []
+        close_code = None
         await socket.accept()
         try:
             try:
@@ -48,7 +49,7 @@ class RealtimeConnections:
                 state = self._snapshot_encoder(snapshot)
             except Exception:
                 logger.exception("Realtime initial snapshot unavailable connection=%s", connection_id)
-                await asyncio.wait_for(socket.close(code=1011), self._send_timeout)
+                close_code = 1011
                 return
 
             async def send():
@@ -75,7 +76,12 @@ class RealtimeConnections:
                 while (await socket.receive())["type"] != "websocket.disconnect":
                     pass
 
-            tasks = [asyncio.create_task(send()), asyncio.create_task(receive_disconnect())]
+            async def watch_invalidation():
+                await subscription.invalidated.wait()
+                raise RuntimeError("realtime subscription invalidated")
+
+            tasks = [asyncio.create_task(send()), asyncio.create_task(receive_disconnect()),
+                     asyncio.create_task(watch_invalidation())]
             done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
                 task.result()
@@ -83,10 +89,7 @@ class RealtimeConnections:
             pass
         except Exception:
             logger.exception("Realtime delivery failed connection=%s", connection_id)
-            try:
-                await asyncio.wait_for(socket.close(code=1013), self._send_timeout)
-            except Exception:
-                logger.exception("Realtime close failed connection=%s", connection_id)
+            close_code = 1013
         finally:
             # ASGI uses level cancellation: protect the cleanup checkpoint from
             # repeated cancel-scope delivery while child tasks release resources.
@@ -95,3 +98,8 @@ class RealtimeConnections:
                 for task in tasks:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
+                if close_code is not None:
+                    try:
+                        await asyncio.wait_for(socket.close(code=close_code), self._send_timeout)
+                    except Exception:
+                        logger.exception("Realtime close failed connection=%s", connection_id)
