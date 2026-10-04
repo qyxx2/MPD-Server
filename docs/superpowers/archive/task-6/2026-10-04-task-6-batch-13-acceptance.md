@@ -107,3 +107,24 @@ Declined项目逐一裁定：
 - 物理MPD/NAS/DAC/reverse proxy：留Task12，本轮只做本地确定性proof；代价是本轮不提供物理端到端结论。
 
 本轮执行裁定：按用户指定checkout/branch使用既有环境（代价：没有额外worktree隔离）；无生产delta时如实记录新proof验证既有行为、不制造RED（代价：没有新production TDD-cycle证据）；D6不越界扩写（代价：最终验收持续BLOCKED）。没有deferred minor。
+
+## 2026-10-04 D6专项重新核对（最新 gate 状态）
+
+实际起始/结束HEAD为 `82391fcf6bb02a8bb480e99ea5be4a93ec43746b`，branch `feature/task-6-realtime-state`；起始clean。上文三份Batch13修改已经在该提交，两个Python proof本次未修改。上文命令与“没有新的Contract Gap”保留为历史记录，不作为本次D6结论。
+
+唯一D6专项记录：[Task4 D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)；active执行计划：[D6 corrective plan](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。专项真实SQLite/Services/MockPort测试 `server/tests/invariants/test_d6_recovery.py::test_unclassified_external_stop_does_not_fabricate_history` **1 failed**：无用户Stop请求，仅外部STOPPED，仍新增STOP History、清active/session并禁用AutoPlay。重复运行相同RED；没有fixture/environment失败。
+
+本次发现Task4 D6领域Contract Gap：自然完成可信识别、外部漂移分类/确认/History reason、自然完成无可用歌曲终态、恢复retry转移身份及未知原因正向处理策略缺少权威定义。P §7/§8.8禁止错误归因，§10仍将精确Queue映射/故障恢复协议列为未决；不得从现有Next/delete/Mock事件或方法名补语义。Task6 G6-01–05已冻结的观察/传播协议不重开。本次按用户停止条件停止production implementation，未启用恢复loop。
+
+本次fresh检查：Batch13 recovery selector **6 passed**；recovery/API两文件 **14 passed**；Stop/observation/History/playback基线 **57 passed**；R-TX **19 passed**；R-ARCH **3 passed**；新增D6 Python Ruff及compileall exit0。完整命令、RED差异和未执行Gate见上述唯一D6记录。
+
+**最新状态：D6 Relationship Gate FAILED / Contract Matrix Gate BLOCKED；Batch13与Task6最终acceptance继续BLOCKED。** D6未完成，未进入“D6完成后”的完整final sequence；其余realtime/全部R集合/invariants+API/全套本次未重新执行，旧GREEN不得冲抵专项RED。无commit/push/PR/merge，不具备以Task6完成为前提进入后续Task的条件。物理MPD/NAS/DAC/reverse-proxy未执行。
+
+
+## D6 Contract Gap Resolution / 人工 A（2026-10-04，最新 blocker）
+
+用户明确选择A，唯一领域authority新增于Playback Spec §7/§8.9；[D6 corrective plan](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)已分解保守consumer合同、逐行为selectors及rollback/retry。当前完整事实只在[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)，本节不复制领域定义或第二份实施计划。
+
+consumer合同已闭合但未实施；自然完成生产因果证据来源仍缺机制/验证，D6-SOURCE BLOCKED。专项unknown STOPPED selector本窗口重复 **1 failed**；Stop/observation/History/playback基线 **57 passed**，仅基线，旧reconciliation成功断言需后续按新Spec迁移。未修改两个Batch13 Python proof，未运行本批最终sequence；历史GREEN不能解除当前RED/来源能力门禁。
+
+**最新状态：D6 consumer definition CLOSED / implementation NOT COMPLETE；Relationship Gate FAILED；完整Contract Matrix验收及D6-SOURCE BLOCKED；Batch13与Task6 final acceptance继续BLOCKED。** 允许下一窗口从D6 Step2.1保守consumer TDD开始，不启用自动恢复，不扩展Task8，不将Fake completion输入当作生产来源proof。无commit/push/PR/merge。

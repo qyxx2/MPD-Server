@@ -276,7 +276,9 @@ AutoPlay 的歌曲来源、随机策略和重复规避规则由后续章节细�
 
 -   **PLAYING**：正在播放；
 -   **PAUSED**：已暂停，播放会话仍存在；
--   **STOPPED**：用户明确停止，当前会话不再由 AutoPlay 自动续播。
+-   **STOPPED**：已确认没有正在执行的播放。用户明确 Stop 时
+    AutoPlay=false、active/session 结束；§8.9 的自然完成无候选时
+    AutoPlay=true、active 为空而 session 保留。STOPPED 本身不证明用户意图。
 
 Queue
 耗尽不是独立的终止状态。正常情况下，系统应在耗尽前补充内容并继续播放。
@@ -317,6 +319,52 @@ Stop、Pause、切歌、自然播放完成是不同事件，必须分别处理�
 
 自然结束与外部恢复的领域能力仍由 Task 4 corrective 承担：不能将 MPD STOPPED 本身当作“用户明确 Stop”，不能由采样推测或补造遗漏播放事件。必须按本章 §6/§7、PB-HISTORY-001 和确认/回滚合同证明自然结束、显式 Stop、外部漂移及重试的区分。Task 6 只暴露 reconciliation_required，不直接调用尚未通过该验收的恢复路径。自动恢复启用及 Task 6 最终验收以该专项能力验收为前置；独立的只读观察、传播基础和 snapshot Batch 可以先执行。此实施依赖不表示本节的新观察语义待决，也不授权本轮修改 production code。
 
+### 8.9 D6 领域恢复合同（2026-10-04，人工决策 A）
+
+本节是 D6 Contract Gap Resolution 的唯一新增领域权威。用户明确选择 A：保守接纳、保留未知原因、限定进程内 retry；自然完成生产证据来源仍是能力 blocker。合同定义不表示状态机、证据生产者或 D6 验收已经完成。§8.8 的 Task6 observer/snapshot/reconnect 保持只读；本节只由显式调用的 Task4 PlaybackService 消费，不接入 loop、API 或 Task8。
+
+#### 8.9.1 证据与确认边界
+
+- 自然完成必须有**来源验证的因果完成证据**：标明来源及其连续性代次、服务进程 epoch、业务代次、精确 server queue_item_id 与绑定的 MPD occurrence ID、唯一 completion/transition ID、实际完成时间。证据须对应已提交 active/current，且证明是该 occurrence 自然完成；相同 URI/song_id 不构成绑定。时间不得早于 active.started_at。
+- STOPPED、elapsed/duration 接近或达到终点、URI 变化、Mock event 名称、没有看到 Stop 请求，均不足以建立该证据。断线、进程重启、缺失绑定、业务代次失配或证据连续性无法验证，返回 UNKNOWN。不补造断线/重启窗口中遗漏的事件。
+- 当前 PlayerPort/MPDAdapter/能力记录**未提供这种因果来源**。内部类型或测试 Fake 可以表达并消费证据，但不能赋予生产可信度；生产接入必须另有已验证来源、连续性和 occurrence conformance proof。不能仅添加 `verified=true` 或 reason 字段解除 blocker。来源机制仍待能力工作确定，不在本次假定存在。
+- 接纳证据、选择目标、确认、提交受同一业务串行边界保护。准备时固定基线 Queue revision/current/active/session/context；恢复的新业务代次在提交时生效。普通 observation 的采样次数/时间变化不构成新的播放代次。
+- 有 successor 时，完成旧 current 的因果证据与最终**精确目标 occurrence、PLAYING、完整 execution Queue** 的实际确认均是成功前置。若外部已处于该精确目标，确认后接纳，不再次 play；若实际 STOPPED，可经 PlayerPort 控制到固定目标，再确认。若实际为其它 occurrence/Queue 或确认失败，不强行覆盖漂移，不提交。
+- 无候选时须同时确认实际 STOPPED 和空 execution Queue；可以清理已完成 occurrence 对应的执行项，但不得发送用户 Stop，也不得将清理解释成 STOP reason。任何外部副作用均不由 SQLite rollback 撤销。
+
+#### 8.9.2 漂移分类和未知结果
+
+| 输入类别 | 允许的业务 delta / History | 控制与结果 |
+|---|---|---|
+| 当前 occurrence、Queue、transport 与业务相同 | 无 delta、无 History；不因 elapsed 推进写持久状态 | UNCHANGED；无控制 |
+| 已绑定同一 current 且完整 execution Queue 未变，PLAYING↔PAUSED | 接纳实际 state/确认位置，保留 AutoPlay、Context、active/session、Queue/revision；无完成事件及 reason | APPLIED；仅回读确认，无 play/pause/seek |
+| 具备 §8.9.1 因果证据的自然完成 | 按 §8.9.3；唯一 reason 为 NATURAL_COMPLETION | APPLIED；允许固定目标控制及确认 |
+| 无因果证据的外部 STOPPED、外部 Next/换曲、foreign current、同歌曲不同 occurrence、Queue 漂移或无法绑定 | persisted Playback/Queue/Context/History/active/session/AutoPlay 全保留；无 SKIP/STOP/SWITCH_AWAY 推断 | UNKNOWN + reconciliation_required=true；无控制、无成功 terminal |
+| 来源读取不可达/命令错误 | 业务全保留 | 抛既有 PlayerUnavailable/PlayerCommandError；不返回伪成功 |
+
+UNKNOWN 是明确未接纳结果，不是恢复成功；可以带原因诊断和最后已提交 PlaybackState（允许 null），不新增 REST/WS wire contract。观察缓存仍只按 §8.8 独立采样更新，不用领域返回值直接制造 observation。显式用户 Stop/Next/delete 保留各自冻结合同和确认要求，不能由上述漂移分类重新解释其 History reason。
+
+#### 8.9.3 自然完成与无候选终态
+
+- 按串行化后的 Up Next 顺序选择首个 AVAILABLE successor；MISSING/UNREADABLE/absent 项跳过并记录诊断，不为其建立 active/History。没有可用 pending 时使用既有 AutoPlay 来源与候选规则，不重新定义随机算法。MANUAL 相对顺序、保留项的 occurrence/source/context 身份不得被覆盖。
+- 最终确认后，旧 active 恰一次结束为 NATURAL_COMPLETION，旧 current 的同一 queue_item_id 移入 Played（最近完成为 position=-1，既有 Played 顺序保留）；有目标时仅该目标成为 position=0，其余 pending 连续排序。确认目标后建立新 active，继续原 session/context 和 AutoPlay；新 active 的时间不得早于旧事件结束时间。Queue revision 只随实际 Queue mutation 增加。
+- 无可用候选时：PlaybackState=`state=STOPPED, song_id=null, position_seconds=null, autoplay_enabled=true`，playback_context_id 保留；active=null、原 session_id 保留；Queue 无 position>=0 的 execution 项，完成项及原 Played 保留。仅旧 active 产生 NATURAL_COMPLETION，没有 STOP 事件。updated_at 为本次确认时间；明确无歌曲状态由这个组合表达，不新增枚举/持久字段。
+- 这是等待内容的会话，不能把它标为正在播放，也不能声称用户终止 AutoPlay。相同证据不再 refill 或重启；本次不规定无候选后的新自动调度。后续明确 Start/Stop 仍使用原入口，Stop 结束保留的 session。§9 的持续播放要求受 §8.1 无可用歌曲例外约束。
+
+#### 8.9.4 身份、提交、rollback 与 retry
+
+- 恢复身份为 `(service_epoch, business_generation, queue_item_id, transition_id)`，transition_id 绑定不可变因果证据和固定目标计划（包括新 AutoPlay occurrence IDs、基线 revision、完成时间）。相同身份不同内容是恢复冲突，抛 PlaybackReconciliationError，不返回成功。重复歌曲分别绑定不同 occurrence/播放代次。
+- 首次接纳生成**进程内待处理意图**；它独立于须回滚的业务 runtime。同一意图重试不得换目标、重新随机或重新分配 occurrence IDs。业务/History/确认绑定与成功 receipt 同一最外层提交边界；调用尚在外层事务时的返回值是待提交结果，不能提前消费证据或宣布 terminal success。
+- 确认失败、提交前取消、History/Queue/state 写入失败、outer commit、terminal 或结果 materialization 失败：恢复全部 persisted 业务和 active/session/业务绑定，不消费证据、不保存成功 receipt，不发成功事件；待处理意图保留。SQLite 不撤销已发生的 MPD 控制。
+- 同 ID retry 先重读实际状态/Queue：已经是固定目标时直接确认并完成同一业务提交，不能重播、再 Next 或跳过目标；仍是证据允许的 STOPPED 基线时可继续固定计划；其它漂移或来源连续性失效时 UNKNOWN，保留意图，不猜测补偿。基线因另一合法业务提交变化时拒绝旧意图，不将其转用于新 current。
+- 最外层提交后生成不可变 receipt；同 ID 同内容返回原提交结果，且不控制、不 refill、不写 History/Queue、不重发业务事件。先查 receipt，再判旧代次失配，避免成功 replay 被当作新请求。receipt/已失效身份保留至进程结束；不得静默逐出后重新执行旧 ID。它不是 REST Idempotency-Key，也不写新的持久表。
+- 进程重启更换 epoch；旧证据/ID 返回 UNKNOWN，不重放。这里不承诺跨进程 exactly-once、会话恢复或 durable completion log；缺失 runtime active 不凭数据库位置重建遗漏事件。REST key/scope/payload 的持久 replay 合同不变。
+- 提交后取消、publisher/send 失败不回滚已提交业务/receipt；成功通知沿用 outer commit 后交付，Task6 的失败隔离合同不变。UNKNOWN/UNCHANGED 不制造 mutation 成功事件或领域 revision；允许独立观察按 §8.8 传播事实。
+
+#### 8.9.5 验收与能力门禁
+
+真实 SQLite/Services + 可控 Port 的 consumer proof 必须覆盖所有分类、精确重复 occurrence、无候选组合、confirmation failure、逐项 persisted/runtime rollback、同 ID retry/replay、冲突与重启拒绝，及提交前/后取消和交付失败。Fake 的完成证据仅证明消费者，不证明生产自然识别。生产可信证据来源未验证时 D6-RECOVERY 与 Batch13/Task6 final acceptance 继续 BLOCKED，自动恢复不启用；允许先实施 UNKNOWN/保守漂移和 consumer 路径。本节新增语义由唯一 D6 corrective plan 分解，验收事实只写唯一 D6 acceptance。
+
 ## 9. 本章验收标准
 
 本章对应的实现只有满足以下条件，才可视为核心播放模型完成：
@@ -340,7 +388,7 @@ Stop、Pause、切歌、自然播放完成是不同事件，必须分别处理�
 以下内容留待后续章节，不在本章擅自固化：
 
 -   AutoPlay 的具体随机算法、权重和歌曲来源；
--   Queue 与 MPD 原生队列的精确映射及故障恢复协议；
+-   Queue 与 MPD 原生队列的完整持久映射及故障恢复协议（§8.9 已定义 D6 保守接纳/进程内 retry；自然完成生产证据来源仍未验证）；
 -   歌曲重复入队、跨集合重复项的完整策略；
 -   Queue 历史保留数量与永久播放历史的保留期限；
 -   多用户、多播放设备或多房间播放；

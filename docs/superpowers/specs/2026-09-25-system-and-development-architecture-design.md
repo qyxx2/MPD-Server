@@ -440,7 +440,7 @@ WebSocket 是实时状态同步通道。
 
 ### 12.3 观察生命周期与完整 DTO
 
-继承人工决策 G6-04/G6-05 / A；History 与播放观察的领域 authority 分别为第一章 §2.2.1/§8.8，不在 gateway 重定义。
+继承人工决策 G6-04/G6-05 / A；History 与播放观察的领域 authority 分别为第一章 §2.2.1/§8.8，不在 gateway 重定义。Task4 D6 的保守恢复及 STOPPED/AutoPlay/session 组合只由第一章 §7/§8.9 定义；本节观察循环仍不调用恢复，完整验收另需其生产因果证据能力门禁。
 
 **生命周期合同**：前提是 composition root 已注入 PlaybackService observation facade、OutputManager、传播协调器和可控时钟。每个服务进程仅启动一个观察循环，首次启动立即采样，以每轮完成后 1 秒为默认间隔，无重叠采样；单轮外部读取预算默认 5 秒，可注入以便测试，不引入 Task 10 配置系统。PlayerPort 的既有 typed timeout/error 保留。采样不依赖客户端数量；失败后按同一有界间隔重试，不忙循环。关闭应用取消并 await observer/senders、注销订阅，不把关停取消解释成 Stop 或 rollback 已提交业务。MPD 不可达不阻止服务启动。
 

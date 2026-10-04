@@ -847,7 +847,7 @@ Dependencies:
 - Task 5 completed.
 - Task 7 completed.
 - Task 6 owns snapshot/read facades, committed change/revision propagation, WebSocket delivery and read-only Service observation lifecycle. It does not redefine playback/Queue/History recovery transitions.
-- D6-RECOVERY: before automatic recovery activation or final Task 6 acceptance, Task 4 corrective must prove natural completion versus explicit Stop, external drift confirmation, History exactly-once per confirmed transition and rollback/retry against P §6/§7/§8.8 and PB-HISTORY-001. Existing reconcile_external_status is not sufficient evidence. This is an implementation/acceptance dependency, not an unresolved Task 6 semantic. Independent foundation/observation Batches can proceed; this documentation-only task does not execute the corrective or declare it complete.
+- D6-RECOVERY: before automatic recovery activation or final Task 6 acceptance, Task 4 corrective must prove natural completion versus explicit Stop, external drift confirmation, History exactly-once per confirmed transition and rollback/retry against P §6/§7/§8.8–8.9 and PB-HISTORY-001. Existing reconcile_external_status is not sufficient evidence. This is an implementation/acceptance dependency, not an unresolved Task 6 semantic. Independent foundation/observation Batches can proceed; this documentation-only task does not execute the corrective or declare it complete. The 2026-10-04 user decision A defines conservative consumer semantics exclusively in P §8.9; the unique D6 corrective plan separates executable consumer steps from the still-blocked production causal-evidence source. Fake consumer proof does not satisfy that source gate or final D6 acceptance.
 
 Files:
 - Create: server/app/services/state_service.py

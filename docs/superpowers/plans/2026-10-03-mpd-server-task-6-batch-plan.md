@@ -84,6 +84,8 @@ T1/1R verified capability record 只证明已验证命令，不证明外部自�
 
 D6-RECOVERY 的验收义务：真实 Services/Repository/MockPort 证明自然完成与显式 Stop 分别记录、AutoPlay/可用 successor 遵循原合同、无法确定原因不伪造 History、外部状态转移经确认且历史恰一次、失败恢复 persisted/runtime、retry/replay 无重复。验收记录必须给出实际 test 路径/函数、命令和 fresh GREEN；方法存在、历史全套 GREEN 或新计划本身不算通过。
 
+2026-10-04 人工决策 A 的新增领域 authority 仅为 P §8.9。唯一执行入口：[D6 corrective plan](2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据：[D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。保守 consumer 合同已定义，生产因果完成证据来源仍 BLOCKED；consumer Fake GREEN 不能解除 D6/Batch13 final gate。G6-01–05 与本计划11 rows不重开，不新增Task6恢复接线。
+
 ## 4. 冻结 Contract Matrix
 
 ### 4.1 共同字段（逐 row 引用，是 row 的组成部分）
