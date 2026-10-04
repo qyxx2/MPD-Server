@@ -12,6 +12,7 @@ from server.app.api.history import router as history_router
 from server.app.api.library import router as library_router
 from server.app.api.playback import router as playback_router
 from server.app.api.playlists import router as playlists_router
+from server.app.api.realtime import router as realtime_router
 from server.app.api.system import router as system_router
 from server.app.player.capabilities import MPDCapabilities
 from server.app.player.mpd_adapter import MPDAdapter
@@ -255,6 +256,7 @@ app.include_router(library_router)
 app.include_router(playlists_router)
 app.include_router(playback_router)
 app.include_router(system_router)
+app.include_router(realtime_router)
 
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
