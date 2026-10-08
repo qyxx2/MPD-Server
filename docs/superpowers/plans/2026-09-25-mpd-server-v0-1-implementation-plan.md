@@ -1,5 +1,7 @@
 # MPD-Server v0.1 Implementation Plan
 
+**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
 **Goal:** 在群晖 DSM 7.1.1 + 独立 MPD 0.23.5 上实现由 FastAPI 统一管理播放状态、Queue、AutoPlay、Library、Playlist、History 和输出状态，并由 Vue 3/PWA 提供客户端界面的 Music Server。
@@ -125,10 +127,10 @@ Required mechanics:
 | Task 1R | Extended Queue/Output/Stats transport contract remains behaviorally consistent across MockMPD, MPDAdapter and VerifiedPlayerPort. |
 | Task 2R | Migration/reconciliation ↔ LibraryRepository preserves Song identity plus Playlist/Favorites/History references across availability changes and rollback. |
 | Task 3 | media parser/filesystem → scanner → Repository atomic persistence → post-commit event/optional MPD update ordering; source media remains read-only. |
-| Task 4 | QueueRepository/PlaybackState ↔ QueueManager/PlaybackService ↔ PlayerPort ↔ History/AutoPlay remain mutually consistent across mutations and transitions. |
+| Task 4 | QueueRepository/PlaybackState ↔ QueueManager/PlaybackService ↔ PlayerPort ↔ History/AutoPlay remain mutually consistent across mutations and transitions. D6-RECOVERY now follows Playback Spec §8.9 stock-MPD current-occurrence binding/adoption, pre-synchronized execution, uncertified-History suppression, partial-command retry and independent runner proof before final Task 6 acceptance; strict causal SOURCE is superseded, not passed. Historical consumer acceptance is not new-route proof. |
 | Task 5 | API ↔ Service ↔ Repository/PlayerPort; Playlist persisted membership ↔ all REST representations; Collection playable split remains distinct; idempotency rollback restores persisted and in-memory session state. |
 | Task 7 | OutputManager ↔ PlayerPort output state while preserving current Song/Queue/PlaybackContext/best-effort position and reconciling actual MPD state. |
-| Task 6 | authoritative Services → FullStateSnapshot/event publication → WebSocket delivery/reconnect; events occur post-commit and reconnect recovers from full state. |
+| Task 6 | RT-SNAPSHOT-001: committed local/runtime/revision cut and explicit failure/staleness; RT-REVISION-001: delta/no-op/rollback/replay/restart; RT-LIBRARY/PLAYLIST/PLAYBACK/OUTPUT-001: producer → outer commit → invalidation without changing frozen domain rules; RT-HISTORY-001: persistent events survive Song unavailability, active/session separate; RT-OBSERVE-001: PlayerPort → Service observation bound to current occurrence, no domain mutation; RT-CONNECT/DELIVERY/RECOVER-001: barrier-proven handoff, ordered invalidation, bounded-client isolation and full reconnect recovery. Proof owners and exact commands: active Task 6 plan. |
 | Task 8 | REST/WebSocket state → typed client/store → Player UI; client never becomes Queue/AutoPlay authority and reconnect replaces stale local state. |
 | Task 9 | server-authoritative Queue/Library/Playlist/Favorites/Search ↔ Web actions/views; UI state must not reimplement conflicting business semantics. |
 | Task 10 | config → composition root; backup/restore write gate ↔ Repository writes; health reports FastAPI/SQLite/MPD independently. |
@@ -276,7 +278,7 @@ class PlayerPort(Protocol):
 - [x] Step 9: Commit: feat: add mpd adapter and verified capabilities.
 **Task 1 verification record (2026-09-25, Steps 6-9):**
 - Step 6: Added a real localhost TCP server test covering MPD greeting, command exchange, status/current-song parsing, song URI to MPD song ID lookup, playback controls, seek, volume, repeat/random, update and outputs. The test passes.
-- Step 7: Completed against the real Synology DS920 MPD 0.23.5 endpoint on 2026-09-26. Recorded the full `commands` list (104 commands), 17 `status_fields`, two real outputs (USB DAC/ALSA enabled and HTTPD disabled), seven `stats` fields, `update_response: {"updating_db":"2"}`, and two error outcomes. The unknown-command probe produced a real connection close; the ACK probe returned error code 50 / "No such song". The probe result was saved on NAS as `mpd-0.23.5-probe-2026-09-26-091948.json`.
+- Step 7: Completed against the real Synology DS920 MPD 0.23.5 endpoint on 2026-09-26. Recorded the full `commands` list (historically transcribed as 104; 2026-10-04 raw JSON reconciliation corrects this to 105, including `unmount`), 17 `status_fields`, two real outputs (USB DAC/ALSA enabled and HTTPD disabled), seven `stats` fields, `update_response: {"updating_db":"2"}`, and two error outcomes. The unknown-command probe produced a real connection close; the ACK probe returned error code 50 / "No such song". The probe result was saved on NAS as `mpd-0.23.5-probe-2026-09-26-091948.json`.
 - Step 8: Added MPDCapabilities and VerifiedPlayerPort; operations whose required MPD commands were not verified are rejected before reaching the underlying PlayerPort. Song-URI playback additionally requires playlistinfo and playid; status requires status and currentsong.
 - Step 9: This branch is committed with message feat: add mpd adapter and verified capabilities.
 
@@ -713,6 +715,8 @@ Task 3 corrective follow-up is therefore accepted and the repository is READY FO
 
 ## Task 4：Queue、Playback Context、History、AutoPlay、Playback Service
 
+2026-10-04 historical D6 migration (superseded status by 2026-10-09 S12): then-current HEAD 651aade contains the old conservative consumer. The current authority is [Playback Spec §8.9](../specs/2026-09-24-playback-model-queue-semantics-design.md); remaining work is only the [existing D6 corrective plan S0–S12](2026-10-04-task-4-d6-recovery-corrective-plan.md). PB-NATURAL-001/PB-NATURAL-EMPTY-001 are historical consumer rows. New PB-BINDING/CURRENT/QUEUE-ADOPT/HISTORY-UNCERTIFIED/AUTOPLAY-EXEC/RECOVERY-RUNNER and RT-ACTUAL obligations are not implemented or accepted. No automatic commit or backend extension is authorized by this migration. R1 was accepted by the user on 2026-10-04: service/MPD restart restores actual-state display, while business occurrence rebinding requires an explicitly requested playback operation and confirmation. Browser refresh/new browser does not discard a valid service binding. Acceptance of this contract is not implementation or gate acceptance; final remains BLOCKED.
+
 Dependencies:
 - Task 1R and Task 2R completed.
 - Task 3 completed, including available-library queries and the DomainEvent contract.
@@ -755,21 +759,21 @@ MPD Queue mapping:
 - MPD unavailability does not erase or silently replace the server Queue; synchronization state is explicit and can be reconciled later.
 - Playback state advances only after MPD command success and status reconciliation.
 
-- [ ] Step 1: RED tests for Start Track replacing pending Up Next and creating PlaybackContext.
-- [ ] Step 2: RED tests for Queue Play Now preserving prior pending items after the selected song.
-- [ ] Step 3: RED tests for Play Next and Add to Queue insertion order.
-- [ ] Step 4: RED tests for reorder/delete/clear/save-as-playlist and current-song deletion.
-- [ ] Step 5: RED tests for Played view versus persistent History.
-- [ ] Step 6: RED tests for natural completion, skip, stop and switch-away reasons.
-- [ ] Step 7: Implement AutoPlay low-watermark 5/refill 5 using Task 3 available Songs while respecting PlaybackContext.
-- [ ] Step 8: Prevent AutoPlay from overwriting MANUAL items and mark every generated item source.
-- [ ] Step 9: Test empty library, one-song library, insufficient candidates and concurrent Queue mutation.
-- [ ] Step 10: Serialize Queue mutations using Repository transaction boundaries plus Queue revision/CAS.
-- [ ] Step 11: Test Pause keeps AutoPlay, Stop disables it, and Queue exhaustion is not terminal.
-- [ ] Step 12: Implement Playback Service as the sole orchestration layer between Queue/History/AutoPlay and PlayerPort.
-- [ ] Step 13: Test MPD failures do not falsely advance current-track service state and reconcile external status.
-- [ ] Step 14: Verify Queue/Playback persistence, MPD synchronization, compile/lint and diff.
-- [ ] Step 15: Commit: feat: implement authoritative playback model.
+- [x] Step 1: RED tests for Start Track replacing pending Up Next and creating PlaybackContext.
+- [x] Step 2: RED tests for Queue Play Now preserving prior pending items after the selected song.
+- [x] Step 3: RED tests for Play Next and Add to Queue insertion order.
+- [x] Step 4: RED tests for reorder/delete/clear/save-as-playlist and current-song deletion.
+- [x] Step 5: RED tests for Played view versus persistent History.
+- [x] Step 6: Historical consumer reason tests remain; stock D6 follows Playback Spec §8.9: only confirmed explicit-operation reasons, no inferred natural completion, and no fabricated missed History.
+- [x] Step 7: Implement AutoPlay low-watermark 5/refill 5 using Task 3 available Songs while respecting PlaybackContext.
+- [x] Step 8: Prevent AutoPlay from overwriting MANUAL items and mark every generated item source.
+- [x] Step 9: Test empty library, one-song library, insufficient candidates and concurrent Queue mutation.
+- [x] Step 10: Serialize Queue mutations using Repository transaction boundaries plus Queue revision/CAS.
+- [x] Step 11: Test Pause keeps AutoPlay, explicit confirmed Stop disables it, normal online playback preloads successors, and unknown STOPPED never auto-restarts or changes user intent (Playback Spec §8.9.5).
+- [x] Step 12: Implement Playback Service as the sole orchestration layer between Queue/History/AutoPlay and PlayerPort.
+- [x] Step 13: Test MPD failures do not falsely advance current-track service state and reconcile external status.
+- [x] Step 14: Verify Queue/Playback persistence, MPD synchronization, compile/lint and diff.
+- [x] Step 15: Commit: feat: implement authoritative playback model.
 
 
 
@@ -831,17 +835,29 @@ Idempotency:
 
 ## Task 6：WebSocket 与完整状态恢复
 
+Active Contract Audit / Batch Execution Plan:
+`docs/superpowers/plans/2026-10-03-mpd-server-task-6-batch-plan.md`.
+2026-10-03 Contract Gap Resolution: G6-01–G6-05 closed by the user's
+explicit A/A/A/A/A decisions plus G6-01 Context clarification A in the current conversation; authority is A
+§12.1–12.3, L §7.1 and P §2.2.1/§8.8. Contract Gap = 0; contract-freeze
+blocked status is removed. No implementation Step is accepted by this audit.
+The rebuilt Batch Plan is executable in dependency order; independent Batch 1
+has no new implementation prerequisite. Automatic recovery activation and final
+Task 6 acceptance retain the explicit D6-RECOVERY prerequisite below.
+
 Dependencies:
 - Task 3 completed and provides DomainEvent contract.
 - Task 4 completed.
 - Task 5 completed.
 - Task 7 completed.
-- Task 6 implements realtime transport only and does not redefine domain business rules.
+- Task 6 owns snapshot/read facades, committed change/revision propagation, WebSocket delivery and read-only Service observation lifecycle. It does not redefine playback/Queue/History recovery transitions.
+- D6-RECOVERY: Playback Spec §8.9 (2026-10-04 stock MPD revision) replaces the strict natural-completion SOURCE requirement with occurrence binding/current confirmation, preserved Queue/manual order, pre-synchronized AutoPlay, no invented History, safe partial-command/transaction retry and a PlaybackService-owned runner. Architecture §12.3.1 adds RT-ACTUAL-001 for truthful full snapshots. The unique D6 corrective plan S0–S12 owns implementation/proofs and target-runtime validation; final Task 6/Batch13 requires its gates and the Task 6 regression sequence to pass; these passed on 2026-10-09 (E S12). Existing consumer or Fake GREEN does not prove this route. No custom backend is planned; GET/WS/observer stay read-only.
 
 Files:
 - Create: server/app/services/state_service.py
 - Create: server/app/api/realtime.py
 - Create: server/tests/api/test_realtime.py
+- Additional precise producer/coordinator/observer/schema files and invariant tests are assigned by the active Task 6 Batch Plan; no production changes in this resolution.
 
 Interfaces:
 ~~~python
@@ -857,16 +873,22 @@ Rules:
 - Reconnect always obtains a complete snapshot; missed incremental events are not the consistency mechanism.
 - Snapshot includes Playback, Queue, History availability, Output and necessary Library/Playlist revisions.
 - WebSocket code never accesses MPD directly.
+- GET /api/state and WS /api/realtime obey A §12.1–12.3: initial snapshot, live invalidation, bounded overflow/timeout disconnect and full reconnect.
+- Local data/runtime/revisions form one committed cut; local required read failures fail the snapshot, external failure is explicit stale/unknown/error.
+- Library/Playlist versions use L §7.1 process epoch and actual-delta counters; no-op/rollback/replay do not increment.
+- Read-only observer reports MPD facts and reconciliation_required without changing Queue/History or treating STOPPED as user Stop.
 
-- [ ] Step 1: Define and test FullStateSnapshot.
-- [ ] Step 2: Test post-commit event semantics for Library/Playlist/Playback/Output mutations.
-- [ ] Step 3: Implement WebSocket connection manager and initial snapshot.
-- [ ] Step 4: Test disconnected clients.
-- [ ] Step 5: Test reconnect/full snapshot restoration.
-- [ ] Step 6: Run realtime tests, required Service/Snapshot/Event/WebSocket relationship invariants and diff review.
-- [ ] Step 7: Commit: feat: add realtime state synchronization.
+- [x] Step 1: Define and test FullStateSnapshot.
+- [x] Step 2: Test post-commit event semantics for Library/Playlist/Playback/Output mutations.
+- [x] Step 3: Implement WebSocket connection manager and initial snapshot.
+- [x] Step 4: Test disconnected clients.
+- [x] Step 5: Test reconnect/full snapshot restoration.
+- [x] Step 6: Run realtime tests, required Service/Snapshot/Event/WebSocket relationship invariants and diff review.
+- [x] Step 7: Commit: feat: add realtime state synchronization.
 
 
+
+2026-10-09：Steps1–6真实源码及规定proof已完整复验，D6/S12、Batch13与Task6 functional final PASSED。Step7为本轮用户授权提交范围，提交后须核对真实Git结果；原本地DB保留UNVERIFIED作为独立审计事件保留。Task8/Task10/Task12仍按原依赖另行实施与验收。
 
 ## Task 7：Output Manager 与 MPD About
 
@@ -1192,7 +1214,7 @@ Before Task completion:
 | Task 4 | Task 1R + Task 2R + Task 3 |
 | Task 5 | Task 3 + Task 4 |
 | Task 7 | Task 1R + Task 4 |
-| Task 6 | Task 3 + Task 4 + Task 5 + Task 7 |
+| Task 6 | Task 3 + Task 4 + Task 5 + Task 7; D6-RECOVERY Task 4 stock-MPD corrective S2–S12 acceptance (including independent runner and RT-ACTUAL-001), before target automatic activation/final Task 6 acceptance; strict SOURCE superseded; S12 functional final PASSED (2026-10-09); not before independent foundation Batches |
 | Task 8 | Task 5 + Task 6 + Task 7 |
 | Task 9 | Task 5 + Task 6 + Task 8 |
 | Task 10 | Task 3 + Task 4 + Task 5 + Task 6 + Task 7 |
@@ -1224,6 +1246,7 @@ Task numbers are historical identifiers. Execution order is defined by the depen
 Why Task 7 precedes Task 6:
 - FullStateSnapshot contains Output state, so Output Manager must exist before the final realtime snapshot is assembled.
 - Task 6 consumes the Output Service contract; it does not create it.
+- D6-RECOVERY is a stage-specific addition approved in G6-05/A: Task 4 retains domain recovery ownership, Task 6 owns observation/propagation. Historical Task numbers and overall execution order are unchanged; no dependency on Task 8+ is introduced.
 
 Why Task 10 is late:
 - Earlier Tasks use constructor injection and explicit defaults.

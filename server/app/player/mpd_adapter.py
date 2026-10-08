@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
+from uuid import uuid4
 
 from server.app.player.models import (
     DatabaseUpdateStatus,
+    ExecutionSample,
     MPDStats,
     OutputInfo,
     PlayerQueueEntry,
@@ -47,12 +49,14 @@ class MPDAdapter(PlayerPort):
         self._connection_factory = connection_factory or asyncio.open_connection
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._connection_epoch: str | None = None
         self._lock = asyncio.Lock()
 
     async def close(self) -> None:
         writer = self._writer
         self._reader = None
         self._writer = None
+        self._connection_epoch = None
         if writer is not None:
             writer.close()
             try:
@@ -68,6 +72,28 @@ class MPDAdapter(PlayerPort):
             if song_position is not None and song_position >= 0:
                 current = await self._command_unlocked("currentsong")
             return _status_from_response(response, current)
+
+    async def read_execution_sample(self) -> ExecutionSample:
+        async with self._lock:
+            for _ in range(2):
+                before = await self._command_unlocked("status")
+                connection_epoch = self._connection_epoch
+                playlist = await self._command_unlocked("playlistinfo")
+                after = await self._command_unlocked("status")
+                if connection_epoch != self._connection_epoch:
+                    continue
+                sample = _execution_sample_from_responses(
+                    connection_epoch,
+                    before,
+                    playlist,
+                    after,
+                )
+                if sample is not None:
+                    return sample
+        raise PlayerCommandError(
+            "read_execution_sample",
+            "inconsistent execution sample",
+        )
 
     async def play(self, song_uri: str | None = None) -> None:
         if song_uri is None:
@@ -190,6 +216,11 @@ class MPDAdapter(PlayerPort):
             ) from exc
         except PlayerCommandError:
             raise
+        except asyncio.CancelledError:
+            # An interrupted response cannot be used by the next command.
+            # Abandon transport only; cancellation never sends player Stop.
+            await self.close()
+            raise
         except (asyncio.TimeoutError, TimeoutError) as exc:
             await self.close()
             raise PlayerUnavailable(f"MPD command timed out: {command}") from exc
@@ -224,6 +255,7 @@ class MPDAdapter(PlayerPort):
                         error_code=exc.error_code,
                         command_list_index=exc.command_list_index,
                     ) from exc
+            self._connection_epoch = uuid4().hex
         except PlayerCommandError:
             await self.close()
             raise
@@ -305,6 +337,69 @@ def _status_from_response(
         volume=volume,
         repeat=_parse_bool(_scalar(data.get("repeat"))),
         random=_parse_bool(_scalar(data.get("random"))),
+    )
+
+
+def _execution_sample_from_responses(
+    connection_epoch: str | None,
+    before: MPDResponse,
+    playlist: MPDResponse,
+    after: MPDResponse,
+) -> ExecutionSample | None:
+    if connection_epoch is None:
+        return None
+    before_data = before.as_dict()
+    after_data = after.as_dict()
+    stable_fields = ("partition", "playlist", "playlistlength", "song", "songid", "state")
+    if any(_scalar(before_data.get(key)) != _scalar(after_data.get(key)) for key in stable_fields):
+        return None
+
+    partition = _scalar(after_data.get("partition"))
+    playlist_version = _nonnegative_int(_scalar(after_data.get("playlist")))
+    playlist_length = _nonnegative_int(_scalar(after_data.get("playlistlength")))
+    single = _scalar(after_data.get("single"))
+    consume_raw = _scalar(after_data.get("consume"))
+    if (
+        not partition
+        or playlist_version is None
+        or playlist_length is None
+        or single is None
+        or consume_raw not in {"0", "1"}
+    ):
+        return None
+
+    try:
+        entries = tuple(_queue_entries_from_response(playlist))
+    except (TypeError, ValueError):
+        return None
+    if playlist_length != len(entries):
+        return None
+    if [entry.position for entry in entries] != list(range(len(entries))):
+        return None
+    if len({entry.mpd_song_id for entry in entries}) != len(entries):
+        return None
+
+    status = _status_from_response(after, None)
+    if (status.song_position is None) != (status.song_id is None):
+        return None
+    if status.song_position is not None:
+        if status.song_position >= len(entries):
+            return None
+        current_entry = entries[status.song_position]
+        if status.song_id != current_entry.mpd_song_id:
+            return None
+        status = status.model_copy(update={"song_uri": current_entry.song_uri})
+
+    error = _scalar(after_data.get("error")) or None
+    return ExecutionSample(
+        connection_epoch=connection_epoch,
+        partition=partition,
+        playlist_version=playlist_version,
+        status=status,
+        entries=entries,
+        single=single,
+        consume=consume_raw == "1",
+        error=error,
     )
 
 

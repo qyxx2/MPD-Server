@@ -198,6 +198,8 @@
 - MPD 暂时断开时，客户端明确显示连接异常。最后一次状态可作为缓存展示，但必须标记为旧数据。
 - 客户端重连后重新获取完整状态快照，不能只依赖断线期间的事件。
 
+Task 6 的聚合一致性、外部降级、失效通知/交接和观察生命周期分别以第四章 §12.1–12.3 为唯一协议 authority；History availability 与 playback/progress 权威以第一章 §2.2.1/§8.8 为准。MPD 实际 transport 事实不等于已确认业务会话，发现漂移必须明确表示 reconciliation_required；不能由 API/WS 或只读 observer 擅自改写 Queue/History。第一章要求的自然结束与外部恢复由 PlaybackService 承担，并按 Task 4 专项 corrective 验收后启用，不能用现有方法名称代替该能力证明。
+
 ### 8.2 错误处理
 
 | 场景 | 处理方式 |

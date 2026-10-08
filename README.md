@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories → MPD/SQLite`。
 
-当前 `main` 已完成 Task 0–5 和 Task 7 实现及后端 final acceptance。按照主 Implementation Plan 的依赖顺序，下一项为 Task 6；合同与 Batch 规划在独立 Task 6 分支维护，功能尚未实现。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
+当前实现已完成 Task 0–7，以及 Task 4 D6 corrective 和 Task 6 Batch13 的后端 final acceptance。按照主 Implementation Plan 的依赖顺序，下一项为 Task 8 Web/PWA。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
 
 ## 当前状态
 
@@ -12,15 +12,18 @@ Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories →
 | 1 / 1R | 已完成 | PlayerPort、Mock/真实 MPD Adapter、MPD 0.23.5 能力合同 |
 | 2 / 2R | 已完成 | SQLite、Library/Playlist/Favorites/History、reconciliation persistence |
 | 3 | 已完成 | 元数据、歌词、扫描、watch/scheduler、artwork lifecycle |
-| 4 | 已完成 | Queue、PlaybackContext、History、AutoPlay、PlaybackService |
+| 4 | 已完成；D6 S10/S11/S12 已通过 | Queue、PlaybackContext、History、AutoPlay、PlaybackService |
 | 5 | 已完成并合入 main | Collection、Library/Playlist Service、REST API、idempotency 与跨模块 invariant |
 | 7 | 已完成并合入 main；物理 DAC 验收留待 Task 12 | Output Manager、NAS_DAC 状态/控制、MPD About |
-| 6 | 功能未开始；合同与 Batch 规划在独立分支维护 | WebSocket、完整状态快照与重连恢复 |
+| 6 | Batch1–13 实现与后端 final acceptance 已通过 | WebSocket、完整状态快照与重连恢复 |
 | 8–12 | 未开始 | Web/PWA、配置、部署及最终实机验收 |
 
 当前实施入口：
 - `docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md`
-- Task 6 合同与执行计划分支：`feature/task-6-realtime-state`
+- [D6 联合验收与逐合同追溯](docs/superpowers/archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)
+- [Task 6 Batch13 final acceptance](docs/superpowers/archive/task-6/2026-10-04-task-6-batch-13-acceptance.md)
+
+D6 目标验证限现有 NAS 部署功能范围（daemon 0.23.17 / 协议 0.23.5）。恢复 runner 需显式启用并注入能力；最终配置加载属 Task 10。服务或 MPD 重启可恢复 actual 显示，业务 occurrence 绑定需明确播放操作经确认重建；不认证自然完成原因或补造遗漏 History。
 
 Task 7 后端验收证据见 `docs/superpowers/archive/task-7/2026-10-03-task-7-batch-9-acceptance.md`；本地后端验收不代表已完成真实 NAS/物理 DAC 验收。
 
@@ -47,10 +50,12 @@ make build
 后端可直接在现有 virtualenv 中运行：
 
 ```text
-python -m pytest -q server/tests
-python -m compileall -q server
-python -m ruff check server
+DATABASE_PATH="$(mktemp -d)/test.db" .venv/bin/python -m pytest -q server/tests
+.venv/bin/python -m compileall -q server
+.venv/bin/python -m ruff check server
 ```
+
+测试使用临时 `DATABASE_PATH`，避免少数 API lifespan 测试回落到本地运行数据库。
 
 前端目录为 `web/`。群晖 Node.js 18 不满足新版 Vite 构建要求；生产 Web 构建使用 `deploy/Dockerfile` 中的 Node 22 环境。
 

@@ -34,6 +34,51 @@ _transaction_commits: ContextVar[dict[str, list[CommitCallback]] | None] = Conte
     "database_transaction_commits", default=None,
 )
 
+_transaction_visible: ContextVar[dict[str, list[Callable[[], None]]] | None] = ContextVar(
+    "database_transaction_visible", default=None,
+)
+_visibility_failures: ContextVar[dict[str, list[Callable[[], None]]] | None] = ContextVar(
+    "database_visibility_failures", default=None,
+)
+
+
+def transaction_identity(path: str) -> object:
+    """Opaque outer owner shared by nested calls, including inherited child tasks."""
+    transactions = _active_transactions.get()
+    key = _database_key(path)
+    if transactions is None or key not in transactions:
+        raise RuntimeError("transaction identity requires an active transaction")
+    connection = transactions[key]
+    try:
+        active = connection.in_transaction
+    except sqlite3.ProgrammingError:
+        active = False
+    if not active:
+        raise RuntimeError("transaction identity requires an active transaction")
+    return connection
+
+
+def on_transaction_visibility_failure(path: str, callback: Callable[[], None]) -> None:
+    """Fail closed if any registration in this outer commit fails, without rollback."""
+    callbacks = _visibility_failures.get()
+    key = _database_key(path)
+    if callbacks is None or key not in callbacks:
+        raise RuntimeError("visibility failure callback requires an active transaction")
+    callbacks[key].append(callback)
+
+
+def on_transaction_visible(path: str, callback: Callable[[], None]) -> None:
+    """Register committed in-memory state before releasing the outer DB lock.
+
+    Callbacks must be synchronous and perform no I/O. State owners register
+    on_transaction_visibility_failure to invalidate their state on any failure.
+    """
+    callbacks = _transaction_visible.get()
+    key = _database_key(path)
+    if callbacks is None or key not in callbacks:
+        raise RuntimeError("visibility callback requires an active transaction")
+    callbacks[key].append(callback)
+
 
 def on_transaction_commit(path: str, callback: CommitCallback) -> None:
     """Notify after the owning outer transaction commits and releases its lock."""
@@ -124,6 +169,12 @@ async def run_transaction(
         commits = dict(_transaction_commits.get() or {})
         commits[key] = []
         commit_token = _transaction_commits.set(commits)
+        visible = dict(_transaction_visible.get() or {})
+        visible[key] = []
+        visible_token = _transaction_visible.set(visible)
+        failures = dict(_visibility_failures.get() or {})
+        failures[key] = []
+        failure_token = _visibility_failures.set(failures)
         try:
             connection.execute("BEGIN")
             result = operation(connection)
@@ -135,7 +186,24 @@ async def run_transaction(
             for callback in reversed(rollbacks[key]):
                 callback()
             raise
+        else:
+            # A visibility failure is post-commit: never run rollback hooks.
+            visibility_failed = False
+            for callback in visible[key]:
+                try:
+                    callback()
+                except BaseException:
+                    visibility_failed = True
+                    logger.exception("Commit visibility registration failed for database %s", key)
+            if visibility_failed:
+                for callback in failures[key]:
+                    try:
+                        callback()
+                    except BaseException:
+                        logger.exception("Commit visibility failure handler failed for database %s", key)
         finally:
+            _visibility_failures.reset(failure_token)
+            _transaction_visible.reset(visible_token)
             _transaction_commits.reset(commit_token)
             _transaction_rollbacks.reset(rollback_token)
             _active_transactions.reset(token)

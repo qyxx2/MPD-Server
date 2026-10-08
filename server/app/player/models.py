@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PlayerState(str, Enum):
@@ -35,6 +35,44 @@ class PlayerQueueEntry(BaseModel):
     mpd_song_id: int
     position: int
     song_uri: str
+
+
+class _ExecutionPlayerStatus(PlayerStatus):
+    model_config = ConfigDict(frozen=True)
+
+
+class _ExecutionQueueEntry(PlayerQueueEntry):
+    model_config = ConfigDict(frozen=True)
+
+
+class ExecutionSample(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    connection_epoch: str
+    partition: str
+    playlist_version: int = Field(ge=0)
+    status: PlayerStatus
+    entries: tuple[PlayerQueueEntry, ...]
+    single: str
+    consume: bool
+    error: str | None = None
+
+    @model_validator(mode="after")
+    def _copy_nested_models(self) -> ExecutionSample:
+        object.__setattr__(
+            self,
+            "status",
+            _ExecutionPlayerStatus.model_validate(self.status.model_dump()),
+        )
+        object.__setattr__(
+            self,
+            "entries",
+            tuple(
+                _ExecutionQueueEntry.model_validate(entry.model_dump())
+                for entry in self.entries
+            ),
+        )
+        return self
 
 
 class MPDStats(BaseModel):

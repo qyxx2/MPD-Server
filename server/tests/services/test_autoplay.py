@@ -45,6 +45,23 @@ def seed_songs(library: LibraryRepository, *song_ids: str) -> None:
         run(library.upsert_song(make_song(song_id)))
 
 
+def test_plan_refill_preserves_candidate_policy_without_persistence(components):
+    library, queue, manager = components
+    seed_songs(library, *"abcdefg")
+    context = run(manager.start_track("a"))
+    context = context.model_copy(update={"ordered_song_ids": ("d", "d", "c", "b")})
+    autoplay = AutoPlay(queue, library, manager.playback_state_repository)
+    before = run(queue.get_snapshot())
+    state = run(manager.get_playback_state())
+    planned = run(autoplay.plan_refill(context, before))
+    assert [item.song_id for item in planned] == ["d", "c", "b", "e", "f"]
+    assert len({item.queue_item_id for item in planned}) == 5
+    assert [item.position for item in planned] == [1, 2, 3, 4, 5]
+    assert all(item.source == "AUTOPLAY" and item.playback_context_id == context.context_id for item in planned)
+    assert run(queue.get_snapshot()) == before and run(manager.get_playback_state()) == state
+    assert [item.song_id for item in run(autoplay.refill(context))] == ["d", "c", "b", "e", "f"]
+
+
 def current_context(song_id: str = "a") -> PlaybackContext:
     return PlaybackContext(
         context_id=f"context-{song_id}",

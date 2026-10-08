@@ -68,6 +68,15 @@ class LibraryService:
     async def list_songs(self) -> list[Song]:
         return await self._repository.list_songs()
 
+    async def revision_content(self) -> tuple[object, ...]:
+        """Observable resources, excluding internal scan/audit timestamps."""
+        return tuple(
+            song.model_dump(exclude={"last_scanned_at", "last_seen_at"})
+            for song in sorted(
+                await self._repository.list_songs(), key=lambda song: song.song_id or "",
+            )
+        )
+
     async def list_available_songs(self) -> list[Song]:
         songs = await self._repository.list_available_songs()
         return [song for song in songs if song.availability_status == "AVAILABLE"]

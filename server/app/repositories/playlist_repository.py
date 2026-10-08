@@ -1,11 +1,30 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from functools import wraps
+from typing import TypeVar
 
 from server.app.models.playlist import Playlist
 
 from .database import run_transaction
+
+T = TypeVar("T")
+MutationRunner = Callable[[Callable[[], Awaitable[T]]], Awaitable[T]]
+
+
+def _mutation(method):
+    @wraps(method)
+    async def wrapped(self, *args, **kwargs):
+        async def operation():
+            return await method(self, *args, **kwargs)
+
+        if self._mutation_runner is None:
+            return await operation()
+        return await self._mutation_runner(operation)
+
+    return wrapped
 
 
 class DuplicatePlaylistSongError(ValueError):
@@ -31,6 +50,11 @@ class SystemPlaylistModificationError(ValueError):
 class PlaylistRepository:
     def __init__(self, path: str) -> None:
         self.path = path
+        self._mutation_runner: MutationRunner | None = None
+
+    def set_mutation_runner(self, runner: MutationRunner) -> None:
+        """Let the domain Service wrap writes from all existing repository consumers."""
+        self._mutation_runner = runner
 
     @staticmethod
     def _playlist_from_row(row: tuple[object, ...]) -> Playlist:
@@ -64,6 +88,7 @@ class PlaylistRepository:
         if row is None:
             raise SongNotFoundError(song_id)
 
+    @_mutation
     async def create_playlist(self, name: str) -> Playlist:
         async def operation(connection):
             now = datetime.now(timezone.utc)
@@ -112,6 +137,7 @@ class PlaylistRepository:
 
         return await run_transaction(self.path, operation)
 
+    @_mutation
     async def update_playlist(self, playlist_id: str, name: str) -> Playlist:
         async def operation(connection):
             playlist = self._require_playlist(connection, playlist_id)
@@ -137,6 +163,7 @@ class PlaylistRepository:
 
         return await run_transaction(self.path, operation)
 
+    @_mutation
     async def delete_playlist(self, playlist_id: str) -> None:
         async def operation(connection):
             playlist = self._require_playlist(connection, playlist_id)
@@ -150,6 +177,7 @@ class PlaylistRepository:
 
         await run_transaction(self.path, operation)
 
+    @_mutation
     async def add_song(
         self, playlist_id: str, song_id: str, position: int | None = None
     ) -> None:
@@ -203,6 +231,7 @@ class PlaylistRepository:
 
         await run_transaction(self.path, operation)
 
+    @_mutation
     async def remove_song(self, playlist_id: str, song_id: str) -> None:
         async def operation(connection):
             self._require_playlist(connection, playlist_id)
@@ -238,6 +267,7 @@ class PlaylistRepository:
 
         await run_transaction(self.path, operation)
 
+    @_mutation
     async def reorder_playlist(
         self, playlist_id: str, ordered_song_ids: list[str]
     ) -> None:
@@ -287,6 +317,7 @@ class PlaylistRepository:
 
         await run_transaction(self.path, operation)
 
+    @_mutation
     async def set_favorite(self, song_id: str, is_favorite: bool) -> None:
         async def operation(connection):
             if is_favorite:

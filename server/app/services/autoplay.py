@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from server.app.models.queue import PlaybackContext, QueueItem
+from uuid import uuid4
+
+from server.app.models.queue import PlaybackContext, QueueItem, QueueSnapshot
 from server.app.repositories.library_repository import LibraryRepository
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.queue_repository import (
@@ -116,3 +118,26 @@ class AutoPlay:
                     return []
 
         return []
+
+    async def plan_refill(self, context: PlaybackContext, snapshot: QueueSnapshot) -> tuple[QueueItem, ...]:
+        """Plan the existing candidate policy without persisting new occurrences."""
+        if not await self._autoplay_is_enabled():
+            return ()
+        pending = [i for i in snapshot.items if i.position > 0]
+        current = self._current_item(snapshot.items)
+        if len(pending) >= self.LOW_WATERMARK or (
+            current is not None and current.playback_context_id is not None
+            and current.playback_context_id != context.context_id
+        ):
+            return ()
+        available = await self.library_repository.list_available_songs()
+        candidates, allow_current_repeat = self._candidate_ids(snapshot.items, context, [s.song_id for s in available if s.song_id])
+        # Match add_autoplay_batch's existing fallback boundary: an already
+        # pending copy of current prevents another AutoPlay repeat.
+        if allow_current_repeat and any(item.song_id == current.song_id for item in pending):
+            return ()
+        start = max((i.position for i in pending), default=0) + 1
+        return tuple(QueueItem(
+            queue_item_id=str(uuid4()), song_id=song_id, position=start + index,
+            source="AUTOPLAY", playback_context_id=context.context_id,
+        ) for index, song_id in enumerate(list(dict.fromkeys(candidates))[:self.REFILL_COUNT]))

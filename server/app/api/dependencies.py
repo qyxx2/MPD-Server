@@ -11,6 +11,7 @@ from server.app.services.output_manager import OutputManager
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
 from server.app.services.queue_manager import QueueManager
+from server.app.services.state_service import StateService
 
 
 async def resolve_history_service(request: Request) -> HistoryService:
@@ -101,4 +102,11 @@ async def get_mpd_info_service(request: Request) -> MPDInfoService:
     service = getattr(request.app.state, "mpd_info_service", None)
     if service is None:
         raise RuntimeError("MPD info service is not configured")
+    return service
+
+
+async def get_state_service(request: Request) -> StateService:
+    service = getattr(request.app.state, "state_service", None)
+    if service is None:
+        raise RuntimeError("state service is not configured")
     return service

@@ -1,10 +1,34 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import gzip
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolate_application_observer(monkeypatch):
+    """Legacy API fixtures replace Services and use DBs from independent loops.
+
+    Stop the real background task before those fixtures begin. Observer/root
+    acceptance uses main.lifespan directly with an injected deterministic Port.
+    This also prevents ordinary API tests from contacting a live MPD server.
+    """
+    from server.app.main import app
+
+    lifespan = app.router.lifespan_context
+
+    @asynccontextmanager
+    async def isolated(application):
+        async with lifespan(application):
+            await application.state.state_observer.close()
+            await asyncio.gather(application.state.state_observer_task, return_exceptions=True)
+            yield
+
+    monkeypatch.setattr(app.router, 'lifespan_context', isolated)
 
 _FLAC_GZIP_B64 = (
     "H4sIANqAt2oC/+3Ov0oDMRwH8LR0sSgqOBQcDG4OLXen+GcI9BS3okVdHNNLWkJzObhLCw4dXB0cXMUncPQd3HwCX8LBwU2TOyuCbyDfDwnJ75u/wx4/IoRs1rv1LiHLrtXe628u6Tden9Pb48vp/dPN3Us2e2iQ2uqiW+jx6XA37Ox1wmDb12uuS5NkQubs95q7i1hltWQXsrD0PDMjH/HcqsKyuBxo/Dc6XPGRHkzS6mDsp615Nt/r57Q6seQfynkyNpN04D4R+V8JVSTfdejfENxKFgXRTjvYbwcHTReNpMklO8uS8cJPFWu75Qp9laukYH3NlaHS3SKEFLRMqVZG0rBZDtE12VgnAAAAAAAAAAAAAAAAAAAA/9vnh2iR08eqmJ18ARPRGgRtIAAA"

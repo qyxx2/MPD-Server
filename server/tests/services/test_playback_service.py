@@ -228,15 +228,26 @@ def test_reconcile_external_status_updates_service_state_but_not_server_queue(
     run(service.start_track("a"))
     run(player.play("music/b.mp3"))
 
-    run(service.reconcile_external_status())
-
-    state = run(components["state"].get_state())
-    assert state is not None
-    assert state.song_id == "b"
-    assert state.state == "PLAYING"
-    assert current_song_id(components["queue"]) == "a"
-    assert components["history_service"].active_event is not None
-    assert components["history_service"].active_event.song_id == "b"
+    before = (
+        run(components["state"].get_state()),
+        run(service.queue_manager.get_snapshot()),
+        run(components["history"].list_history()),
+        components["history_service"].active_event,
+        components["history_service"].session_id,
+    )
+    result = run(service.reconcile_external_status())
+    assert result.outcome == "APPLIED" and not result.reconciliation_required
+    after = run(service.queue_manager.get_snapshot())
+    assert after.revision == before[1].revision + 1
+    old_a = next(i for i in before[1].items if i.position == 0)
+    old_b = next(i for i in before[1].items if i.song_id == "b")
+    assert next(i for i in after.items if i.queue_item_id == old_a.queue_item_id).position == -1
+    assert next(i for i in after.items if i.position == 0).queue_item_id == old_b.queue_item_id
+    assert result.playback.song_id == "b"
+    assert run(components["history"].list_history()) == before[2]
+    assert components["history_service"].active_event is None
+    assert components["history_service"].session_id == before[4]
+    assert {(i.queue_item_id, i.source, i.playback_context_id) for i in after.items} == {(i.queue_item_id, i.source, i.playback_context_id) for i in before[1].items}
 
 
 def test_successful_next_promotes_server_queue_and_records_switch(

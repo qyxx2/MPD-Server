@@ -65,7 +65,10 @@ class FakePlaybackService:
         self.calls.append(("start_track", song_id))
         return self.context.model_copy(update={"source_id": song_id})
 
-    async def play_context(self, context: PlaybackContext) -> PlaybackState:
+    async def play_context(
+        self, context: PlaybackContext, *, request_id: str | None = None,
+        request_payload: str | None = None,
+    ) -> PlaybackState:
         self.calls.append(("play_context", context))
         return self.state
 

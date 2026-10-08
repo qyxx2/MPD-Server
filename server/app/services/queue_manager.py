@@ -3,7 +3,13 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
+from server.app.models.queue import (
+    PlaybackContext,
+    PlaybackState,
+    QueueItem,
+    QueueSnapshot,
+)
+from server.app.repositories.database import run_transaction
 from server.app.repositories.playback_state_repository import PlaybackStateRepository
 from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import (
@@ -34,15 +40,32 @@ class QueueManager:
         self.playback_state_repository = playback_state_repository
         self.playlist_repository = playlist_repository
 
+    async def adopt_current(
+        self, previous_id: str, target_id: str, *, expected_revision: int,
+    ) -> QueueSnapshot:
+        return await self.queue_repository.adopt_current(
+            previous_id, target_id, expected_revision=expected_revision,
+        )
+
+    async def complete_current(
+        self, queue_item_id: str, *, pending: tuple[QueueItem, ...],
+        successor_id: str | None, expected_revision: int,
+    ) -> QueueSnapshot:
+        return await self.queue_repository.complete_current(
+            queue_item_id, pending=pending, successor_id=successor_id,
+            expected_revision=expected_revision,
+        )
+
     async def start_track(
         self,
         song_id: str,
         *,
         expected_revision: int | None = None,
         persist_state: bool = True,
+        context_id: str | None = None,
     ) -> PlaybackContext:
         context = PlaybackContext(
-            context_id=str(uuid.uuid4()),
+            context_id=context_id or str(uuid.uuid4()),
             source_type="TRACK",
             source_id=song_id,
             ordered_song_ids=(song_id,),
@@ -236,20 +259,26 @@ class QueueManager:
     async def list_items(self) -> list[QueueItem]:
         return await self.queue_repository.list_items()
 
+    async def get_snapshot(self) -> QueueSnapshot:
+        return await self.queue_repository.get_snapshot()
+
     async def get_item(self, queue_item_id: str) -> QueueItem | None:
         return await self.queue_repository.get_item(queue_item_id)
 
     async def save_as_playlist(self, name: str):
-        up_next = await self.queue_repository.list_up_next()
-        song_ids = [item.song_id for item in up_next]
-        if len(song_ids) != len(set(song_ids)):
-            raise ValueError("Queue Up Next contains duplicate songs")
+        async def operation(_):
+            up_next = await self.queue_repository.list_up_next()
+            song_ids = [item.song_id for item in up_next]
+            if len(song_ids) != len(set(song_ids)):
+                raise ValueError("Queue Up Next contains duplicate songs")
 
-        playlist = await self.playlist_repository.create_playlist(name)
-        for position, song_id in enumerate(song_ids):
-            await self.playlist_repository.add_song(
-                playlist.playlist_id,
-                song_id,
-                position=position,
-            )
-        return playlist
+            playlist = await self.playlist_repository.create_playlist(name)
+            for position, song_id in enumerate(song_ids):
+                await self.playlist_repository.add_song(
+                    playlist.playlist_id,
+                    song_id,
+                    position=position,
+                )
+            return playlist
+
+        return await run_transaction(self.queue_repository.path, operation)

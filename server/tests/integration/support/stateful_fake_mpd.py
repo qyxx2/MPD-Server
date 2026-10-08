@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import shlex
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 
@@ -39,6 +40,15 @@ class StatefulFakeMPD:
         self.repeat = False
         self.random = False
 
+        self.playlist_version = 0
+        self.single = "0"
+        self.consume = False
+        self.error: str | None = None
+        self.received: list[str] = []
+        self.before_request: Callable[[str], Awaitable[None]] | None = None
+        self.after_request: Callable[[str], Awaitable[None]] | None = None
+        self.drop_response: str | None = None
+        self.response_override: Callable[[str], str | None] | None = None
         self._next_song_id = 1
         self._fail_next: dict[str, tuple[int, str]] = {}
 
@@ -117,6 +127,9 @@ class StatefulFakeMPD:
                     return
 
                 request = raw.decode("utf-8").rstrip("\r\n")
+                self.received.append(request)
+                if self.before_request is not None:
+                    await self.before_request(request)
                 try:
                     response = self._dispatch(request)
                 except ValueError as exc:
@@ -128,6 +141,11 @@ class StatefulFakeMPD:
                         f"ACK [50@0] {{command}} {exc}\n".encode()
                     )
                 else:
+                    if self.after_request is not None:
+                        await self.after_request(request)
+                    if request.split()[0] == self.drop_response:
+                        self.drop_response = None
+                        return
                     writer.write(response.encode("utf-8"))
                 await writer.drain()
         finally:
@@ -145,6 +163,11 @@ class StatefulFakeMPD:
 
         command = parts[0]
         args = parts[1:]
+
+        if self.response_override is not None:
+            response = self.response_override(request)
+            if response is not None:
+                return response
 
         injected = self._fail_next.pop(command, None)
         if injected is not None:
@@ -167,6 +190,9 @@ class StatefulFakeMPD:
             "repeat": self._cmd_repeat,
             "random": self._cmd_random,
             "setvol": self._cmd_setvol,
+            "seekcur": self._cmd_seekcur,
+            "seekid": self._cmd_seekid,
+            "outputs": self._cmd_outputs,
         }
         handler = handlers.get(command)
         if handler is None:
@@ -184,6 +210,11 @@ class StatefulFakeMPD:
                 song_id = current.mpd_song_id
 
         lines = [
+            "partition: default",
+            f"playlist: {self.playlist_version}",
+            f"playlistlength: {len(self.queue)}",
+            f"single: {self.single}",
+            f"consume: {int(self.consume)}",
             f"volume: {self.volume}",
             f"repeat: {1 if self.repeat else 0}",
             f"random: {1 if self.random else 0}",
@@ -194,6 +225,8 @@ class StatefulFakeMPD:
             "duration: 180.0",
             "OK\n",
         ]
+        if self.error is not None:
+            lines.insert(-1, f"error: {self.error}")
         return "\n".join(lines)
 
     def _cmd_currentsong(self, args: list[str]) -> str:
@@ -236,6 +269,7 @@ class StatefulFakeMPD:
                 song_uri=args[0],
             )
         )
+        self.playlist_version += 1
         return f"Id: {song_id}\nOK\n"
 
     def _cmd_deleteid(self, args: list[str]) -> str:
@@ -247,6 +281,7 @@ class StatefulFakeMPD:
             return f"ACK [50@0] {{deleteid}} No such song id {target_id}\n"
 
         del self.queue[index]
+        self.playlist_version += 1
         self._renumber_positions()
         if self.current_song_id == target_id:
             self.current_song_id = None
@@ -266,6 +301,7 @@ class StatefulFakeMPD:
         entry = self.queue.pop(source_index)
         destination = max(0, min(destination, len(self.queue)))
         self.queue.insert(destination, entry)
+        self.playlist_version += int(source_index != destination)
         self._renumber_positions()
         return "OK\n"
 
@@ -393,3 +429,37 @@ class StatefulFakeMPD:
             )
             for index, entry in enumerate(self.queue)
         ]
+
+    def _cmd_seekcur(self, args: list[str]) -> str:
+        self.elapsed = float(args[0])
+        return "OK\n"
+
+    def _cmd_seekid(self, args: list[str]) -> str:
+        target = int(args[0])
+        if self._find_entry(target) is None:
+            return "ACK [50@0] {seekid} No such song\n"
+        self.current_song_id = target
+        self.elapsed = float(args[1])
+        return "OK\n"
+
+    def _cmd_outputs(self, args: list[str]) -> str:
+        return "outputid: 0\noutputname: local-dac\nplugin: alsa\noutputenabled: 1\nOK\n"
+
+    async def disconnect_clients(self) -> None:
+        for writer in tuple(self._writers):
+            writer.close()
+            await writer.wait_closed()
+
+    async def restart(self) -> None:
+        """Local daemon restart facts: restored URIs, reset version and reused IDs.
+
+        This deliberately does not certify that the target MPD restores its queue.
+        """
+        await self.disconnect_clients()
+        selected = self._current_index()
+        self.queue = [FakeMPDQueueEntry(index + 1, index, entry.song_uri)
+                      for index, entry in enumerate(self.queue)]
+        self.current_song_id = None if selected is None else selected + 1
+        self._next_song_id = len(self.queue) + 1
+        self.playlist_version = 0
+        self.elapsed = 0
