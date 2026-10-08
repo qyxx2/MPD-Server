@@ -12,6 +12,14 @@ from server.app.models.queue import PlaybackState, QueueSnapshot
 from server.app.player.models import PlayerState
 
 
+class ActualCurrent(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    entry_id: int | None = None
+    uri: str | None = None
+    position: int | None = Field(default=None, ge=0)
+
+
 class HistoryAvailability(BaseModel):
     has_entries: bool
     active_event: HistoryEvent | None = None
@@ -20,6 +28,17 @@ class HistoryAvailability(BaseModel):
 
 class PlaybackObservation(BaseModel):
     actual_state: PlayerState | None = None
+    actual_current: ActualCurrent | None = None
+    actual_freshness: Literal["fresh", "stale", "unknown"] = "unknown"
+    bound_queue_item_id: str | None = None
+    sync_status: Literal[
+        "CONFIRMED",
+        "UNBOUND",
+        "EXTERNAL_DRIFT",
+        "UNCONFIRMED_STOP",
+        "SYNC_FAILED",
+        "NO_CANDIDATES",
+    ] = "UNBOUND"
     matches_current: bool | None = None
     position_seconds: float | None = Field(default=None, ge=0)
     duration_seconds: float | None = Field(default=None, ge=0)

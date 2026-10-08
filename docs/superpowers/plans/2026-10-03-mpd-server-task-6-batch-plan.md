@@ -1,6 +1,8 @@
 # MPD-Server Task 6 Contract Audit / Batch Execution Plan
 
-> **For agentic workers:** 后续执行使用 `superpowers:executing-plans`；原计划记录保留；最新状态见下方2026-10-04修订。当前仅文档，旧Batch实现/proof不等于新D6验收。没有 commit/push/PR 授权；不得因下列实施白名单而在本轮修改 production code。
+**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
+
+> **2026-10-03原计划记录 / For agentic workers:** 后续执行使用 `superpowers:executing-plans`；原计划记录保留；最新状态见下方2026-10-04修订。当前仅文档，旧Batch实现/proof不等于新D6验收。没有 commit/push/PR 授权；不得因下列实施白名单而在本轮修改 production code。
 
 **Goal:** 传播已确认的权威状态，以完整快照恢复客户端，同时保持既有 Playback/Queue/History/Library/Playlist/Output 业务合同。
 
@@ -20,7 +22,7 @@
 - T7：`2026-10-02-mpd-server-task-7-batch-plan.md` §4；O-* 合同保持。
 - T1–3：M Task 1/1R/2/2R/3；`../archive/task-3/2026-09-27-task3-corrective-followup-plan.md`；`../archive/integration/2026-09-29-mpd-server-task-0-4-integration-gate-acceptance.md`；`../../mpd-0.23.5-capabilities.md`。
 
-## 2026-10-04 当前 D6 依赖修订
+## 2026-10-04 D6 依赖修订（历史基线；最新结果见页首与E S12）
 
 当前HEAD 651aade已有Task6 snapshot/observer/WS与旧D6 consumer，不能继续把下文2026-10-03“尚不存在/未实施”审计表当当前源码。B1–B13各次执行记录保留在archive；最终Task6仍BLOCKED。本节覆盖下文旧时态及严格SOURCE依赖，未重做原Batch。
 
@@ -42,8 +44,8 @@ R1 状态同步（2026-10-04）：用户已接受服务/MPD 重启后恢复 actu
 - [x] 完成当前对话 G6-01–05 决策并写入 Spec。
 - [x] 冻结 Matrix、更新全局 relationship/dependency、重新推导 Batch。
 - [x] 完整 Task-level Contract Audit：所有合同有 authority、owner、proof obligation、验收门禁。
-- [ ] Batch 1–13 的实现、RED/GREEN 与 Task 6 acceptance。
-- [ ] D6-RECOVERY 的独立领域能力验收（本轮不执行）。
+- [x] Batch 1–13 已实施；各Batch archive记录及S12逐Contract最终proof完成。
+- [x] D6-RECOVERY S10/S11/S12已验收，见唯一D6 acceptance（2026-10-09）。
 
 **Global Constraints**：API→Service→Repository/PlayerPort；Service 不依赖 socket/concrete MPDAdapter；真实曲库只读；沿用 outer transaction、runtime rollback、terminal replay；网络不在 DB 锁内；不实现 Task 8–12、CLIENT_STREAM、最终配置/备份/部署；不改 frozen REST 字段或播放规则；不提交环境/DB/cache/本地 AGENTS 文件。
 

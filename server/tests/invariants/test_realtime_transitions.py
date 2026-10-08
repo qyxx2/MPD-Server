@@ -17,7 +17,7 @@ from server.tests.support.playback import mutate, run, start
 
 
 def wire(playback, publisher, coordinator):
-    return PlaybackService(
+    service = PlaybackService(
         queue_manager=playback.queue_manager,
         history_service=playback.history_service,
         autoplay=playback.autoplay,
@@ -26,6 +26,8 @@ def wire(playback, publisher, coordinator):
         event_publisher=publisher,
         coordinator=coordinator,
     )
+    service._recovery = playback._recovery
+    return service
 
 
 def prepare(client, playback, operation):
@@ -139,7 +141,7 @@ def test_explicit_reconciliation_propagates_only_committed_existing_delta(real_c
 
     service = wire(playback, Publisher(), coordinator)
     # Reuse the committed occurrence binding; construction alone proves none.
-    service._observations.binding = playback._observations.binding
+    service._recovery = playback._recovery
     before = server_snapshot(service)
     run(player.stop() if stopped else player.pause())
 

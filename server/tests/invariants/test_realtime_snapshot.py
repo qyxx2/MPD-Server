@@ -142,7 +142,9 @@ def test_snapshot_empty_and_unknown_observations_are_complete(real_client, monke
     assert first.history.model_dump() == {'has_entries': False, 'active_event': None, 'session_id': None}
     assert first.output == output
     assert first.playback_observation.model_dump() == {
-        'actual_state': None, 'matches_current': None, 'position_seconds': None,
+        'actual_state': None, 'actual_current': None, 'actual_freshness': 'unknown',
+        'bound_queue_item_id': None, 'sync_status': 'UNBOUND',
+        'matches_current': None, 'position_seconds': None,
         'duration_seconds': None, 'observed_at': None, 'freshness': 'unknown',
         'reconciliation_required': False, 'error_code': None, 'error_message': None,
     }

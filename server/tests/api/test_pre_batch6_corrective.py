@@ -713,7 +713,7 @@ def test_direct_playback_sync_failure_restores_transaction(
 
 
 @pytest.mark.parametrize("drift", ["stop", "foreign", "pause"])
-def test_reconciliation_outer_rollback_restores_history(real_client, drift):
+def test_reconciliation_outer_rollback_restores_history(real_client, monkeypatch, drift):
     from server.app.repositories.database import run_transaction
 
     client, _, player, service = real_client
@@ -743,16 +743,28 @@ def test_reconciliation_outer_rollback_restores_history(real_client, drift):
     assert run(service.history_service.list_history()) == []
     assert service.history_service.active_event == active
     assert service.history_service.session_id == session
-    result = run(service.reconcile_external_status())
-    assert result.outcome == ("APPLIED" if drift == "pause" else "UNKNOWN")
-    assert run(service.history_service.list_history()) == []
-    assert service.history_service.active_event == active
-    assert service.history_service.session_id == session
     assert run(service.queue_manager.get_snapshot()) == queue
-    if drift == "pause":
-        assert result.playback.state == "PAUSED"
+    from server.tests.invariants.test_d6_recovery import capture_controls
+
+    controls = capture_controls(monkeypatch, player)
+    result = run(service.reconcile_external_status())
+    assert result.outcome == ("APPLIED" if drift in {"pause", "foreign"} else "UNKNOWN")
+    assert run(service.history_service.list_history()) == []
+    assert service.history_service.session_id == session
+    assert controls == []  # retry only verifies the already executed fixed prefix
+    if drift == "foreign":
+        assert service.history_service.active_event is None
+        adopted = run(service.queue_manager.get_snapshot())
+        assert adopted.revision == queue.revision + 1
+        assert result.playback.song_id == "b"
+        assert next(i for i in adopted.items if i.position == -1).queue_item_id == next(i for i in queue.items if i.position == 0).queue_item_id
     else:
-        assert run(service.queue_manager.get_playback_state()) == state
+        assert service.history_service.active_event == active
+        assert run(service.queue_manager.get_snapshot()) == queue
+        if drift == "pause":
+            assert result.playback.state == "PAUSED"
+        else:
+            assert run(service.queue_manager.get_playback_state()) == state
 
 
 @pytest.mark.parametrize("failure", ["play", "disconnected", "confirmation"])

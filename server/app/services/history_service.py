@@ -46,6 +46,10 @@ class HistoryService:
 
         on_transaction_rollback(self.history_repository.path, restore)
 
+    async def discard_unconfirmed_active(self) -> None:
+        """Forget an uncertified active occurrence without fabricating History."""
+        self._active = None
+
     async def list_played(self) -> list[QueueItem]:
         items = await self.queue_repository.list_items()
         return [item for item in items if item.position < 0]

@@ -40,6 +40,13 @@ class QueueManager:
         self.playback_state_repository = playback_state_repository
         self.playlist_repository = playlist_repository
 
+    async def adopt_current(
+        self, previous_id: str, target_id: str, *, expected_revision: int,
+    ) -> QueueSnapshot:
+        return await self.queue_repository.adopt_current(
+            previous_id, target_id, expected_revision=expected_revision,
+        )
+
     async def complete_current(
         self, queue_item_id: str, *, pending: tuple[QueueItem, ...],
         successor_id: str | None, expected_revision: int,
@@ -55,9 +62,10 @@ class QueueManager:
         *,
         expected_revision: int | None = None,
         persist_state: bool = True,
+        context_id: str | None = None,
     ) -> PlaybackContext:
         context = PlaybackContext(
-            context_id=str(uuid.uuid4()),
+            context_id=context_id or str(uuid.uuid4()),
             source_type="TRACK",
             source_id=song_id,
             ordered_song_ids=(song_id,),

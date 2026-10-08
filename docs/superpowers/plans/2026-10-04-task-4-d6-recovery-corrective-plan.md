@@ -1,5 +1,7 @@
 # Task4 D6 原版 MPD 合同迁移与执行计划
 
+**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
+
 > **For agentic workers:** 后续实现使用 `superpowers:executing-plans` 顺序执行；本轮仅文档。用户已授权合同修订，未授权本轮代码、测试、依赖、环境、schema/数据库修改、commit/push/PR、Docker/live MPD。本计划只有一份；归档中的旧 consumer 和旧 S0/S1 为历史记录，不是当前执行指令。
 
 **Goal:** 保留原版 MPD 0.23.5，以可信当前 occurrence 接纳、提前执行队列和真实状态展示实现核心体验，不伪造自然完成或遗漏历史。
@@ -146,7 +148,7 @@ Relied unchanged：PB-STOP/NEXT-UNAVAILABLE/INSERT/REORDER/DELETE-PENDING/DELETE
 - **白名单**：`server/app/player/models.py` ExecutionSample；`ports.py` PlayerPort；`mpd_adapter.py::read_execution_sample/_ensure_connected/close`；`capabilities.py::VerifiedPlayerPort`；`mock_mpd.py` 同接口；专用support文件及下列测试。
 - **接口**：新增 `PlayerPort.read_execution_sample() -> ExecutionSample`。Adapter一次本连接lock内status→playlistinfo→status（必要currentsong须验证），至多2次attempt；不一致抛 `PlayerCommandError(command="read_execution_sample", message="inconsistent execution sample")`；失联原PlayerUnavailable，取消弃连接并原样传播。VerifiedPlayerPort要求status/playlistinfo命令，不自动标transport verified；greeting/连接生成本地connection_epoch。
 - **确认/事务/失败**：输出只表示采样时事实；不含原子跨客户端承诺；T/F用于调用方接受样本，S2自身无业务事务/receipt。U全保留，O只读；没有控制重发。
-- **TO CREATE** `server/tests/player/test_execution_sample.py::test_sample_rejects_torn_current_and_queue`，参数current/version/length/duplicate-id/position：`sample.status.song_id == sample.entries[sample.status.song_position].mpd_song_id`；冲突两次 `error.command == "read_execution_sample"; controls == []; attempts == 2`。
+- **TO CREATE** `server/tests/player/test_execution_sample.py::test_sample_rejects_torn_current_and_queue`，参数current/state/version/length/duplicate-id/position：`sample.status.song_id == sample.entries[sample.status.song_position].mpd_song_id`；冲突两次 `error.command == "read_execution_sample"; controls == []; attempts == 2`。
 - **TO CREATE** 同文件 `test_sample_epoch_and_modes_are_not_completion_evidence`：`new.connection_epoch != old.connection_epoch; sample.single == "0"; sample.consume is False; sample.error == "decoder error"; "reason" not in sample.model_dump()`；error为空仍无reason；另含空队列STOPPED `sample.entries == (); sample.status.song_id is None`，STOPPED但仍选中entry仅表示选择位置、不表示播放。单次断线不返回半样本。
 - **已有/验证**：`T(server/tests/player/test_execution_sample.py::test_sample_rejects_torn_current_and_queue)`逐参数RED→实现→同selectorGREEN；第二selector同循环→该文件→`T(server/tests/player/test_mpd_adapter_tcp.py)`→`T(server/tests/player/test_mpd_adapter_errors.py)`→`T(server/tests/player)`；Ruff仅本步文件。
 - **完成/gate**：端口/Mock/Adapter/wrapper一致，typed失败全覆盖。只本地协议proof；目标模式/组合运行时仍NOT VERIFIED，final BLOCKED。
@@ -164,6 +166,10 @@ Relied unchanged：PB-STOP/NEXT-UNAVAILABLE/INSERT/REORDER/DELETE-PENDING/DELETE
 - **完成/gate**：所有业务current-changing入口（start/play_context/play_now/next/previous/delete/stop）使绑定更新或失效，observer只读；跨重启自动绑定不在合同内，final BLOCKED。
 
 ### S4 — 固定执行意图、逐命令前缀、部分成功与retry
+
+2026-10-07 用户授权的最小白名单补充：固定 ID 分配必须早于 Queue 写入，不能在同步器中按 URI 或位置补认新 occurrence。允许 `PlaybackService::_atomic_history_transition` 注入固定分配作用域、`QueueRepository` 各既有 occurrence 分配点及新增固定分配作用域、`QueueManager.start_track` 接受固定 context ID；只改变分配/复用，不改变候选算法、Queue 位置/revision/CAS 或持久 schema。原 S4 白名单及全部验收保持，S5–S12 不授权。
+
+同日用户追加授权：`PlaybackService._prepare_play` 的既有 add/play 委托同一执行账本，重试优先核验已固定的 queue intent；`api/playback.py::play_collection` 仅传递请求身份/内容给 `PlaybackService.play_context`，由 journal 固定原已生成 context，避免失败重试重新生成 ID/随机顺序。不改变集合候选算法、HTTP 响应、幂等 terminal/schema 或任何 S5–S12 语义。
 
 - **目标/排除**：先补安全执行基础，再允许新转移/补充；不改变候选算法、不完成current/History业务提交。
 - **Authority/依赖/停止**：PB-RECOVERY-RETRY、TX-*，F8.9.6；S3。响应丢失且不能唯一归属、外部version变化、connection epoch改变则UNKNOWN并停止后续控制。
@@ -189,6 +195,8 @@ Relied unchanged：PB-STOP/NEXT-UNAVAILABLE/INSERT/REORDER/DELETE-PENDING/DELETE
 - **完成/gate**：不再通过start_track隐式SWITCH_AWAY伪造过去；自动观测目标无runtime active，final BLOCKED。
 
 ### S6 — 确认当前转移与 Queue CAS/清理
+
+2026-10-07 用户授权的最小白名单补充：修复旧 D6 已记录的 PAUSED current-delete 遗留失败，允许 `PlaybackService._sync_player_queue` 在显式后继播放已确认、精确目标 MPD ID 与当前匹配时固定 PLAYING 目标状态；只修正执行意图与已确认控制结果的状态一致性，不改变普通 pending 同步、自动接纳 PAUSED、UNKNOWN STOPPED 或其它 S6 合同。允许在 `test_d6_current.py` 增补该场景的 commit/outer rollback retry proof，保留旧 D6 原断言；S7–S12 不授权。
 
 - **目标/排除**：A→B/C当前事实接纳，保留未观察pending；不认证自然原因、不触发候选生成、不在未知STOPPED play。
 - **Authority/依赖/停止**：PB-CURRENT/QUEUE-ADOPT/RECOVERY-UNKNOWN/TRANSPORT，F8.9.1–4/6；S4/S5。目标不在有效映射、已Played项、最终执行确认失败、CAS/generation变化停止提交。
@@ -283,11 +291,11 @@ git status --short
 
 ## 执行进度（不得以文档复选替代证明）
 
-- [x] S0 静态Git/源码/能力/proof审计（未来执行前pytest仍未运行）。
+- [x] S0 静态Git/源码/能力/proof审计；后续必跑proof已由S12完整复验。
 - [x] S1 合同、接口和影响矩阵已写入；R1 已接受，见 F §8.9.2。
-- [ ] S2 一致样本；S3绑定；S4安全执行；S5 History；S6当前接纳。
-- [ ] S7 AutoPlay；S8实际DTO；S9 runner。
-- [ ] S10本地联合；S11目标运行时；S12最终gate。
+- [x] S2 一致样本；S3绑定；S4安全执行；S5 History；S6当前接纳（2026-10-09 fresh proof）。
+- [x] S7 AutoPlay；S8实际DTO；S9 runner（2026-10-09 fresh proof）。
+- [x] S10/S11/S12、D6/Batch13/Task6 functional final PASSED（2026-10-09；见E）。原本地DB保留UNVERIFIED独立记录。
 
 ## Review Focus / 场景覆盖核对
 
@@ -297,4 +305,4 @@ git status --short
 4. 多命令部分成功/响应丢失/outer失败：S4全部命令×故障参数 + S10；禁止URI猜add结果。
 5. 页面重连/服务与MPD分别重启/Stop与runner竞态：S8/S9/S10，actual显示可恢复≠业务绑定或遗漏History可恢复。
 
-本轮最终只检查文档 diff、链接、源文件字节和未授权范围，不执行上述未来测试，不 commit。**产品项 R1 已接受（2026-10-04）**：服务/MPD 重启后自动恢复准确的 actual 显示；业务 occurrence 绑定必须由明确 Start Track/Play Context/Queue Play Now 经实际确认重建。仅刷新、换浏览器或 WebSocket 重连不使有效服务绑定丢失；若同时发生 MPD 连接失效，仍按 F §8.9.2 处理。S3/S8/S9 按此已定合同设计和验收，不再等待 R1 答复；本轮仍只修改文档，新实现和验收未完成，最终 gate BLOCKED。
+2026-10-04原计划轮次最终只检查文档 diff、链接、源文件字节和未授权范围，不执行上述未来测试，不 commit。**产品项 R1 已接受（2026-10-04）**：服务/MPD 重启后自动恢复准确的 actual 显示；业务 occurrence 绑定必须由明确 Start Track/Play Context/Queue Play Now 经实际确认重建。仅刷新、换浏览器或 WebSocket 重连不使有效服务绑定丢失；若同时发生 MPD 连接失效，仍按 F §8.9.2 处理。S3/S8/S9 按此已定合同设计和验收，不再等待 R1 答复；本轮仍只修改文档，新实现和验收未完成，最终 gate BLOCKED。

@@ -18,7 +18,7 @@ def wire(playback, publisher, coordinator):
     assert "coordinator" in inspect.signature(PlaybackService).parameters, (
         "PlaybackService lacks committed transport propagation"
     )
-    return PlaybackService(
+    service = PlaybackService(
         queue_manager=playback.queue_manager,
         history_service=playback.history_service,
         autoplay=playback.autoplay,
@@ -27,6 +27,9 @@ def wire(playback, publisher, coordinator):
         event_publisher=publisher,
         coordinator=coordinator,
     )
+    # Rewire delivery in the same process; preserve the confirmed execution owner.
+    service._recovery = playback._recovery
+    return service
 
 
 @pytest.mark.parametrize("operation", ["pause", "seek", "stop"])

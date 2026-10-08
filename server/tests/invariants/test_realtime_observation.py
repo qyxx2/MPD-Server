@@ -47,21 +47,21 @@ def test_late_sample_never_becomes_new_current_progress(real_client, monkeypatch
     playback, player, _, coordinator, _ = setup_observation(real_client)
     initial = run(playback.observe())
     assert initial.matches_current is True and initial.freshness == 'fresh'
-    original_status = player.status
+    original_sample = player.read_execution_sample
 
     async def scenario():
         sampled, release = asyncio.Event(), asyncio.Event()
         observation_task = None
 
         async def held_status():
-            status = await original_status()
+            status = await original_sample()
             if asyncio.current_task() is observation_task:
                 sampled.set()
                 await release.wait()
             return status
 
         player._elapsed = 23
-        monkeypatch.setattr(player, 'status', held_status)
+        monkeypatch.setattr(player, 'read_execution_sample', held_status)
         observation_task = asyncio.create_task(playback.observe())
         await asyncio.wait_for(sampled.wait(), 1)
         if operation == 'seek':
@@ -180,12 +180,13 @@ def test_external_drift_never_attaches_progress_or_changes_history(real_client, 
         run(player.queue_play(entries[1].mpd_song_id))
         player._elapsed = 42
     elif drift == 'missing-id':
-        original_status = player.status
+        original_sample = player.read_execution_sample
 
         async def without_id():
-            return (await original_status()).model_copy(update={'song_id': None})
+            sample = await original_sample()
+            return sample.model_copy(update={'status': sample.status.model_copy(update={'song_id': None})})
 
-        monkeypatch.setattr(player, 'status', without_id)
+        monkeypatch.setattr(player, 'read_execution_sample', without_id)
     else:
         entries = run(player.queue_entries())
         run(player.queue_move(entries[1].mpd_song_id, entries[0].mpd_song_id))
@@ -219,7 +220,9 @@ def test_disconnect_retry_and_restart_never_invent_binding(real_client, prior):
     player.reconnect()
     clock.advance(1)
     recovered = run(playback.observe())
-    assert recovered.freshness == 'fresh' and recovered.position_seconds == 9
+    assert recovered.freshness == 'unknown' and recovered.position_seconds is None
+    assert recovered.matches_current is None and recovered.reconciliation_required
+    assert run(playback.get_execution_binding()) is None
     assert recovered.error_code is None
     restarted = PlaybackService(
         queue_manager=playback.queue_manager, history_service=playback.history_service,
@@ -239,20 +242,20 @@ def test_disconnect_retry_and_restart_never_invent_binding(real_client, prior):
 def test_older_overlapping_sample_cannot_replace_newer_accepted_progress(real_client, monkeypatch):
     """Out-of-order external reads cannot overwrite the newer accepted transport sample."""
     playback, player, _, coordinator, _ = setup_observation(real_client)
-    original_status = player.status
+    original_sample = player.read_execution_sample
 
     async def scenario():
         sampled, release = asyncio.Event(), asyncio.Event()
         old_task = None
 
         async def held_status():
-            value = await original_status()
+            value = await original_sample()
             if asyncio.current_task() is old_task:
                 sampled.set()
                 await release.wait()
             return value
 
-        monkeypatch.setattr(player, 'status', held_status)
+        monkeypatch.setattr(player, 'read_execution_sample', held_status)
         player._elapsed = 3
         old_task = asyncio.create_task(playback.observe())
         await asyncio.wait_for(sampled.wait(), 1)
@@ -304,7 +307,7 @@ def test_observation_runtime_rolls_back_with_terminal_and_cancels_without_contro
             sampled.set()
             await asyncio.Event().wait()
 
-        monkeypatch.setattr(player, 'status', hung_status)
+        monkeypatch.setattr(player, 'read_execution_sample', hung_status)
         task = asyncio.create_task(playback.observe())
         await asyncio.wait_for(sampled.wait(), 1)
         # No external wait holds the business boundary.
@@ -318,18 +321,19 @@ def test_observation_runtime_rolls_back_with_terminal_and_cancels_without_contro
     assert server_snapshot(playback) == before and coordinator.marker() == marker
 
 
-@pytest.mark.parametrize('command', ['status', 'queue_entries'])
+@pytest.mark.parametrize('command', ['read_execution_sample', 'queue_entries'])
 def test_unknown_numbers_and_port_error_stay_nullable(real_client, monkeypatch, command):
     """Missing MPD fields must not turn into zero, and read failures cannot run recovery."""
     playback, player, _, coordinator, _ = setup_observation(real_client)
-    original_status = player.status
+    original_sample = player.read_execution_sample
 
     async def unknown_numbers():
-        return (await original_status()).model_copy(update={
+        sample = await original_sample()
+        return sample.model_copy(update={'status': sample.status.model_copy(update={
             'elapsed_seconds': None, 'duration_seconds': None,
-        })
+        })})
 
-    monkeypatch.setattr(player, 'status', unknown_numbers)
+    monkeypatch.setattr(player, 'read_execution_sample', unknown_numbers)
     before = server_snapshot(playback)
     sample = run(playback.observe())
     assert sample.freshness == 'fresh' and sample.matches_current is True
@@ -390,7 +394,7 @@ def test_unparseable_port_sample_degrades_without_swallowing_cancellation(real_c
     async def malformed():
         raise ValueError('unparseable external status')
 
-    monkeypatch.setattr(player, 'status', malformed)
+    monkeypatch.setattr(player, 'read_execution_sample', malformed)
     failed = run(playback.observe())
     assert failed.freshness == 'stale' and failed.position_seconds == 4
     assert failed.observed_at == sample.observed_at

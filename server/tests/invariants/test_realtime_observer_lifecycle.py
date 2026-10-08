@@ -27,7 +27,7 @@ def test_observation_budget_degrades_but_shutdown_cancellation_does_not(real_cli
             entered.set()
             await asyncio.Event().wait()
 
-        monkeypatch.setattr(player, 'status', blocked)
+        monkeypatch.setattr(player, 'read_execution_sample', blocked)
         failed = await playback.observe(read_timeout=0.01)
         assert failed.freshness == 'stale'
         assert failed.error_code == 'PLAYER_TIMEOUT'
@@ -94,13 +94,13 @@ def test_round_budget_is_shared_and_output_timeout_retries_independently(real_cl
     playback, player, _, _, clock, manager = setup_output(real_client)
 
     async def scenario():
-        status, outputs = player.status, player.outputs
+        sample, outputs = player.read_execution_sample, player.outputs
         sleeps, permits = asyncio.Queue(), asyncio.Queue()
         cancelled = asyncio.Event()
         samples = 0
 
-        async def slow_status():
-            result = await status()
+        async def slow_sample():
+            result = await sample()
             clock.advance(0.015)
             return result
 
@@ -118,7 +118,7 @@ def test_round_budget_is_shared_and_output_timeout_retries_independently(real_cl
             await sleeps.put(delay)
             await permits.get()
 
-        monkeypatch.setattr(player, 'status', slow_status)
+        monkeypatch.setattr(player, 'read_execution_sample', slow_sample)
         monkeypatch.setattr(player, 'outputs', blocked_output)
         observer = StateObserver(playback=playback, output=manager, read_budget=0.02,
                                  monotonic_clock=lambda: clock().timestamp(), sleep=sleep)
@@ -232,7 +232,7 @@ def test_single_observer_retries_and_shutdown_preserves_playback(real_client, mo
         terminal = await create_terminal(records)
         before = await authority_snapshot(playback)
         facts = await player.status(), await player.queue_entries()
-        original_status = player.status
+        original_sample = player.read_execution_sample
         commands = []
         check = player._check
 
@@ -247,7 +247,7 @@ def test_single_observer_retries_and_shutdown_preserves_playback(real_client, mo
         active = 0
         maximum = 0
 
-        async def status():
+        async def sample():
             nonlocal calls, active, maximum
             calls += 1
             active += 1
@@ -261,7 +261,7 @@ def test_single_observer_retries_and_shutdown_preserves_playback(real_client, mo
                         await asyncio.Event().wait()
                     finally:
                         cancelled.set()
-                return await original_status()
+                return await original_sample()
             finally:
                 active -= 1
 
@@ -270,7 +270,7 @@ def test_single_observer_retries_and_shutdown_preserves_playback(real_client, mo
             await permits.get()
             clock.advance(delay)
 
-        monkeypatch.setattr(player, 'status', status)
+        monkeypatch.setattr(player, 'read_execution_sample', sample)
         observer = observer_type(playback=playback, output=manager, sleep=sleep,
                                  monotonic_clock=lambda: clock().timestamp())
         task = asyncio.create_task(observer.run())
@@ -282,7 +282,13 @@ def test_single_observer_retries_and_shutdown_preserves_playback(real_client, mo
                 await observer.run()
             await permits.put(None)
             assert await asyncio.wait_for(sleeps.get(), 1) == 1
-            assert (await playback.get_observation()).freshness == 'fresh'
+            recovered = await playback.get_observation()
+            assert recovered.actual_freshness == 'fresh'
+            # A read after a connection gap restores facts, never the occurrence
+            # binding or its progress (Playback §8.9.2 / Architecture §12.3.1).
+            assert recovered.freshness == 'unknown'
+            assert recovered.bound_queue_item_id is None
+            assert recovered.reconciliation_required is True
             await permits.put(None)
             await asyncio.wait_for(entered.wait(), 1)
             await asyncio.wait_for(observer.close(), 1)
@@ -291,7 +297,7 @@ def test_single_observer_retries_and_shutdown_preserves_playback(real_client, mo
             assert await library.list_songs() == songs
             assert await app.state.playlist_service.revision_content() == playlists
             assert await records.get_by_key('confirmed') == terminal
-            assert set(commands) <= {'status', 'outputs', 'queue_entries'}
+            assert set(commands) <= {'status', 'read_execution_sample', 'outputs', 'queue_entries'}
             monkeypatch.undo()
             assert (await player.status(), await player.queue_entries()) == facts
             assert coordinator.marker().library_revision == coordinator.marker().playlist_revision == 0

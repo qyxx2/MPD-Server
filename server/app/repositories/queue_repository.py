@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from server.app.models.queue import (
     PlaybackContext,
@@ -10,6 +13,8 @@ from server.app.models.queue import (
 )
 
 from .database import run_transaction
+
+_fixed_allocation: ContextVar[tuple[str, int, object] | None] = ContextVar("queue_fixed_allocation", default=None)
 
 
 class QueueItemNotFoundError(ValueError):
@@ -34,6 +39,26 @@ class QueueRevisionConflictError(ValueError):
 
 class QueueRepository:
     """Persistent authoritative Queue storage."""
+
+    @contextmanager
+    def fixed_allocation(self, operation_id: str):
+        """Use the same occurrence IDs when this outer operation is retried."""
+        token = _fixed_allocation.set((operation_id, 0, asyncio.current_task()))
+        try:
+            yield
+        finally:
+            _fixed_allocation.reset(token)
+
+    @staticmethod
+    def _new_item_id() -> str:
+        allocation = _fixed_allocation.get()
+        if allocation is None:
+            return str(uuid.uuid4())
+        operation_id, index, owner = allocation
+        if owner is not asyncio.current_task():
+            raise RuntimeError("Fixed allocation owner cannot be inherited by a child writer")
+        _fixed_allocation.set((operation_id, index + 1, owner))
+        return str(uuid.uuid5(uuid.UUID(operation_id), str(index)))
 
     _QUEUE_STATE_SCHEMA = """
         CREATE TABLE IF NOT EXISTS queue_state (
@@ -203,7 +228,7 @@ class QueueRepository:
                 )
             connection.execute("DELETE FROM queue_items WHERE position > 0")
 
-            queue_item_id = str(uuid.uuid4())
+            queue_item_id = self._new_item_id()
             connection.execute(
                 """
                 INSERT INTO queue_items(
@@ -262,7 +287,7 @@ class QueueRepository:
             for position, song_id in enumerate(
                 playback_context.ordered_song_ids
             ):
-                queue_item_id = str(uuid.uuid4())
+                queue_item_id = self._new_item_id()
                 connection.execute(
                     """
                     INSERT INTO queue_items(
@@ -417,7 +442,7 @@ class QueueRepository:
                 WHERE position > 0
                 """
             )
-            queue_item_id = str(uuid.uuid4())
+            queue_item_id = self._new_item_id()
             connection.execute(
                 """
                 INSERT INTO queue_items(
@@ -455,7 +480,7 @@ class QueueRepository:
                 """
             ).fetchone()
             position = int(row[0] or 0) + 1
-            queue_item_id = str(uuid.uuid4())
+            queue_item_id = self._new_item_id()
             connection.execute(
                 """
                 INSERT INTO queue_items(
@@ -677,6 +702,7 @@ class QueueRepository:
         max_items: int = 5,
         allow_current_repeat: bool = False,
         expected_revision: int | None = None,
+        planned_items: tuple[QueueItem, ...] | None = None,
     ) -> list[QueueItem]:
         if max_items <= 0 or not song_ids:
             return []
@@ -749,12 +775,20 @@ class QueueRepository:
             ).fetchone()
             start_position = int(row[0] or 0) + 1
 
-            created: list[QueueItem] = []
-            for offset, song_id in enumerate(
-                pending_candidates,
-                start=start_position,
+            if planned_items is not None and (
+                tuple(item.song_id for item in planned_items) != tuple(pending_candidates)
+                or len({item.queue_item_id for item in planned_items}) != len(planned_items)
+                or any(item.source != "AUTOPLAY"
+                       or item.playback_context_id != playback_context_id
+                       or item.position != start_position + index
+                       for index, item in enumerate(planned_items))
             ):
-                queue_item_id = str(uuid.uuid4())
+                raise ValueError("Invalid fixed AutoPlay occurrences")
+            created: list[QueueItem] = []
+            for index, song_id in enumerate(pending_candidates):
+                offset = start_position + index
+                queue_item_id = (planned_items[index].queue_item_id
+                                 if planned_items is not None else self._new_item_id())
                 connection.execute(
                     """
                     INSERT INTO queue_items(
@@ -795,6 +829,28 @@ class QueueRepository:
                 """
             ).fetchall()
             return [self._item_from_row(row) for row in rows]
+
+        return await run_transaction(self.path, operation)
+
+    async def adopt_current(
+        self, previous_id: str, target_id: str, *, expected_revision: int,
+    ) -> QueueSnapshot:
+        """Adopt one pending occurrence without claiming unobserved departures."""
+        async def operation(connection):
+            items = self._list_from_connection(connection)
+            current = next((item for item in items if item.position == 0), None)
+            target = next((item for item in items if item.queue_item_id == target_id), None)
+            if current is None or current.queue_item_id != previous_id:
+                raise ValueError("Adoption must identify the previous current occurrence")
+            if target is None or target.position <= 0:
+                raise ValueError("Adoption target must be an existing pending occurrence")
+            self._reserve_mutation(connection, expected_revision)
+            connection.execute("UPDATE queue_items SET position = position - 1 WHERE position < 0")
+            connection.execute("UPDATE queue_items SET position = -1 WHERE queue_item_id = ?", (previous_id,))
+            execution = [target, *(item for item in items if item.position > 0 and item.queue_item_id != target_id)]
+            for position, item in enumerate(execution):
+                connection.execute("UPDATE queue_items SET position = ? WHERE queue_item_id = ?", (position, item.queue_item_id))
+            return QueueSnapshot(revision=self._current_revision(connection), items=tuple(self._list_from_connection(connection)))
 
         return await run_transaction(self.path, operation)
 

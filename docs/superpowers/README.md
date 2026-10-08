@@ -14,17 +14,18 @@
 
 发生冲突时，不通过增加另一份解释文档解决；回到 spec、主 Plan、实际代码/测试定位冲突，并在必要时修正唯一权威来源。
 
-## 当前 Task 5 最小读取集
+## 当前 Task 8 最小读取集
 
-实施 Task 5 或其 corrective 时，只需默认读取：
+Task 0–7、D6及Task6后端功能验收已完成；D6最终逐合同证明位于 `archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md`，Task6 Batch13状态位于 `archive/task-6/2026-10-04-task-6-batch-13-acceptance.md`。原本地DB保留未验证审计事件单独保留，不宣称已恢复。
 
-- 与本次范围直接相关的 `specs/`；
-- 主 Implementation Plan 的 Task 5、依赖矩阵和必要的全局约束；
-- `plans/2026-09-29-mpd-server-task-5-batch-plan.md`；
-- `plans/2026-10-01-task-5-contract-architecture-corrective-acceptance.md`；
+开始 Task 8 时默认读取：
+
+- 与本次范围直接相关的 `specs/`，包括 Web/PWA visual design；
+- 主 Implementation Plan 的 Task 8、依赖矩阵和全局约束；
+- Task 6 plan 中仍约束客户端消费的快照、重连、actual/binding合同；
 - 本次将修改的实际代码与测试。
 
-只有需要追溯某项历史决定、旧测试证据或旧 commit 时，才读取 `archive/`。
+Task 8的执行计划应在开始该Task时另行制定。本轮不提前实现UI。只有需要追溯历史决定或测试证据时，才读取相应 `archive/`。
 
 ## Relationship / Invariant Test Gate
 

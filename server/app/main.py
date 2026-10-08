@@ -2,6 +2,7 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Lock
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -14,7 +15,7 @@ from server.app.api.playback import router as playback_router
 from server.app.api.playlists import router as playlists_router
 from server.app.api.realtime import router as realtime_router
 from server.app.api.system import router as system_router
-from server.app.player.capabilities import MPDCapabilities
+from server.app.player.capabilities import MPDCapabilities, VerifiedPlayerPort
 from server.app.player.mpd_adapter import MPDAdapter
 from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
@@ -34,6 +35,7 @@ from server.app.services.library_service import (
 )
 from server.app.services.mpd_info_service import MPDInfoService
 from server.app.services.output_manager import OutputManager
+from server.app.services.playback_recovery_runner import PlaybackRecoveryRunner
 from server.app.services.playback_service import PlaybackService
 from server.app.services.playlist_service import PlaylistService
 from server.app.services.queue_manager import QueueManager
@@ -41,94 +43,130 @@ from server.app.services.realtime_coordinator import RealtimeCoordinator
 from server.app.services.state_observer import StateObserver
 from server.app.services.state_service import StateService
 
+_recovery_owner_lock = Lock()
+_recovery_owner: object | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    database_path = os.environ.get("DATABASE_PATH", "music-server.db")
-    await initialize_database(database_path)
-
-    library_repository = LibraryRepository(database_path)
-    playlist_repository = PlaylistRepository(database_path)
-    queue_repository = QueueRepository(database_path)
-    playback_state_repository = PlaybackStateRepository(database_path)
-    history_repository = HistoryRepository(database_path)
-    idempotency_repository = IdempotencyRepository(database_path)
-
-    coordinator = RealtimeCoordinator(database_path, getattr(app.state, 'event_publisher', None))
-    library_service = LibraryService(library_repository)
-    library_scanner = LibraryScanner(
-        library_repository, coordinator=coordinator, event_publisher=coordinator,
-    )
-    playlist_service = PlaylistService(
-        playlist_repository, coordinator=coordinator, event_publisher=coordinator,
-    )
-    collection_service = CollectionService(library_service, playlist_service)
-    queue_manager = QueueManager(
-        queue_repository,
-        playback_state_repository,
-        playlist_repository,
-    )
-    history_service = HistoryService(queue_repository, history_repository)
-    autoplay = AutoPlay(
-        queue_repository,
-        library_repository,
-        playback_state_repository,
-    )
-    player = MPDAdapter(
-        os.environ.get("MPD_HOST", "127.0.0.1"),
-        port=int(os.environ.get("MPD_PORT", "6600")),
-        password=os.environ.get("MPD_PASSWORD"),
-    )
-    playback_service = PlaybackService(
-        queue_manager=queue_manager,
-        history_service=history_service,
-        autoplay=autoplay,
-        player=player,
-        library_repository=library_repository,
-        coordinator=coordinator, event_publisher=coordinator,
-    )
-
-    # Capability loading belongs to Task 10. Until verification is explicitly
-    # injected, system reads report unavailable facts without running a probe.
-    capabilities = getattr(app.state, "mpd_capabilities", None)
-    if capabilities is None:
-        capabilities = MPDCapabilities.from_commands(set())
-    app.state.output_manager = OutputManager(
-        player=player,
-        capabilities=capabilities,
-        operation_runner=playback_service.run_output_operation,
-        selector=getattr(app.state, "output_selector", None),
-        event_publisher=getattr(app.state, 'event_publisher', None) or coordinator,
-        coordinator=coordinator,
-    )
-    app.state.mpd_info_service = MPDInfoService(player=player, capabilities=capabilities)
-
-    app.state.library_service = library_service
-    app.state.library_scanner = library_scanner
-    app.state.playlist_service = playlist_service
-    app.state.collection_service = collection_service
-    app.state.queue_manager = queue_manager
-    app.state.playback_service = playback_service
-    app.state.history_service = history_service
-    app.state.idempotency_service = IdempotencyService(idempotency_repository)
-
-    app.state.realtime_coordinator = coordinator
-    app.state.state_service = StateService(
-        coordinator=coordinator, queue_manager=queue_manager, history_service=history_service,
-        library_service=library_service, playback_service=playback_service,
-        output_snapshot=app.state.output_manager.get_cached_state,
-        output_observation=app.state.output_manager.get_observation,
-    )
-    observer = StateObserver(playback=playback_service, output=app.state.output_manager)
-    app.state.state_observer = observer
-    task = asyncio.create_task(observer.run(), name='state-observer')
-    app.state.state_observer_task = task
+    global _recovery_owner
+    injected_capabilities = getattr(app.state, "mpd_capabilities", None)
+    recovery_enabled = bool(getattr(app.state, "recovery_enabled", False) and injected_capabilities is not None)
+    owner = object()
+    if recovery_enabled:
+        required = ("read_execution_sample", "queue_entries", "queue_add", "queue_delete", "queue_move")
+        if not all(injected_capabilities.supports_operation(operation) for operation in required):
+            raise RuntimeError("Playback recovery capabilities are not verified")
+        # Process-local exclusion only; deployment must use one control process.
+        with _recovery_owner_lock:
+            if _recovery_owner is not None:
+                raise RuntimeError("Playback recovery control owner already exists")
+            _recovery_owner = owner
     try:
-        yield
+        database_path = os.environ.get("DATABASE_PATH", "music-server.db")
+        await initialize_database(database_path)
+
+        library_repository = LibraryRepository(database_path)
+        playlist_repository = PlaylistRepository(database_path)
+        queue_repository = QueueRepository(database_path)
+        playback_state_repository = PlaybackStateRepository(database_path)
+        history_repository = HistoryRepository(database_path)
+        idempotency_repository = IdempotencyRepository(database_path)
+
+        coordinator = RealtimeCoordinator(database_path, getattr(app.state, 'event_publisher', None))
+        library_service = LibraryService(library_repository)
+        library_scanner = LibraryScanner(
+            library_repository, coordinator=coordinator, event_publisher=coordinator,
+        )
+        playlist_service = PlaylistService(
+            playlist_repository, coordinator=coordinator, event_publisher=coordinator,
+        )
+        collection_service = CollectionService(library_service, playlist_service)
+        queue_manager = QueueManager(
+            queue_repository,
+            playback_state_repository,
+            playlist_repository,
+        )
+        history_service = HistoryService(queue_repository, history_repository)
+        autoplay = AutoPlay(
+            queue_repository,
+            library_repository,
+            playback_state_repository,
+        )
+        player = getattr(app.state, "player", None)
+        if player is None:
+            player = MPDAdapter(
+                os.environ.get("MPD_HOST", "127.0.0.1"),
+                port=int(os.environ.get("MPD_PORT", "6600")),
+                password=os.environ.get("MPD_PASSWORD"),
+            )
+        if recovery_enabled:
+            player = VerifiedPlayerPort(player, injected_capabilities)
+        playback_service = PlaybackService(
+            queue_manager=queue_manager,
+            history_service=history_service,
+            autoplay=autoplay,
+            player=player,
+            library_repository=library_repository,
+            coordinator=coordinator, event_publisher=coordinator,
+        )
+
+        # Capability loading belongs to Task 10. Until verification is explicitly
+        # injected, system reads report unavailable facts without running a probe.
+        capabilities = getattr(app.state, "mpd_capabilities", None)
+        if capabilities is None:
+            capabilities = MPDCapabilities.from_commands(set())
+        app.state.output_manager = OutputManager(
+            player=player,
+            capabilities=capabilities,
+            operation_runner=playback_service.run_output_operation,
+            selector=getattr(app.state, "output_selector", None),
+            event_publisher=getattr(app.state, 'event_publisher', None) or coordinator,
+            coordinator=coordinator,
+        )
+        app.state.mpd_info_service = MPDInfoService(player=player, capabilities=capabilities)
+
+        app.state.library_service = library_service
+        app.state.library_scanner = library_scanner
+        app.state.playlist_service = playlist_service
+        app.state.collection_service = collection_service
+        app.state.queue_manager = queue_manager
+        app.state.playback_service = playback_service
+        app.state.history_service = history_service
+        app.state.idempotency_service = IdempotencyService(idempotency_repository)
+
+        app.state.realtime_coordinator = coordinator
+        app.state.state_service = StateService(
+            coordinator=coordinator, queue_manager=queue_manager, history_service=history_service,
+            library_service=library_service, playback_service=playback_service,
+            output_snapshot=app.state.output_manager.get_cached_state,
+            output_observation=app.state.output_manager.get_observation,
+        )
+        # Complete existing local Queue initialization before read-only tasks run.
+        await queue_repository.get_snapshot()
+        observer = StateObserver(playback=playback_service, output=app.state.output_manager)
+        app.state.state_observer = observer
+        task = asyncio.create_task(observer.run(), name='state-observer')
+        app.state.state_observer_task = task
+        runner = PlaybackRecoveryRunner(playback_service) if recovery_enabled else None
+        recovery_task = (asyncio.create_task(runner.run(), name='playback-recovery')
+                         if runner is not None else None)
+        app.state.playback_recovery_runner = runner
+        app.state.playback_recovery_task = recovery_task
+        try:
+            yield
+        finally:
+            if runner is not None:
+                await runner.close()
+                await asyncio.gather(recovery_task, return_exceptions=True)
+            await observer.close()
+            await asyncio.gather(task, return_exceptions=True)
+            coordinator.close()
     finally:
-        await observer.close()
-        await asyncio.gather(task, return_exceptions=True)
-        coordinator.close()
+        if recovery_enabled:
+            with _recovery_owner_lock:
+                if _recovery_owner is owner:
+                    _recovery_owner = None
 
 
 app = FastAPI(title="MPD-Server", lifespan=lifespan)

@@ -81,9 +81,11 @@ def test_stop_transport_failure_rolls_back_and_retries(real_client, failure):
     retry = mutate(client, "POST", "/api/playback/stop", key="stop-failure")
     assert retry.status_code == 200, retry.text
     assert_execution_relationship(service, player)
-    assert [
-        (e.song_id, e.reason) for e in run(service.history_service.list_history())
-    ] == [("a", "STOP")]
+    # Reconnect changes the connection epoch, so the old active occurrence can no
+    # longer be certified as the target of this successful retry.
+    assert run(service.history_service.list_history()) == []
+    assert service.history_service.active_event is None
+    assert service.history_service.session_id is None
     final = server_snapshot(service)
     assert (
         mutate(client, "POST", "/api/playback/stop", key="stop-failure").json()

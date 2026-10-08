@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.app.models.queue import PlaybackState, QueueItem
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
@@ -297,6 +297,7 @@ async def seek(
 
 @router.post("/collections/play", response_model=PlaybackStateResponse | None)
 async def play_collection(
+    http_request: Request,
     request: CollectionRequest,
     collection_service: Annotated[
         CollectionService, Depends(get_collection_service)
@@ -313,7 +314,10 @@ async def play_collection(
             random_seed=request.random_seed,
         )
         context = collection_service.create_playback_context(collection)
-        return _playback_state_response(await playback_service.play_context(context))
+        return _playback_state_response(await playback_service.play_context(
+            context, request_id=http_request.headers.get("Idempotency-Key"),
+            request_payload=request.model_dump_json(),
+        ))
     except Exception as exc:
         _raise_playback_http_error(exc)
         raise

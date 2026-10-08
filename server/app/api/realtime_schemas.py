@@ -27,8 +27,25 @@ class HistoryAvailabilityResponse(BaseModel):
     session_id: str | None
 
 
+class ActualCurrentResponse(BaseModel):
+    entry_id: int | None = None
+    uri: str | None = None
+    position: int | None = Field(default=None, ge=0)
+
+
 class PlaybackObservationResponse(BaseModel):
     actual_state: Literal["playing", "paused", "stopped"] | None
+    actual_current: ActualCurrentResponse | None = None
+    actual_freshness: Literal["fresh", "stale", "unknown"] = "unknown"
+    bound_queue_item_id: str | None = None
+    sync_status: Literal[
+        "CONFIRMED",
+        "UNBOUND",
+        "EXTERNAL_DRIFT",
+        "UNCONFIRMED_STOP",
+        "SYNC_FAILED",
+        "NO_CANDIDATES",
+    ] = "UNBOUND"
     matches_current: bool | None
     position_seconds: float | None = Field(ge=0)
     duration_seconds: float | None = Field(ge=0)

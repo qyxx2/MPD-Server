@@ -87,7 +87,9 @@ def test_unknown_recovery_preserves_all_authorities(real_client, monkeypatch, dr
     if drift in {"stop", "elapsed-at-end"}:
         run(player.stop())
     elif drift == "foreign":
-        run(player.play("b.flac"))
+        # A genuinely foreign MPD entry, rather than the mapped pending b.
+        foreign_id = run(player.queue_add("d.flac"))
+        run(player.queue_play(foreign_id))
     elif drift == "duplicate":
         run(player.queue_delete(run(player.queue_entries())[0].mpd_song_id))
         new_id = run(player.queue_add("a.flac"))
@@ -103,16 +105,17 @@ def test_unknown_recovery_preserves_all_authorities(real_client, monkeypatch, dr
         new_id = run(player.queue_add("b.flac"))
         run(player.queue_move(new_id, run(player.queue_entries())[1].mpd_song_id))
     if drift in {"missing-id", "elapsed-at-end"}:
-        original = player.status
+        original = player.read_execution_sample
 
-        async def status():
+        async def sample():
             actual = await original()
-            return actual.model_copy(update=(
+            status = actual.status.model_copy(update=(
                 {"song_id": None} if drift == "missing-id" else
-                {"elapsed_seconds": actual.duration_seconds}
+                {"elapsed_seconds": actual.status.duration_seconds}
             ))
+            return actual.model_copy(update={"status": status})
 
-        monkeypatch.setattr(player, "status", status)
+        monkeypatch.setattr(player, "read_execution_sample", sample)
     before = authorities(service)
     controls = capture_controls(monkeypatch, player)
     for _ in range(2):
@@ -121,7 +124,12 @@ def test_unknown_recovery_preserves_all_authorities(real_client, monkeypatch, dr
         assert result.reconciliation_required is True
         assert result.playback == before[1][1]
         assert result.transition_id is None
-        assert authorities(service) == before
+        after = authorities(service)
+        assert after[:2] == before[:2]
+        if drift in {"foreign", "duplicate", "queue-mismatch", "pending-duplicate"}:
+            assert after[2] is None  # External continuity is never restored by rollback.
+        else:
+            assert after[2] == before[2]
         assert controls == []
 
 
@@ -147,12 +155,14 @@ def test_recovery_source_failure_preserves_authorities(real_client, monkeypatch,
         player.disconnect()
         expected = PlayerUnavailable
     else:
-        player.fail_next(failure, "source failure")
+        player.fail_next("read_execution_sample" if failure == "status" else failure, "source failure")
         expected = PlayerCommandError
     controls = capture_controls(monkeypatch, player)
     with pytest.raises(expected):
         run(service.reconcile_external_status(evidence=evidence))
-    assert authorities(service) == before
+    after = authorities(service)
+    assert after[:2] == before[:2]
+    assert after[2] is None if failure != "validator-command" else after[2] == before[2]
     assert controls == []
 
 
@@ -195,13 +205,13 @@ def test_natural_completion_promotes_confirmed_successor(real_client, monkeypatc
         run(player.stop())
     controls = capture_controls(monkeypatch, player)
     if pending == "confirmation-fails":
-        original = player.status
+        original = player.read_execution_sample
 
         async def wrong():
             actual = await original()
-            return actual.model_copy(update={"song_id": 999}) if actual.state == PlayerState.PLAYING else actual
+            return actual.model_copy(update={"status": actual.status.model_copy(update={"song_id": 999})}) if actual.status.state == PlayerState.PLAYING else actual
 
-        monkeypatch.setattr(player, "status", wrong)
+        monkeypatch.setattr(player, "read_execution_sample", wrong)
         with pytest.raises(PlaybackReconciliationError):
             run(service.reconcile_external_status(evidence=evidence))
         assert server_snapshot(service) == before
@@ -429,16 +439,16 @@ def test_bound_external_pause_resume_preserves_history(real_client, monkeypatch,
     generation = service._recovery.business_generation
     controls = capture_controls(monkeypatch, player)
     if transport == "confirmation-conflict":
-        original = player.status
+        original = player.read_execution_sample
         reads = 0
 
         async def inconsistent():
             nonlocal reads
             reads += 1
             actual = await original()
-            return actual if reads == 1 else actual.model_copy(update={"song_id": 999})
+            return actual if reads == 1 else actual.model_copy(update={"status": actual.status.model_copy(update={"song_id": 999})})
 
-        monkeypatch.setattr(player, "status", inconsistent)
+        monkeypatch.setattr(player, "read_execution_sample", inconsistent)
         with pytest.raises(PlaybackReconciliationError):
             run(service.reconcile_external_status())
         assert server_snapshot(service) == before
@@ -574,15 +584,13 @@ def test_recovery_rollback_retry_keeps_identity(real_client, monkeypatch, target
 
     with monkeypatch.context() as fault:
         if failure == "confirmation":
-            original = player.status
-            reads = 0
+            original = player.read_execution_sample
 
             async def wrong():
-                nonlocal reads
-                reads += 1
                 actual = await original()
-                return actual if reads == 1 else actual.model_copy(update={"state": PlayerState.PAUSED})
-            fault.setattr(player, "status", wrong)
+                # Fail the execution confirmation, preserving the isolated legacy cause.
+                return actual.model_copy(update={"status": actual.status.model_copy(update={"state": PlayerState.PAUSED})})
+            fault.setattr(player, "read_execution_sample", wrong)
         elif failure == "history-write":
             fault.setattr(service.history_service.history_repository, "record_history", explode)
         elif failure == "queue-write":
@@ -890,7 +898,8 @@ def test_recovery_serializes_with_new_current_and_commit_visibility(real_client,
     assert final[1].song_id == "c" and final[3].song_id == "c"
     if first == "mutation":
         assert result.outcome == "UNKNOWN"
-        assert [(e.song_id, e.reason) for e in final[2]] == [("a", "SWITCH_AWAY")]
+        # prepare_completion externally stopped A before the explicit takeover.
+        assert final[2] == []
     else:
         receipt = service._recovery.get_receipt(identity, evidence)
         assert receipt.playback.song_id == "b"
@@ -961,29 +970,34 @@ def test_completion_retains_existing_played_occurrences(real_client):
 def test_recovery_binding_uses_the_confirmed_execution_sample(real_client, monkeypatch):
     """A late same-URI replacement must not silently establish a new binding."""
     _, player, service, evidence = prepare_completion(real_client, "successor")
-    original = player.queue_entries
-    reads = 0
+    original_entries = player.queue_entries
+    original_sample = player.read_execution_sample
+    confirmed = None
 
     async def replace_last():
-        entries = await original()
+        entries = await original_entries()
         last = entries[-1]
         await player.queue_delete(last.mpd_song_id)
         await player.queue_add(last.song_uri)
 
-    async def late_read():
-        nonlocal reads
-        reads += 1
-        if reads == 3:
-            await replace_last()
-        return await original()
+    async def sample_then_drift():
+        nonlocal confirmed
+        confirmed = await original_sample()
+        await replace_last()
+        return confirmed
 
-    monkeypatch.setattr(player, "queue_entries", late_read)
+    monkeypatch.setattr(player, "read_execution_sample", sample_then_drift)
     result = run(service.reconcile_external_status(evidence=evidence))
     assert result.outcome == "APPLIED"
     identity = service._recovery.identity(evidence)
-    assert service._observations.binding[6] == service._recovery.execution[identity]
-    monkeypatch.setattr(player, "queue_entries", original)
-    run(replace_last())
+    binding = run(service.get_execution_binding())
+    assert binding.entries == service._recovery.execution[identity]
+    assert tuple((entry.mpd_song_id, entry.song_uri) for entry in confirmed.entries) == tuple(
+        (mpd_id, uri) for _, mpd_id, uri in binding.entries
+    )
+    assert binding.playlist_version == confirmed.playlist_version
+    monkeypatch.setattr(player, "read_execution_sample", original_sample)
     before = authorities(service)
     assert run(service.reconcile_external_status()).outcome == "UNKNOWN"
-    assert authorities(service) == before
+    assert authorities(service)[:2] == before[:2]
+    assert run(service.get_execution_binding()) is None

@@ -1,10 +1,12 @@
-# Task 6 Batch 13 recovery proof / blocked final acceptance
+# Task 6 Batch 13 recovery proof / PASSED final acceptance
+
+**当前有效状态（2026-10-09）：Batch13 / Task6 functional final PASSED。D6 S10/S11/S12已通过；原本地DB保留未验证独立记录；全部11 RT rows和RT-ACTUAL逐项追溯见[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。历史BLOCKED记录保留，不能替代最新证据。**
 
 日期：2026-10-04（Asia/Shanghai）。仅本轮执行证据，不新增/修改合同语义。
 
-**最新状态：既有重连恢复 proof 的历史 GREEN 保留；原版 MPD 新合同已定义，新实现/联合验收未执行；Batch13 / Task6 final BLOCKED（D6-RECOVERY）。**
+**2026-10-04历史状态：既有重连恢复 proof 的历史 GREEN 保留；原版 MPD 新合同已定义，新实现/联合验收未执行；Batch13 / Task6 final BLOCKED（D6-RECOVERY）。**
 
-> 下文各轮结果均有各自基线；最新门禁见文末“原版 MPD 合同迁移”，不把历史状态作为新实施指令。
+> 下文各轮结果均有各自基线；最新门禁见文末“2026-10-09 S12 final acceptance”，不把历史状态作为新实施指令。
 
 ## 真实基线与 scope
 
@@ -149,7 +151,7 @@ branch=`feature/task-6-realtime-state`，HEAD=`6b05d7f434024488a736db5be83ada82b
 
 consumer Step2.1–Step3 已实施/验收，P 的旧时态/checklist 已同步；历史 RED 保留。生产因果来源/validator 尚未接线，D6-SOURCE 继续 BLOCKED，完整 D6/Batch13/Task6 final NOT COMPLETE。未进入 T §5/Batch13 最终序列；355/1087 等仅是前次记录，本次未重跑，不以三文件 GREEN 解除来源门禁。S1 及后续未执行，未启用恢复 loop，未 commit/push/PR/merge。
 
-## 2026-10-04 原版 MPD 合同迁移（最新 gate）
+## 2026-10-04 原版 MPD 合同迁移（当时 gate；最新见S12）
 
 当前HEAD=`651aade83d0df52601f4555e0a682c9f16afd25e`，branch=`feature/task-6-realtime-state`。本轮文档修订；两份Batch13 Python proofs未改、未运行。旧源码/consumer存在已核对，历史GREEN不作为本轮执行证据。
 
@@ -160,3 +162,8 @@ consumer Step2.1–Step3 已实施/验收，P 的旧时态/checklist 已同步�
 **Relationship Gate REQUIRED / BLOCKED；Contract Matrix新合同DEFINED / acceptance BLOCKED；D6、Batch13、Task6 final仍BLOCKED。** 不具备以Task6完成为前提进入Task8的验收条件。没有新实现完成、目标能力通过或新pytest GREEN声明；未commit/push/PR。
 
 R1 同步（2026-10-04）：用户已接受重启后“恢复 actual 显示、明确播放操作经确认重建业务绑定”；仅刷新/换浏览器不丢失有效服务绑定。当前合同已定义，旧计划历史已从 P 移入 task-4 归档，当前执行仍仅 P 的 S0–S12。新实现/自动测试/目标运行时未完成，final 仍 BLOCKED。
+
+
+## 2026-10-09 S12 final acceptance
+
+D6已按S12完整顺序执行自动验收；本批指定selector6、两文件14、realtime251、invariants/API1072及server全量1355均fresh GREEN；七组T5 R集合逐条通过，scoped Ruff/diff/link/status通过。逐RT row和继承Contract的Spec→implementation→proof→fresh result只记录于[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12，避免复制领域权威。Batch13 / Task6 functional final PASSED；本轮用户已授权提交、push、PR及合规合并main。原本地DB保留UNVERIFIED独立列为审计事件，不改变产品合同通过结论。旧API测试本地DB fallback隔离事件及owner修复/重新运行事实均保留于该记录，不能声称整个窗口无runtime DB副作用。Task8UI、Task12DAC/HTTPS仍未验收。

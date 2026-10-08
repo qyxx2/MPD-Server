@@ -74,11 +74,12 @@ class SampleMPDServer:
         song_position = 1 if self.conflict == "current" and second_read else 0
         song_id = 11 if self.conflict == "current" and second_read else 10
         playlist_length = 3 if self.conflict == "length" else self.entry_count
+        sampled_state = "pause" if self.conflict == "state" and second_read else self.state
         lines = [
             "partition: default\n",
             f"playlist: {playlist_version}\n",
             f"playlistlength: {playlist_length}\n",
-            f"state: {self.state}\n",
+            f"state: {sampled_state}\n",
             "single: 0\n",
             "consume: 0\n",
             "repeat: 1\n",
@@ -127,7 +128,7 @@ async def with_adapter(
 
 @pytest.mark.parametrize(
     "conflict",
-    ["current", "version", "length", "duplicate-id", "position"],
+    ["current", "state", "version", "length", "duplicate-id", "position"],
 )
 def test_sample_rejects_torn_current_and_queue(conflict: str) -> None:
     async def run() -> None:

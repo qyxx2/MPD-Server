@@ -350,7 +350,7 @@ def _execution_sample_from_responses(
         return None
     before_data = before.as_dict()
     after_data = after.as_dict()
-    stable_fields = ("partition", "playlist", "playlistlength", "song", "songid")
+    stable_fields = ("partition", "playlist", "playlistlength", "song", "songid", "state")
     if any(_scalar(before_data.get(key)) != _scalar(after_data.get(key)) for key in stable_fields):
         return None
 
