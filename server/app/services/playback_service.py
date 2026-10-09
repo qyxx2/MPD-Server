@@ -5,10 +5,13 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from functools import wraps
+from math import isfinite
+from time import monotonic
 from typing import Concatenate, ParamSpec, TypeVar
 from uuid import UUID, uuid5
 
 from server.app.models.library import Song
+from server.app.models.playback_control import PlaybackControlTarget
 from server.app.models.queue import PlaybackContext, PlaybackState, QueueItem
 from server.app.models.realtime import PlaybackObservation
 from server.app.models.recovery import (
@@ -35,6 +38,10 @@ from server.app.services.autoplay import AutoPlay
 from server.app.services.events import EventPublisher, PlaybackChangedEvent
 from server.app.services.history_service import HistoryService
 from server.app.services.output_operation import OutputOperationLifecycle
+from server.app.services.playback_control import (
+    PlaybackControlTargets,
+    PlaybackTargetConflictError,
+)
 from server.app.services.playback_execution import ExecutionSynchronizer
 from server.app.services.playback_observation import PlaybackObservations
 from server.app.services.playback_recovery import RecoveryJournal
@@ -211,7 +218,10 @@ class PlaybackService:
         self._event_publisher = event_publisher
         self._coordinator = coordinator
         self._observations = PlaybackObservations(self, observation_clock, observation_max_age)
-        self._recovery = RecoveryJournal(queue_manager.queue_repository.path)
+        self._control_targets = PlaybackControlTargets(queue_manager.queue_repository.path)
+        self._recovery = RecoveryJournal(
+            queue_manager.queue_repository.path, invalidate_targets=self._control_targets.invalidate,
+        )
         self._completion_validator = completion_validator
         self._transport_changes: dict[object, list[dict[str, object]]] = {}
 
@@ -246,6 +256,33 @@ class PlaybackService:
             return self._recovery.binding
 
         return await run_transaction(self.queue_manager.queue_repository.path, read)
+
+    def _control_identity(self) -> tuple[object, ...] | None:
+        binding = self._recovery.binding
+        if binding is None or not binding.entries:
+            return None
+        return (binding.service_epoch, binding.connection_epoch, binding.partition,
+                binding.binding_generation, binding.entries[0][0], self._control_targets.generation)
+
+    async def _require_control_target(self, target: PlaybackControlTarget) -> ExecutionSample:
+        await self.get_execution_binding()
+        if self._control_identity() != self._control_targets.identity:
+            self._control_targets.invalidate()
+        self._control_targets.require(target)
+        sample = await self._read_bound_sample()
+        binding = await self.get_execution_binding()
+        status = sample.status
+        if (binding is None or not binding.entries
+                or self._control_identity() != self._control_targets.identity
+                or status.state not in {PlayerState.PLAYING, PlayerState.PAUSED}
+                or status.song_id != binding.entries[0][1]
+                or status.song_uri != binding.entries[0][2] or status.song_position != 0
+                or sample.single != "0" or sample.consume or status.random or status.repeat
+                or sample.error is not None):
+            self._control_targets.invalidate()
+            raise PlaybackTargetConflictError("Playback control target no longer matches actual current")
+        self._control_targets.require(target)
+        return sample
 
     async def _read_execution_sample(self) -> ExecutionSample:
         try:
@@ -805,15 +842,71 @@ class PlaybackService:
             autoplay_enabled=state.autoplay_enabled,
         )
 
+    async def _confirm_control_transport(
+        self, target: PlaybackControlTarget, *, expected_state: PlayerState,
+        position: float | None, started: float,
+    ) -> PlayerStatus:
+        try:
+            sample = await self._require_control_target(target)
+        except PlaybackTargetConflictError as error:
+            raise PlaybackReconciliationError("MPD control target changed after command") from error
+        status = sample.status
+        elapsed = status.elapsed_seconds
+        allowance = monotonic() - started + 1 if expected_state == PlayerState.PLAYING else 0.05
+        if (status.state != expected_state or (position is not None and (
+                elapsed is None or elapsed < position - 0.05 or elapsed > position + allowance))):
+            self._control_targets.invalidate()
+            raise PlaybackReconciliationError("MPD did not confirm transport state and position")
+        return status
+
     @_atomic_history_transition
     @_transport_change
-    async def seek(self, seconds: float) -> PlaybackState | None:
+    async def resume(self, target: PlaybackControlTarget) -> PlaybackState:
+        sample = await self._require_control_target(target)
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
+            raise PlaybackTargetConflictError("Playback control target has no active session")
+        started = monotonic()
+        if sample.status.state == PlayerState.PAUSED:
+            if sample.status.elapsed_seconds is None or not isfinite(sample.status.elapsed_seconds):
+                raise PlaybackReconciliationError("MPD resume position is unknown")
+            # Never select/rebuild execution or seek: parameterless play resumes MPD.
+            on_transaction_rollback(self._recovery.path, self._control_targets.invalidate)
+            await self.player.play()
+        status = await self._confirm_control_transport(
+            target, expected_state=PlayerState.PLAYING,
+            position=sample.status.elapsed_seconds, started=started,
+        )
+        if sample.status.state == PlayerState.PLAYING and state.state == "PLAYING":
+            return state
+        return await self._save_confirmed_status(
+            status, song_id=state.song_id, context_id=state.playback_context_id,
+            autoplay_enabled=state.autoplay_enabled,
+        )
+
+    @_atomic_history_transition
+    @_transport_change
+    async def seek(
+        self, seconds: float, *, target: PlaybackControlTarget | None = None,
+    ) -> PlaybackState | None:
+        state = await self.queue_manager.get_playback_state()
+        if state is None or state.state == "STOPPED":
+            if target is not None:
+                self._control_targets.invalidate()
+                raise PlaybackTargetConflictError("Playback control target has no active session")
             return state
 
-        await self.player.seek(seconds)
-        status = await self.player.status()
+        if target is not None:
+            sample = await self._require_control_target(target)
+            started = monotonic()
+            on_transaction_rollback(self._recovery.path, self._control_targets.invalidate)
+            await self.player.seek(seconds)
+            status = await self._confirm_control_transport(
+                target, expected_state=sample.status.state, position=seconds, started=started,
+            )
+        else:
+            await self.player.seek(seconds)
+            status = await self.player.status()
         return await self._save_confirmed_status(
             status,
             song_id=state.song_id,
@@ -829,6 +922,7 @@ class PlaybackService:
 
         await self._discard_unconfirmed_history_active()
 
+        self._control_targets.invalidate()
         await self.player.stop()
         status = await self.player.status()
         if status.state != PlayerState.STOPPED:
@@ -1282,6 +1376,7 @@ class PlaybackService:
         return result
 
     async def _prepare_play(self, song: Song) -> PlayerStatus:
+        self._control_targets.invalidate()
         journal = self._recovery
         operation_id = self._execution_owner[1]
         allocation_id = operation_id

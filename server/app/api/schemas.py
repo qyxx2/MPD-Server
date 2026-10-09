@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
+
+from server.app.models.playback_control import PlaybackControlTarget
 
 CollectionSourceType = Literal[
     "ALBUM",
@@ -247,6 +250,19 @@ class SeekRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     seconds: float = Field(ge=0)
+    target: PlaybackControlTarget | SkipJsonSchema[None] = None
+
+    @model_validator(mode="after")
+    def reject_explicit_null_target(self):
+        if "target" in self.model_fields_set and self.target is None:
+            raise ValueError("target must not be null when provided")
+        return self
+
+
+class ResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target: PlaybackControlTarget
 
 
 class QueueReorderRequest(BaseModel):

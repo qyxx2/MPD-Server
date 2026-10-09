@@ -133,6 +133,8 @@ class PlaybackObservations:
         # Confirmation is owned by Service. This cache cannot create a mapping.
         self._preserve()
         self._confirmed_identity = await self._identity()
+        # A controlled rebind can retire a target even when current is unchanged.
+        await self.get()
 
     async def get(self) -> PlaybackObservation:
         async def read(_):
@@ -162,6 +164,12 @@ class PlaybackObservations:
                     'bound_queue_item_id': None,
                     'sync_status': self._effective_sync_status(),
                 }, deep=True))
+            target = self.cache.control_target
+            if target is not None and (
+                    self.cache.freshness != 'fresh' or self.cache.matches_current is not True
+                    or self.service._control_identity() != self.service._control_targets.identity
+                    or self.service._control_targets.read(target.queue_item_id) != target):
+                await self._set(self.cache.model_copy(update={'control_target': None}, deep=True))
             return self.cache.model_copy(deep=True)
 
         return await run_transaction(self.path, read)
@@ -255,6 +263,13 @@ class PlaybackObservations:
                 and entries[0].position == 0 and entries[0].mpd_song_id == binding.entries[0][1]
                 and entries[0].song_uri == binding.entries[0][2]
             )
+            if not matched:
+                self.service._control_targets.invalidate()
+            control_target = (
+                self.service._control_targets.publish(
+                    self.service._control_identity(), binding.entries[0][0],
+                ) if matched else None
+            )
             actual_current = None
             if any(value is not None for value in (
                 status.song_id, status.song_uri, status.song_position,
@@ -295,6 +310,7 @@ class PlaybackObservations:
             self._sample_sync_status = sample_sync_status
             sync_status = self._effective_sync_status()
             await self._set(PlaybackObservation(
+                control_target=control_target,
                 actual_state=status.state,
                 actual_current=actual_current,
                 actual_freshness='fresh',

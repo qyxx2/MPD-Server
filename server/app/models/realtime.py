@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from server.app.models.history import HistoryEvent
 from server.app.models.library import Song
 from server.app.models.output import OutputSnapshot
+from server.app.models.playback_control import PlaybackControlTarget
 from server.app.models.queue import PlaybackState, QueueSnapshot
 from server.app.player.models import PlayerState
 
@@ -31,6 +32,7 @@ class PlaybackObservation(BaseModel):
     actual_current: ActualCurrent | None = None
     actual_freshness: Literal["fresh", "stale", "unknown"] = "unknown"
     bound_queue_item_id: str | None = None
+    control_target: PlaybackControlTarget | None = None
     sync_status: Literal[
         "CONFIRMED",
         "UNBOUND",

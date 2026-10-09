@@ -23,7 +23,7 @@ In particular:
 - the concept's heart-shaped favorite affordance does not override the existing Favorites contract: song rows use the specified star affordance and its authoritative states;
 - concept-only categories such as a Folder tab are not required unless the Library contract/API exposes them;
 - sample music, artwork, text, status-bar chrome, device frame, clock, and exact mock data are not product requirements;
-- this document does **not** freeze or redefine REST, WebSocket, store, transaction, reconnect, state-ordering, seek-confirmation, retry, or idempotency semantics. Task 8 Contract Audit remains responsible for those contracts.
+- this document does **not** redefine REST, WebSocket, transaction, playback, Queue, retry, or idempotency semantics. Shared Web client state/cache/reconnect/mutation/PWA consumption rules are authoritative in the architecture Spec §4.1–4.3 and realtime §12; Task 8 Contract Audit remains responsible only for Task-8-specific Contract rows and Player interaction semantics not already frozen there, such as seek/progress presentation and confirmation.
 
 ## 2. Visual language
 
@@ -40,12 +40,12 @@ Do not reproduce the phone frame or iOS status bar from the reference. The appli
 
 ## 3. Responsive composition
 
-Design mobile-first. The narrow-screen hierarchy is the canonical hierarchy; larger screens may gain breathing room or a bounded multi-column arrangement without changing meaning or action priority.
+Design for the phone browser as the primary usage and acceptance surface (user clarification, 2026-10-09). The narrow-screen hierarchy is canonical. Ubuntu Firefox/Chromium are auxiliary inspection environments; no dedicated desktop composition, multi-column layout, or desktop visual acceptance matrix is required.
 
 - Prefer fluid sizing, `rem`, `clamp()`, intrinsic grids, flex/grid gaps, and content constraints over device-specific pixel coordinates.
 - Avoid horizontal overflow for ordinary content. Long labels and metadata must truncate or wrap according to their importance.
 - Keep primary actions reachable on touch screens and preserve clear focus treatment for keyboard input.
-- On wider viewports, do not scale a phone mockup indefinitely. Bound reading width and artwork size, then use available space to improve grouping.
+- On wider viewports, retain the mobile composition with bounded content/artwork width; no additional desktop navigation or grouping is required.
 - Task 9 owns the responsive bottom navigation and Player-as-default application navigation defined by the Implementation Plan. Safe-area padding is part of that navigation shell.
 - Persistent navigation, focused inputs, overlays, and primary controls must remain reachable as mobile browser chrome or the on-screen keyboard changes the usable viewport. Layout must not depend on one fixed viewport height.
 
@@ -159,7 +159,7 @@ Every major Task 8/9 surface must have deliberate visual treatment for these sta
 - **Missing/unavailable media:** retain recognizable song identity where the business model does, visibly mark availability, and avoid presenting it as normally playable.
 - **No lyrics / lyrics read failure:** visually distinct when the underlying API distinguishes them; do not manufacture lyrics.
 - **Long text:** Player may wrap important identity text; dense rows truncate with ellipsis while preserving access to the full value through normal accessible UI techniques.
-- **Disconnected / stale / unknown:** use a persistent but non-obscuring status treatment and visibly distinguish stale/unknown data. Whether cached data is retained, controls are disabled, or reconnect occurs is governed by existing/future Task 8 contracts, not this visual document.
+- **Disconnected / stale / unknown:** use a persistent but non-obscuring status treatment and visibly distinguish stale/unknown data. Per architecture Spec §4.1, the last accepted state may remain visible as stale/read-only while server-authoritative mutation controls are unavailable; only a newly accepted initial snapshot restores writable state. This document defines the visual expression of that contract, not a second recovery rule.
 - **Operation error:** show local, specific feedback near the affected control/surface when possible without replacing authoritative state with optimistic fiction. Recovery actions appear only when already authorized by the authoritative Specs/Plan.
 
 ## 9. Accessibility and interaction quality
@@ -172,7 +172,9 @@ Every major Task 8/9 surface must have deliberate visual treatment for these sta
 
 ## 10. Visual acceptance
 
-Task 8/9 visual review should exercise representative narrow-mobile and wider-viewport layouts, reduced-motion mode, a contrast-safe no-`backdrop-filter` fallback, long or scaled text, and the major loading/empty/disconnected states that authoritative data can expose.
+Task 8/9 visual review primarily uses the user’s actual phone browser over a reachable LAN URL. Exercise display, touch, scrolling, mobile browser chrome, on-screen keyboard where relevant, and background return. Auxiliary narrow-viewport checks cover long/scaled text, reduced motion and no-`backdrop-filter` fallback; loading/empty/disconnected states follow authoritative data. Desktop-specific presentation is not an acceptance requirement.
+
+PWA installation, standalone mode, Service Worker and cold-offline review are deferred under Architecture §4.3 (2026-10-09 priority adjustment); they do not block phone Web acceptance. The manual method and report format live in [mobile Web manual acceptance](../plans/2026-10-09-mobile-web-manual-acceptance.md); Batch Plans own required scenario selection. No independent scenario console or test platform is required.
 
 Compare implementation with the reference for hierarchy, density, surface language, and composition rather than pixel equality. Visual acceptance must not invent missing business states, routes, controls, or recovery actions merely to make a screenshot match the concept.
 
@@ -182,7 +184,7 @@ Compare implementation with the reference for hierarchy, density, surface langua
 
 **Task 9** owns the remaining application views and application navigation: Queue, Library, Playlist/Favorites, Search, Settings/About, shared list/grid patterns, FavoriteStar presentation, and responsive bottom navigation.
 
-This split is visual ownership only. It does not move, invent, or freeze any server/client contract and does not change the dependency order in the Implementation Plan.
+This split is visual ownership only. It does not move or redefine server/client contracts and does not change the dependency order in the Implementation Plan. Task 8 implements the shared Web client foundation frozen in architecture Spec §4.1–4.3; Task 9 inherits it rather than creating a second state/cache/retry model.
 
 ## 12. Reference-use rule
 

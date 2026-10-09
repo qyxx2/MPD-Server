@@ -143,7 +143,7 @@ def test_snapshot_empty_and_unknown_observations_are_complete(real_client, monke
     assert first.output == output
     assert first.playback_observation.model_dump() == {
         'actual_state': None, 'actual_current': None, 'actual_freshness': 'unknown',
-        'bound_queue_item_id': None, 'sync_status': 'UNBOUND',
+        'bound_queue_item_id': None, 'control_target': None, 'sync_status': 'UNBOUND',
         'matches_current': None, 'position_seconds': None,
         'duration_seconds': None, 'observed_at': None, 'freshness': 'unknown',
         'reconciliation_required': False, 'error_code': None, 'error_message': None,

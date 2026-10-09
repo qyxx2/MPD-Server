@@ -290,8 +290,11 @@ def test_observation_runtime_rolls_back_with_terminal_and_cancels_without_contro
     with pytest.raises(RuntimeError, match='terminal failure'):
         run(run_transaction(library.path, outer))
     assert server_snapshot(playback) == before
-    assert run(playback.get_observation()) == baseline
-    assert coordinator.marker() == marker
+    assert coordinator.marker() == marker  # Failed mutation has no success notification.
+    restored = run(playback.get_observation())
+    assert baseline.control_target is not None and restored.control_target is None
+    assert restored == baseline.model_copy(update={'control_target': None})
+    assert coordinator.marker().sequence == marker.sequence + 1
     # SQLite cannot undo the external play of b. The old a occurrence proof
     # and cache must be restored, so observation reports this external drift.
     drift = run(playback.observe())
