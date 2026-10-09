@@ -23,7 +23,7 @@ In particular:
 - the concept's heart-shaped favorite affordance does not override the existing Favorites contract: song rows use the specified star affordance and its authoritative states;
 - concept-only categories such as a Folder tab are not required unless the Library contract/API exposes them;
 - sample music, artwork, text, status-bar chrome, device frame, clock, and exact mock data are not product requirements;
-- this document does **not** freeze or redefine REST, WebSocket, store, transaction, reconnect, state-ordering, seek-confirmation, retry, or idempotency semantics. Task 8 Contract Audit remains responsible for those contracts.
+- this document does **not** redefine REST, WebSocket, transaction, playback, Queue, retry, or idempotency semantics. Shared Web client state/cache/reconnect/mutation/PWA consumption rules are authoritative in the architecture Spec §4.1–4.3 and realtime §12; Task 8 Contract Audit remains responsible only for Task-8-specific Contract rows and Player interaction semantics not already frozen there, such as seek/progress presentation and confirmation.
 
 ## 2. Visual language
 
@@ -159,7 +159,7 @@ Every major Task 8/9 surface must have deliberate visual treatment for these sta
 - **Missing/unavailable media:** retain recognizable song identity where the business model does, visibly mark availability, and avoid presenting it as normally playable.
 - **No lyrics / lyrics read failure:** visually distinct when the underlying API distinguishes them; do not manufacture lyrics.
 - **Long text:** Player may wrap important identity text; dense rows truncate with ellipsis while preserving access to the full value through normal accessible UI techniques.
-- **Disconnected / stale / unknown:** use a persistent but non-obscuring status treatment and visibly distinguish stale/unknown data. Whether cached data is retained, controls are disabled, or reconnect occurs is governed by existing/future Task 8 contracts, not this visual document.
+- **Disconnected / stale / unknown:** use a persistent but non-obscuring status treatment and visibly distinguish stale/unknown data. Per architecture Spec §4.1, the last accepted state may remain visible as stale/read-only while server-authoritative mutation controls are unavailable; only a newly accepted initial snapshot restores writable state. This document defines the visual expression of that contract, not a second recovery rule.
 - **Operation error:** show local, specific feedback near the affected control/surface when possible without replacing authoritative state with optimistic fiction. Recovery actions appear only when already authorized by the authoritative Specs/Plan.
 
 ## 9. Accessibility and interaction quality
@@ -182,7 +182,7 @@ Compare implementation with the reference for hierarchy, density, surface langua
 
 **Task 9** owns the remaining application views and application navigation: Queue, Library, Playlist/Favorites, Search, Settings/About, shared list/grid patterns, FavoriteStar presentation, and responsive bottom navigation.
 
-This split is visual ownership only. It does not move, invent, or freeze any server/client contract and does not change the dependency order in the Implementation Plan.
+This split is visual ownership only. It does not move or redefine server/client contracts and does not change the dependency order in the Implementation Plan. Task 8 implements the shared Web client foundation frozen in architecture Spec §4.1–4.3; Task 9 inherits it rather than creating a second state/cache/retry model.
 
 ## 12. Reference-use rule
 
