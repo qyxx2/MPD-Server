@@ -20,12 +20,15 @@ Task 0–7、D6及Task6后端功能验收已完成；D6最终逐合同证明位�
 
 开始 Task 8 时默认读取：
 
-- 与本次范围直接相关的 `specs/`，包括 Web/PWA visual design；
+- `specs/2026-09-25-system-and-development-architecture-design.md` §4.1–4.3 与 §12：Task 8/9 共用的 Web authority/cache/reconnect/mutation/idempotency/PWA 合同；
+- 与 Player/Library/Output 范围直接相关的其它 `specs/`，包括 Web/PWA visual design；
 - 主 Implementation Plan 的 Task 8、依赖矩阵和全局约束；
 - Task 6 plan 中仍约束客户端消费的快照、重连、actual/binding合同；
 - 本次将修改的实际代码与测试。
 
-Task 8的执行计划应在开始该Task时另行制定。本轮不提前实现UI。只有需要追溯历史决定或测试证据时，才读取相应 `archive/`。
+2026-10-09 的 Common Web preflight 只冻结共同前置语义：断线时 degraded read-only，重新接受完整 initial snapshot 后才恢复 mutation；v0.1 PWA 可安装但无离线业务模式；共享 resource cache 受 epoch/sequence/revision/请求代次保护；mutation 统一复用既有 Idempotency-Key 合同。**它没有创建 Task 8/9 Batch Plan，也没有完成任何 Task 8 Step。**
+
+Task 8 的 Contract Audit / 执行计划应在开始该 Task 时另行制定，只为仍未冻结的 Task-8-specific 行为建立 Contract rows。Task 9 后续继承共同 Web 合同，只审计其 Queue/Library/Playlist/Favorites/Search/navigation 增量。只有需要追溯历史决定或测试证据时，才读取相应 `archive/`。
 
 ## Relationship / Invariant Test Gate
 
