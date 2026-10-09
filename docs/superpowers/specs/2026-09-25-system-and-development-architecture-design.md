@@ -112,6 +112,65 @@ Vite 开发服务器负责前端即时更新，并将：
 
 正式环境必须保证群晖反向代理能够正确转发 WebSocket。
 
+### 4.1 Web 客户端权威状态与缓存合同（Task 8/9 共用，2026-10-09）
+
+本节是 Task 8/9 的共同客户端合同。它只规定 Web 如何消费既有服务端权威，不新增播放、Queue、Library、Playlist、History 或 Output 业务语义；Task 8 实现共同状态基础，Task 9 必须复用，不得建立第二套 authority/cache/reconnect 规则。
+
+Web 状态分为三层：
+
+1. **Canonical realtime state**：只由当前连接代次接受的 `FullStateSnapshot` 提供，包括 Playback、current Song、Queue、History availability、Output、observation、`epoch`、`sequence` 与 revisions。WS `invalidate` 只是失效义务，不是领域状态副本，也不是 mutation 回执。
+2. **Resource cache**：Library、Album/Artist/Genre/Year/Tag、Search、Playlist/Favorites 等 REST 资源是服务端资源的客户端缓存。Library 资源受 `library_revision` 失效；Playlist/Favorites membership/name/order 受 `playlist_revision` 失效；任何需要 Song 元数据/availability 的 Playlist/Favorites 展示同时受 Library revision 失效。Search 结果属于 Library-dependent cache。
+3. **Local UI state**：route、打开的菜单/overlay、Artwork/Lyrics 选择、输入草稿、Played 展开状态、drag draft 等仅属于本地交互。它们不得反向改写 Canonical realtime state 或 Resource cache 的服务端事实。
+
+客户端应用状态时必须满足：
+
+- 新 WS 连接只有在成功接受当前连接第一条完整 snapshot 后才建立新的可信 baseline。跨 `epoch` 时废弃旧 sequence/revision 比较基准；旧连接及其未完成请求结果不得写回新 baseline。
+- 同一 `epoch` 仅接受不低于当前已知水位且满足 A §12.2 ordering 合同的 snapshot；相同 sequence 幂等忽略，较旧 snapshot/response 丢弃。
+- 收到一个或多个 invalidate 时可以合并读取，但最终接受的 snapshot 必须覆盖当前已知最高失效水位；如果请求期间又出现更高 sequence，则该次结果不能结束刷新义务。
+- Resource request 启动时记录其请求 generation、当前 `epoch` 及依赖 revision。响应返回时，只能在 generation 仍为当前、epoch 未变且相关 revision 没有被推进时写入 authoritative cache；否则丢弃并按需要重读。取消旧请求是优化，**拒绝迟到旧结果写回是合同**。
+- 新 epoch、相关 revision 前进或明确失效可以保留旧资源用于带 `stale` 标识的只读展示，但不得把它继续标为 fresh/authoritative。
+- 本地 UI state 可以独立保留，但不能用它恢复或推导 Queue、Favorites、Playlist、Playback、actual binding 或 revision。
+
+**断线/降级决策（2026-10-09 已冻结）**：
+
+- WS 断开、初始 snapshot 失败、epoch 需要重新确认或 realtime baseline 已失效时，Web 进入 **degraded read-only** 状态。
+- 已经接受过的最后状态可以继续显示，但必须明确标为 stale/reconnecting/unknown（按已有字段和视觉规则表达）；缓存 Library 等只读内容仍可浏览。
+- degraded read-only 期间，所有会改变服务端权威状态的 Playback、seek、Queue、Favorite、Playlist、Output 等 mutation 控件必须禁用或拒绝发送。普通本地 UI 操作不受影响。
+- 独立成功的 REST GET 可以更新只读显示，但**不能单独恢复 mutation 权限**。只有新连接的完整 initial snapshot 被成功接受并建立当前 epoch/sequence baseline 后，才恢复服务端 mutation。
+- v0.1 不实现“WS 失效时靠 HTTP polling 维持另一套可写一致性”的 fallback；若未来需要，必须另立合同。
+
+Task 8 的 Web relationship/invariant tests 至少必须机械证明：旧 epoch/旧 sequence/旧 resource request 不倒灌；invalidate 与并发 GET 最终覆盖最高已知水位；断线进入 read-only 且重连完整 snapshot 替换 stale baseline。Task 9 在涉及 Library/Playlist/Favorites/Search 缓存时继承并扩展这些 proof，而不是重新定义它们。
+
+### 4.2 Web mutation、幂等与确认合同（Task 8/9 共用，2026-10-09）
+
+所有 Web mutation 服从既有 Task 5 / API idempotency 合同，客户端不得另造较弱语义。
+
+- 一次明确的用户操作意图生成一个新的 opaque `Idempotency-Key`。同一 HTTP method + path + canonical payload 的**传输重试**必须复用同一个 key；不得因为 timeout/retry 自动换 key 并重复业务动作。
+- 用户在前一个意图完成后再次明确执行同一操作，属于新的用户意图，使用新的 key。具体控件是否在 pending 期间阻止重复点击由对应 Task/Batch 的交互设计决定，但不能用新 key 冒充同一网络 retry。
+- Canonical realtime state 和服务器资源缓存禁止 speculative optimistic commit。UI 可以有 `pending`、drag draft、按钮忙碌态或其它临时反馈，但请求成功前不得把它伪装成已经提交的 Queue/Favorite/Playlist/Playback/Output 事实。
+- mutation HTTP 成功是该 endpoint 的确认/资源回执，不把 WS invalidate 当成功 ACK。成功后客户端必须通过已有 authoritative read 路径收敛受影响状态：Realtime 域由当前 snapshot 恢复；Library/Playlist/Favorites/Search 资源由对应 REST resource + revision 规则恢复。返回的完整资源对象可以作为已确认结果使用，但仍受当前 epoch/revision/request-generation 的迟到保护。
+- `204` 或只返回局部结果的成功响应不得驱使客户端从请求 payload 猜造完整服务端状态；按相同规则重读需要展示的 authoritative resource/state。
+- mutation 失败时不提交 optimistic canonical state；保留最后确认状态、显示 typed error，并由后续 snapshot/resource read 对齐当前事实。若服务端状态已经因其它客户端/runner 改变，仍以新的 authoritative read 为准。
+- WS/HTTP 传播延迟、重复 invalidate 或成功 terminal replay 不得使客户端重复执行业务 mutation。
+
+Task 8 必须为共享 API client 提供对 `Idempotency-Key` 的统一生成/复用机制与测试；Task 9 必须复用该机制。不得在各页面分别实现互不一致的 retry/idempotency 策略。
+
+### 4.3 v0.1 PWA 范围（Task 8/9 共用，2026-10-09）
+
+v0.1 的 Web/PWA 定义为：**可安装的移动优先 Web 应用壳，但不提供离线业务模式**。
+
+必须满足：
+
+- 提供可安装所需的 Web App Manifest、应用身份/图标和 standalone-capable shell；具体 manifest 字段值、图标尺寸和安装提示样式属于 Task 8 实现细节。
+- 安装后的应用仍使用当前页面/安装 origin 的同源 REST 与 WS 地址，不引入独立服务器地址或第二套协议。
+- Service Worker 只允许缓存版本化静态 shell/assets。所有 `/api/**` 请求和 `/api/realtime` WebSocket 都是 network-authoritative；不得由 Service Worker 用缓存 API response、旧 snapshot 或离线 mutation 伪装在线成功。
+- 不实现 offline Queue、offline Favorites/Playlist 编辑、Background Sync mutation replay、离线播放控制或持久化 `FullStateSnapshot` 作为下一次启动的权威来源。
+- 离线/服务器不可达时，已加载会话可以保留内存中的最后确认内容并按 §4.1 显示 degraded read-only；全新离线启动只能展示应用壳和明确 disconnected 状态，不制造服务器业务数据。
+- 恢复网络后必须通过正常 WS initial snapshot / authoritative REST 路径重新建立状态，不从 Service Worker 或本地持久缓存“恢复” Queue、Playback、Favorites、Playlist 或 revision。
+- 本地纯 UI preference 可以按实现需要持久化，但不得承载服务端业务 authority。
+
+Task 8 的前端基础验收必须证明 manifest/installable shell 存在，并证明 Service Worker 不缓存/重放 API 与 realtime 业务状态。离线媒体播放、离线业务写入与跨离线会话业务恢复明确不属于 v0.1。
+
 ## 5. 服务端模块边界
 
 推荐结构：
