@@ -40,12 +40,12 @@ Do not reproduce the phone frame or iOS status bar from the reference. The appli
 
 ## 3. Responsive composition
 
-Design mobile-first. The narrow-screen hierarchy is the canonical hierarchy; larger screens may gain breathing room or a bounded multi-column arrangement without changing meaning or action priority.
+Design for the phone browser as the primary usage and acceptance surface (user clarification, 2026-10-09). The narrow-screen hierarchy is canonical. Ubuntu Firefox/Chromium are auxiliary inspection environments; no dedicated desktop composition, multi-column layout, or desktop visual acceptance matrix is required.
 
 - Prefer fluid sizing, `rem`, `clamp()`, intrinsic grids, flex/grid gaps, and content constraints over device-specific pixel coordinates.
 - Avoid horizontal overflow for ordinary content. Long labels and metadata must truncate or wrap according to their importance.
 - Keep primary actions reachable on touch screens and preserve clear focus treatment for keyboard input.
-- On wider viewports, do not scale a phone mockup indefinitely. Bound reading width and artwork size, then use available space to improve grouping.
+- On wider viewports, retain the mobile composition with bounded content/artwork width; no additional desktop navigation or grouping is required.
 - Task 9 owns the responsive bottom navigation and Player-as-default application navigation defined by the Implementation Plan. Safe-area padding is part of that navigation shell.
 - Persistent navigation, focused inputs, overlays, and primary controls must remain reachable as mobile browser chrome or the on-screen keyboard changes the usable viewport. Layout must not depend on one fixed viewport height.
 
@@ -172,7 +172,9 @@ Every major Task 8/9 surface must have deliberate visual treatment for these sta
 
 ## 10. Visual acceptance
 
-Task 8/9 visual review should exercise representative narrow-mobile and wider-viewport layouts, reduced-motion mode, a contrast-safe no-`backdrop-filter` fallback, long or scaled text, and the major loading/empty/disconnected states that authoritative data can expose.
+Task 8/9 visual review primarily uses the user’s actual phone browser over a reachable LAN URL. Exercise display, touch, scrolling, mobile browser chrome, on-screen keyboard where relevant, and background return. Auxiliary narrow-viewport checks cover long/scaled text, reduced motion and no-`backdrop-filter` fallback; loading/empty/disconnected states follow authoritative data. Desktop-specific presentation is not an acceptance requirement.
+
+PWA installation, standalone mode, Service Worker and cold-offline review are deferred under Architecture §4.3 (2026-10-09 priority adjustment); they do not block phone Web acceptance. The manual method and report format live in [mobile Web manual acceptance](../plans/2026-10-09-mobile-web-manual-acceptance.md); Batch Plans own required scenario selection. No independent scenario console or test platform is required.
 
 Compare implementation with the reference for hierarchy, density, surface language, and composition rather than pixel equality. Visual acceptance must not invent missing business states, routes, controls, or recovery actions merely to make a screenshot match the concept.
 

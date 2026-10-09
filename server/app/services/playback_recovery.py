@@ -27,8 +27,9 @@ from server.app.repositories.database import (
 class RecoveryJournal:
     """Process-local business identity; independent of observation sample count."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, *, invalidate_targets=None) -> None:
         self.path = path
+        self._invalidate_targets = invalidate_targets
         self.service_epoch = str(uuid4())
         self.business_generation = 0
         self._owners: set[object] = set()
@@ -178,6 +179,8 @@ class RecoveryJournal:
         return self.binding
 
     def invalidate_binding(self) -> None:
+        if self._invalidate_targets is not None:
+            self._invalidate_targets()
         self._invalidation += 1
         self.binding = None
         self.synced_entries = None

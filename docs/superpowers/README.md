@@ -24,11 +24,16 @@ Task 0–7、D6及Task6后端功能验收已完成；D6最终逐合同证明位�
 - 与 Player/Library/Output 范围直接相关的其它 `specs/`，包括 Web/PWA visual design；
 - 主 Implementation Plan 的 Task 8、依赖矩阵和全局约束；
 - Task 6 plan 中仍约束客户端消费的快照、重连、actual/binding合同；
+- [手机 Web 真人验收方法](plans/2026-10-09-mobile-web-manual-acceptance.md)：手机/LAN 交付、最小场景准备、反馈复验及报告模板；必验编号归 active Batch Plan，不新建验收平台；
 - 本次将修改的实际代码与测试。
 
 2026-10-09 的 Common Web preflight 只冻结共同前置语义：断线时 degraded read-only，重新接受完整 initial snapshot 后才恢复 mutation；v0.1 PWA 可安装但无离线业务模式；共享 resource cache 受 epoch/sequence/revision/请求代次保护；mutation 统一复用既有 Idempotency-Key 合同。**它没有创建 Task 8/9 Batch Plan，也没有完成任何 Task 8 Step。**
 
 Task 8 的 Contract Audit / 执行计划应在开始该 Task 时另行制定，只为仍未冻结的 Task-8-specific 行为建立 Contract rows。Task 9 后续继承共同 Web 合同，只审计其 Queue/Library/Playlist/Favorites/Search/navigation 增量。只有需要追溯历史决定或测试证据时，才读取相应 `archive/`。
+
+2026-10-09 用户优先级调整：手机浏览器为主要交付/触摸验收环境，Ubuntu Firefox/Chromium 仅辅助；PWA 安装/SW/冷离线壳延期，不阻塞 Task 8 手机 Web acceptance 或 Task 9，不声明延期部分完成。详见 Architecture §4.3 和 active Batch Plan。
+
+当前入口：[Task 8 Web Batch Plan](plans/2026-10-09-task-8-web-batch-plan.md) 与 [后端控制前置计划](plans/2026-10-09-task-8-playback-control-prerequisite-plan.md)（计划待审阅，未实施）。[Contract Audit](plans/2026-10-09-task-8-contract-audit.md) 保留已接受决策与专项 rows/证明索引；公共接口已归入 Architecture §4.2.1，Task 8 尚未验收。Task 9 song Play Now 原子入口仍需其后续审计。
 
 ## Relationship / Invariant Test Gate
 

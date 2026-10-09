@@ -111,3 +111,46 @@ def test_adapter_controls_real_line_protocol_over_fake_tcp_server():
             await server.wait_closed()
 
     asyncio.run(run())
+
+
+def test_parameterless_play_resumes_without_rebuilding_execution():
+    async def scenario():
+        received = []
+        state = 'pause'
+
+        async def handle(reader, writer):
+            nonlocal state
+            writer.write(b'OK MPD 0.23.5\n')
+            await writer.drain()
+            try:
+                while raw := await reader.readline():
+                    command = raw.decode().strip()
+                    received.append(command)
+                    if command == 'play':
+                        state = 'play'
+                    if command == 'status':
+                        writer.write(f'state: {state}\nsong: 0\nsongid: 10\nelapsed: 37\n'.encode())
+                    elif command == 'currentsong':
+                        writer.write(b'file: a.flac\nId: 10\nPos: 0\n')
+                    writer.write(b'OK\n')
+                    await writer.drain()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+        server = await asyncio.start_server(handle, '127.0.0.1', 0)
+        adapter = MPDAdapter('127.0.0.1', port=server.sockets[0].getsockname()[1])
+        try:
+            before = await adapter.status()
+            await adapter.play()
+            after = await adapter.status()
+            assert before.state.value == 'paused' and after.state.value == 'playing'
+            assert before.song_id == after.song_id == 10
+            assert before.elapsed_seconds == after.elapsed_seconds == 37
+            assert received == ['status', 'currentsong', 'play', 'status', 'currentsong']
+        finally:
+            await adapter.close()
+            server.close()
+            await server.wait_closed()
+
+    asyncio.run(scenario())

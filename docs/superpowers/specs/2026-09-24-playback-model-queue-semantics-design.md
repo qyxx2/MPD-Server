@@ -138,6 +138,12 @@ AutoPlay 不属于某个专辑或 Playlist
 -   若该操作来自一个明确的"开始独立单曲播放"入口，且产品交互将其定义为新播放上下文，则按第
     4.1 节的 Start Track 规则替换 Queue。
 
+**Web 合同补充（2026-10-09，产品选择已接受；接口与实现待完成）**：
+
+- Library/Search/Playlist 等普通歌曲入口的 Play Now 创建新的 occurrence，保留已有待播 occurrence 及其相对顺序，包括同一 song 的重复项；不隐式选取、移动或去重已有 occurrence。Queue 行的 Play Now 仍精确操作该行的 queue_item_id。
+- 用户明确 Stop 后，从上述普通歌曲入口执行 Play Now 表示开启新的播放会话并重新启用 AutoPlay，同时保留原待播内容；不因此退化为替换 Queue 的 Start Track。开启意图仍受 §8.9 的在线、绑定、候选与确认限制，不承诺异常情况下自动续播。
+- 同一意图的传输重试必须复用既有 Idempotency-Key，不重复创建 occurrence。完整服务端原子入口、Context/History 生命周期与失败确认合同由专项审计补齐；本补充不宣告现有 API 已具备该能力。
+
 #### Play Next
 
 -   将所选歌曲插入当前歌曲之后，成为下一首。
@@ -279,6 +285,41 @@ Queue
 耗尽不是独立的终止状态。正常情况下，系统应在耗尽前补充内容并继续播放。
 
 Stop、Pause、切歌、自然播放完成是不同概念；只记录有确认依据的原因，无法认证的离开不制造永久 History（§8.9.4）。
+
+### 7.1 Web 主播放按钮与 seek 意图（2026-10-09）
+
+以下交互选择已接受；接口合同见 Architecture Spec §4.2.1，实现与验收由 Task 8 后端前置承担：
+
+- PAUSED 下恢复播放必须原位继续，保留当前 occurrence、Queue 和 Playback Context，不能用重新 Start Track 代替 resume。此选择不授权未绑定状态自动接管。
+- 用户明确 Stop 后，主播放按钮不隐式选曲；通过明确选曲/Queue Play Now 重新开始。未知外部停止仍按 §8.9 表达，不能冒充用户 Stop。
+- Web seek 绑定开始操作时的 occurrence。服务端须在共同执行边界验证目标及有效代次；执行前切歌或绑定失效则拒绝，客户端放弃草稿并重读，不将旧 seek 改发到新 current。只做客户端检查不能满足此合同。
+- 已提交 seek 的同 key terminal replay 沿用既有幂等合同，返回原回执而不再次执行；不能因当前歌曲已改变而把 replay 当作新的 seek。目标前置条件、typed conflict 与 API 兼容策略沿用 Architecture Spec §4.2.1。
+
+### 7.2 Web 进度与歌词展示时钟（2026-10-09）
+
+产品选择已接受，具体时钟校准与验收用例由 Task 8 专项合同落实：
+
+- 在有效、已确认绑定且实际处于播放状态的 observation 样本之间，允许平滑推进展示位置；这是本地显示估算，不是新的服务端确认样本，不写回 canonical state。
+- 进度条和同步歌词共用同一个展示时钟，不能各自外推成不同时间线。新 authoritative 样本到达后校准；切歌不能沿用旧 occurrence 的时钟。
+- 暂停、样本过期、断线或绑定失效时停止外推；显示保留值还是 unknown/null 仍遵守 §8.8 及架构 Spec §12 的观察合同，停止外推不代表可以把失效值继续标为 fresh。
+- 展示估算不能触发 next、seek、Queue/History/AutoPlay 变更，不能因估算到达结尾而认定自然完成。普通歌词仍不伪造同步时间戳。
+
+### 7.3 Web seek 交互与确认（2026-10-09）
+
+- 拖动只改变本地预览，松手后提交一次 seek；取消手势不发送。键盘操作以一次完成的调整意图提交，不按动画帧发送。
+- 提交期间显示 pending，禁止再次拖动；不把预览位置提交到 canonical state。若操作期间收到新 occurrence/绑定失效，撤销草稿，不能向新歌曲补发。
+- HTTP 成功表示 endpoint 已确认；随后重读当前 snapshot。未收到属于当前 occurrence、足够新的匹配 observation 前，不把旧样本或拖动目标冒充已确认的新实时进度。可以显示“正在同步”，切歌后立即以新的权威状态为准。
+- HTTP 错误显示 typed error；网络 timeout 表示结果未知，不能显示确定失败或自动生成新 key。显式重试复用原 payload/key，并受共同断线只读门禁约束。
+- 已知 duration 才开放 seek，目标限定在零到 duration 之间；duration 未知/非正数时保留可用 elapsed 的只读显示，禁用 seek，不虚构时长。
+
+### 7.4 Web Player 常规交互选择（2026-10-09）
+
+本节按用户授权选择非重大交互细节，继承架构共同状态、确认和幂等合同：
+
+- 同一客户端内 pause/resume/next/previous/seek 等互斥播放意图 pending 时禁用相互冲突的控件，不排队保存一串稍后自动执行的操作。Stop 仍是明确独立意图，可在共同连接门禁允许时发起；它不是取消已经在服务端执行的请求，也不保证抢占该请求。最终以服务端串行结果和 snapshot 为准。
+- timeout 的未知结果不触发自动业务重试；用户可用原 key 重试或重新读取。HTTP 已成功但读取失败表达为“操作已确认，状态未同步”，不能要求用户用新 key 再做一次。
+- 页面进入后台停止展示动画；回到前台重新读取权威 snapshot，确认 observation 后重建展示时钟，不累加后台停留时间。连接不可用时继续遵守 degraded read-only。
+- 展示外推使用浏览器单调时钟，不直接相减浏览器和服务器墙上时钟。相同 observed_at 的重复样本不重新开启外推有效期；已知 duration 是显示上界，到达上界不触发任何业务动作。
 
 ## 8. 边界情况与一致性要求
 

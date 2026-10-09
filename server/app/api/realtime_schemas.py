@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from server.app.models.playback_control import PlaybackControlTarget
+
 from .schemas import (
     HistoryEventResponse,
     PlaybackStateResponse,
@@ -38,6 +40,7 @@ class PlaybackObservationResponse(BaseModel):
     actual_current: ActualCurrentResponse | None = None
     actual_freshness: Literal["fresh", "stale", "unknown"] = "unknown"
     bound_queue_item_id: str | None = None
+    control_target: PlaybackControlTarget | None = None
     sync_status: Literal[
         "CONFIRMED",
         "UNBOUND",

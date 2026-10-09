@@ -8,6 +8,7 @@ from server.app.models.queue import PlaybackState, QueueItem
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.services.collection_service import CollectionService
 from server.app.services.library_service import CollectionSourceNotFoundError
+from server.app.services.playback_control import PlaybackTargetConflictError
 from server.app.services.playback_service import (
     PlaybackReconciliationError,
     PlaybackService,
@@ -36,6 +37,7 @@ from .schemas import (
     QueueItemResponse,
     QueueListResponse,
     QueueReorderRequest,
+    ResumeRequest,
     SaveQueueAsPlaylistRequest,
     SeekRequest,
 )
@@ -84,6 +86,11 @@ def _raise_playback_http_error(exc: Exception) -> None:
                 "message": f"playlist not found: {exc.args[0]}",
                 "details": None,
             },
+        ) from exc
+    if isinstance(exc, PlaybackTargetConflictError):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "PLAYBACK_TARGET_CONFLICT", "message": str(exc), "details": None},
         ) from exc
     if isinstance(exc, PlayerUnavailable):
         raise HTTPException(
@@ -250,6 +257,18 @@ async def pause(
         raise
 
 
+@router.post("/resume", response_model=PlaybackStateResponse)
+async def resume(
+    request: ResumeRequest,
+    service: Annotated[PlaybackService, Depends(get_playback_service)],
+) -> PlaybackStateResponse:
+    try:
+        return _playback_state_response(await service.resume(request.target))
+    except Exception as exc:
+        _raise_playback_http_error(exc)
+        raise
+
+
 @router.post("/stop", response_model=PlaybackStateResponse | None)
 async def stop(
     service: Annotated[PlaybackService, Depends(get_playback_service)],
@@ -289,7 +308,9 @@ async def seek(
     service: Annotated[PlaybackService, Depends(get_playback_service)],
 ) -> PlaybackStateResponse | None:
     try:
-        return _playback_state_response(await service.seek(request.seconds))
+        state = (await service.seek(request.seconds) if request.target is None
+                 else await service.seek(request.seconds, target=request.target))
+        return _playback_state_response(state)
     except Exception as exc:
         _raise_playback_http_error(exc)
         raise

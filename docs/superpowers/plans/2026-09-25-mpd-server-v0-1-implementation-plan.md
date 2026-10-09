@@ -942,6 +942,13 @@ Rules:
 
 ## Task 8：Web/PWA 状态层与播放器
 
+2026-10-09 用户验收优先级调整：先交付手机浏览器中的实际页面、显示及触摸交互，提供真实 LAN IP/端口供手机实测；不新增桌面专用布局或独立验收场景控制台。PWA manifest/SW/安装/冷离线壳范围 DEFERRED，不阻塞修订后的 Task 8 手机 Web acceptance 或 Task 9；原始 PWA 范围不据此标为已完成。具体 Gate 归 Task 8 Batch Plan，操作与报告见 [手机 Web 真人验收方法](2026-10-09-mobile-web-manual-acceptance.md)。
+
+2026-10-09 专项合同修订（已接受，尚未实施）：
+- 后端前置：[Task 8 playback control prerequisite](2026-10-09-task-8-playback-control-prerequisite-plan.md)，交付 Architecture Spec §4.2.1 的 resume、guarded seek 与 snapshot control_target；不属于组件内临时补丁。
+- Web 执行入口：[Task 8 Batch Plan](2026-10-09-task-8-web-batch-plan.md)。共同 Web 基础可独立开展，使用 resume/seek 的 Batch 必须等待对应前置 Gate；Task-level acceptance 必须覆盖整个前置。
+- 本修订不勾选原始 Step，不表示 Task 8/后端前置已通过测试，也不授权提交或远程操作。
+
 Dependencies:
 - Task 5 completed.
 - Task 6 completed.
@@ -951,7 +958,7 @@ Common Web preflight (2026-10-09):
 - **Contract freeze only; no Task 8/9 Batch split or implementation is created by this preflight.**
 - Shared Web client authority/cache/disconnect/mutation/idempotency/PWA semantics are frozen in Architecture Spec §4.1–4.3 and realtime §12; the Visual Design Spec remains presentation authority.
 - Realtime loss uses degraded read-only: retain the last accepted state as visibly stale, allow read-only browsing, and send no server-authoritative mutations until a new initial full snapshot establishes the current epoch/sequence baseline.
-- v0.1 PWA is an installable shell with static-asset caching only; there is no offline business state, offline mutation replay, or cached API/snapshot authority.
+- PWA delivery/install acceptance is deferred by the 2026-10-09 mobile-browser priority adjustment above. Its eventual scope remains an installable shell with static-asset caching only; no offline business state, mutation replay, or cached API/snapshot authority is allowed.
 - Task 8 Contract Audit must create only Task-8-specific Contract rows still required by the shared contract and Player behavior. This preflight does not mark any Task 8 Step complete.
 
 Rules:
@@ -992,16 +999,19 @@ Files:
 
 ## Task 9：Web Queue、Library、Playlist、Search、Favorites、Settings
 
+2026-10-09 增量 prerequisite：普通 song Play Now 新建 occurrence、保留原待播项，明确 Stop 后重启会话并启用 AutoPlay（Playback Spec §3.3 已接受）。原子 song-id 接口、Context/History 生命周期由 Task 9 Contract Audit 完成；不得以现有 Start Track 或前端拼接请求替代。不在 Task 8 中实施，不据此预拆 Task 9 Batches。
+
 Dependencies:
 - Task 5 completed.
 - Task 6 completed.
-- Task 8 completed.
+- Task 8 revised mobile Web scope accepted (required automated and phone-human Gates); deferred PWA installation/SW scope is not a prerequisite. Real MPD/NAS acceptance remains separately reported.
 
 Rules:
 - Reuse Task 8's typed REST/WS client, canonical realtime store, resource-cache invalidation, mutation/idempotency mechanism and degraded read-only reconnect gate.
 - Task 9 may add only view/domain-specific Contract rows for Queue/Library/Playlist/Favorites/Search/navigation; it must not redefine the shared Web client contract from Architecture Spec §4.1–4.3.
 - Library/Playlist/Favorites/Search views remain server-authoritative and obey Library/Playlist revision invalidation, including Playlist/Favorites display dependence on Library revision.
 - This section does not pre-split Task 9 into Batches; Batch boundaries are decided by the later Task 9 Contract Audit.
+- Phone browser is the primary presentation/touch acceptance environment. Each visible interaction Batch maps applicable scenario IDs from the mobile Web manual method to explicit steps/expected results before implementation; hand off a reachable LAN URL after automated GREEN and wait for required human feedback before closing the Batch. No dedicated desktop UI, scenario console or PWA install Gate is introduced.
 
 Files:
 - Create: web/src/views/QueueView.vue

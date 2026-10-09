@@ -155,11 +155,26 @@ Task 8 的 Web relationship/invariant tests 至少必须机械证明：旧 epoch
 
 Task 8 必须为共享 API client 提供对 `Idempotency-Key` 的统一生成/复用机制与测试；Task 9 必须复用该机制。不得在各页面分别实现互不一致的 retry/idempotency 策略。
 
+### 4.2.1 Web current-target 控制接口（2026-10-09 已接受）
+
+Task 8 后端前置提供 additive 扩展；保留既有协议版本和无 target seek 的历史行为，不能宣称旧调用也获得防串曲保证。
+
+- GET `/api/state` 与 WS 首帧在 `playback_observation` 增加 `control_target: {queue_item_id: string, token: string} | null`。仅 fresh、已匹配实际 current 且绑定有效时提供；缺字段按 null 处理。token 是不透明条件令牌，不是认证凭据，不作为浏览器持久化业务数据。
+- `POST /api/playback/resume` 要求 `{target: {queue_item_id, token}}` 与 Idempotency-Key，成功返回已确认 PlaybackState。目标仍匹配且已 PLAYING 时为确认后的 no-op；不能重新播放或新增 History。
+- `POST /api/playback/seek` 接受 `{seconds, target?: {queue_item_id, token}}`。省略 target 的旧请求保持既有语义；提供 target 时必须非 null、字段非空且严格验证。Web 必须提供 target，服务器未暴露该能力时禁用 resume/seek，不尝试无保护 fallback。
+- 首次执行在 Service 共同串行边界验证 target，且命令前重新核验实际 current 和受控执行关系。缓存 fresh 不替代执行时确认。已确定目标不匹配返回 409 `PLAYBACK_TARGET_CONFLICT`，无业务变更；格式错误为 422，MPD 不可达/命令错误沿用既有 typed error。
+- 既有 IdempotencyService 先处理成功 terminal replay；同 method/path/payload/key 返回原回执，不再校验当前 target 或执行命令。不同 payload/key scope 冲突仍是既有 409。首次失败不产生成功 terminal。
+- token 由 PlaybackService 拥有，绑定 service/connection/binding 生命周期和 current 控制代次。elapsed 采样不轮换；current 离开再回来、同 occurrence 显式重播、连接或绑定失效、服务重启必须使旧 token 无效。单独 queue_item_id 或 realtime sequence 不足以作为 token。失去外部连续性后，数据库 rollback 不得复活旧令牌。
+- snapshot capture 只读取已生成的 target，不采样 MPD、不建立绑定、不恢复播放。target 变化/失效作为 playback 可观察内容参与现有 sequence/outer commit 规则；导出时 freshness 不满足则为 null。
+- resume/guarded seek 命令后再次确认实际 identity/state。resume 保留位置（允许恢复后的自然推进）、Queue、Context、AutoPlay 意图、History active/session；seek 仅改变确认位置及其传播，保留上述其它关系。未确认不能提交成功。原版 MPD 不是跨客户端物理事务，外部介入后的确认失败沿用 reconciliation 与部分执行边界，不承诺撤销所有外部副作用。
+
+领域交互见 Playback Spec §7.1–7.4；Task 8 prerequisite plan 负责实现与 proof。普通 song Play Now 原子入口仍属 Task 9 prerequisite，不由此接口扩展实现。
+
 ### 4.3 v0.1 PWA 范围（Task 8/9 共用，2026-10-09）
 
-v0.1 的 Web/PWA 定义为：**可安装的移动优先 Web 应用壳，但不提供离线业务模式**。
+2026-10-09 用户优先级调整：**先交付手机浏览器显示和触摸交互，PWA 安装不是当前刚需**。Task 8/9 可通过局域网 HTTP 验收手机 Web；manifest、安装、standalone shell、Service Worker 及冷离线壳延期，不作为当前 Task 8 手机 Web acceptance 或 Task 9 的前置。以后明确需要 PWA 时再实施验收，不将延期功能记为已完成，也不为普通手机 UI 测试新增 HTTPS/安装设施。
 
-必须满足：
+PWA 的延期目标仍是可安装的移动优先壳，无离线业务模式。以下安全/authority 限制继续适用；manifest/SW 交付义务仅在恢复 PWA 范围后验收：
 
 - 提供可安装所需的 Web App Manifest、应用身份/图标和 standalone-capable shell；具体 manifest 字段值、图标尺寸和安装提示样式属于 Task 8 实现细节。
 - 安装后的应用仍使用当前页面/安装 origin 的同源 REST 与 WS 地址，不引入独立服务器地址或第二套协议。
@@ -169,7 +184,7 @@ v0.1 的 Web/PWA 定义为：**可安装的移动优先 Web 应用壳，但不�
 - 恢复网络后必须通过正常 WS initial snapshot / authoritative REST 路径重新建立状态，不从 Service Worker 或本地持久缓存“恢复” Queue、Playback、Favorites、Playlist 或 revision。
 - 本地纯 UI preference 可以按实现需要持久化，但不得承载服务端业务 authority。
 
-Task 8 的前端基础验收必须证明 manifest/installable shell 存在，并证明 Service Worker 不缓存/重放 API 与 realtime 业务状态。离线媒体播放、离线业务写入与跨离线会话业务恢复明确不属于 v0.1。
+当前 Task 8 手机 Web 验收不要求 manifest/installable shell 或 Service Worker 存在。全新离线打开普通 HTTP 页面不能要求有离线壳；已加载会话的断线只读/重连合同不变。恢复 PWA 范围后，必须证明 manifest/installable shell 存在及 Service Worker 不缓存/重放 API 与 realtime 业务状态。离线媒体播放、离线业务写入与跨离线会话业务恢复明确不属于 v0.1。
 
 ## 5. 服务端模块边界
 
