@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories → MPD/SQLite`。
 
-当前实现已完成 Task 0–7，以及 Task 4 D6 corrective 和 Task 6 Batch13 的后端 final acceptance。按照主 Implementation Plan 的依赖顺序，下一项为 Task 8 Web/PWA。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
+当前实现已完成 Task 0–7，以及 Task 4 D6 corrective 和 Task 6 Batch13 的后端 final acceptance。Task 8 后端播放控制前置 P1–P3 已通过本地自动 Gate 并合入 main；下一步为 Task 8 手机 Web 状态层与播放器，Web W1–W6 尚未实施。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
 
 ## 当前状态
 
@@ -16,16 +16,23 @@ Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories →
 | 5 | 已完成并合入 main | Collection、Library/Playlist Service、REST API、idempotency 与跨模块 invariant |
 | 7 | 已完成并合入 main；物理 DAC 验收留待 Task 12 | Output Manager、NAS_DAC 状态/控制、MPD About |
 | 6 | Batch1–13 实现与后端 final acceptance 已通过 | WebSocket、完整状态快照与重连恢复 |
-| 8–12 | 未开始 | Web/PWA、配置、部署及最终实机验收 |
+| 8 | 后端控制前置已合入 main；Web W1–W6 未开始 | 手机 Web 状态层与播放器；PWA 安装/SW/冷离线壳延期 |
+| 9–12 | 未开始 | Web 业务页面、配置、部署及最终实机验收 |
 
 当前实施入口：
-- `docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md`
+- [主 Implementation Plan](docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md)
+- [Task 8 Web Batch Plan](docs/superpowers/plans/2026-10-09-task-8-web-batch-plan.md)
+- [Task 8 Contract Audit](docs/superpowers/plans/2026-10-09-task-8-contract-audit.md)
+- [Task 8 后端控制前置验收](docs/superpowers/archive/task-8/2026-10-09-playback-control-prerequisite-acceptance.md)
+- [手机 Web 真人验收方法](docs/superpowers/plans/2026-10-09-mobile-web-manual-acceptance.md)
 - [D6 联合验收与逐合同追溯](docs/superpowers/archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)
 - [Task 6 Batch13 final acceptance](docs/superpowers/archive/task-6/2026-10-04-task-6-batch-13-acceptance.md)
 
 D6 目标验证限现有 NAS 部署功能范围（daemon 0.23.17 / 协议 0.23.5）。恢复 runner 需显式启用并注入能力；最终配置加载属 Task 10。服务或 MPD 重启可恢复 actual 显示，业务 occurrence 绑定需明确播放操作经确认重建；不认证自然完成原因或补造遗漏 History。
 
 Task 7 后端验收证据见 `docs/superpowers/archive/task-7/2026-10-03-task-7-batch-9-acceptance.md`；本地后端验收不代表已完成真实 NAS/物理 DAC 验收。
+
+Task 8 后端已提供 snapshot `control_target`、原位 resume 和 guarded seek，保留无 target seek 的兼容行为。真实 MPD/NAS manual gate 尚未运行；后端自动通过不代表手机 Web 或完整 Task 8 验收通过。当前以手机浏览器通过 LAN HTTP 验收显示和触摸交互，PWA 延期部分不阻塞修订后的 Task 8 手机 Web 验收及 Task 9。
 
 Task 5 的 Batch/acceptance/corrective 文档已归档到 `docs/superpowers/archive/task-5/`，作为历史证据，不再作为当前实现入口。文档读取规则见 `docs/superpowers/README.md`。
 
