@@ -947,8 +947,16 @@ Dependencies:
 - Task 6 completed.
 - Task 7 completed.
 
+Common Web preflight (2026-10-09):
+- **Contract freeze only; no Task 8/9 Batch split or implementation is created by this preflight.**
+- Shared Web client authority/cache/disconnect/mutation/idempotency/PWA semantics are frozen in Architecture Spec §4.1–4.3 and realtime §12; the Visual Design Spec remains presentation authority.
+- Realtime loss uses degraded read-only: retain the last accepted state as visibly stale, allow read-only browsing, and send no server-authoritative mutations until a new initial full snapshot establishes the current epoch/sequence baseline.
+- v0.1 PWA is an installable shell with static-asset caching only; there is no offline business state, offline mutation replay, or cached API/snapshot authority.
+- Task 8 Contract Audit must create only Task-8-specific Contract rows still required by the shared contract and Player behavior. This preflight does not mark any Task 8 Step complete.
+
 Rules:
 - Web uses REST/WebSocket contracts only.
+- Shared client state/cache/reconnect/idempotency/PWA behavior must implement Architecture Spec §4.1–4.3; do not create page-specific alternatives.
 - No direct MPD access.
 - No local Queue or AutoPlay authority.
 - Album artwork comes only from the Task 5 artwork API.
@@ -988,6 +996,12 @@ Dependencies:
 - Task 5 completed.
 - Task 6 completed.
 - Task 8 completed.
+
+Rules:
+- Reuse Task 8's typed REST/WS client, canonical realtime store, resource-cache invalidation, mutation/idempotency mechanism and degraded read-only reconnect gate.
+- Task 9 may add only view/domain-specific Contract rows for Queue/Library/Playlist/Favorites/Search/navigation; it must not redefine the shared Web client contract from Architecture Spec §4.1–4.3.
+- Library/Playlist/Favorites/Search views remain server-authoritative and obey Library/Playlist revision invalidation, including Playlist/Favorites display dependence on Library revision.
+- This section does not pre-split Task 9 into Batches; Batch boundaries are decided by the later Task 9 Contract Audit.
 
 Files:
 - Create: web/src/views/QueueView.vue
