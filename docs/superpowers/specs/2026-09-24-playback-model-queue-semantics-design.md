@@ -288,6 +288,8 @@ Stop、Pause、切歌、自然播放完成是不同概念；只记录有确认�
 
 ### 7.1 Web 主播放按钮与 seek 意图（2026-10-09）
 
+Web 的 pending/同步/未知/错误及恢复操作入口只遵守 [全局 UI 合同](2026-10-03-web-pwa-visual-design.md) WEB-UI-NOTIFY-001；以下“显示/提示”不授权正文增加通知行。2026-10-10 用户已移除 Player Stop UI，本节保留后端 Stop 语义，不要求重新添加按钮；Player 保护基线见 WEB-UI-BASE-001。
+
 以下交互选择已接受；接口合同见 Architecture Spec §4.2.1，实现与验收由 Task 8 后端前置承担：
 
 - PAUSED 下恢复播放必须原位继续，保留当前 occurrence、Queue 和 Playback Context，不能用重新 Start Track 代替 resume。此选择不授权未绑定状态自动接管。

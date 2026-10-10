@@ -2,7 +2,7 @@
 
 Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories → MPD/SQLite`。
 
-当前实现已完成 Task 0–7，以及 Task 4 D6 corrective 和 Task 6 Batch13 的后端 final acceptance。Task 8 后端播放控制前置 P1–P3 已通过本地自动 Gate 并合入 main；下一步为 Task 8 手机 Web 状态层与播放器，Web W1–W6 尚未实施。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
+当前实现已完成 Task 0–7，以及 Task 4 D6 corrective 和 Task 6 Batch13 的后端 final acceptance。Task 8 后端播放控制前置 P1–P3 已通过本地自动 Gate 并合入 main；Task 8 手机 Web W1–W6 已实现，自动 Gate 与必要手机真人验收通过，当前手机 Web 范围满足 Task 9 前置。PWA 延期、真实 MPD/NAS/DAC 尚未运行，不宣称原始 Task 8 整体验收完成。项目的长期产品/架构合同位于 `docs/superpowers/specs/`，任务依赖和范围以主 Implementation Plan 为准。
 
 ## 当前状态
 
@@ -16,8 +16,10 @@ Music Server：`Web/PWA → FastAPI → Services → PlayerPort/Repositories →
 | 5 | 已完成并合入 main | Collection、Library/Playlist Service、REST API、idempotency 与跨模块 invariant |
 | 7 | 已完成并合入 main；物理 DAC 验收留待 Task 12 | Output Manager、NAS_DAC 状态/控制、MPD About |
 | 6 | Batch1–13 实现与后端 final acceptance 已通过 | WebSocket、完整状态快照与重连恢复 |
-| 8 | 后端控制前置已合入 main；Web W1–W6 未开始 | 手机 Web 状态层与播放器；PWA 安装/SW/冷离线壳延期 |
+| 8 | 后端控制前置已合入 main；手机 Web W1–W6 自动及必要真人验收通过 | 手机 Web 状态层与播放器；PWA 安装/SW/冷离线壳延期 |
 | 9–12 | 未开始 | Web 业务页面、配置、部署及最终实机验收 |
+
+全部后续Web UI工作流遵守唯一 [全局 UI 合同](docs/superpowers/specs/2026-10-03-web-pwa-visual-design.md)，保护当前Player；Task9先交付持久共享壳/顶部通知、全局背景及四项导航，再扩展内容。Task 9 尚未实施。
 
 当前实施入口：
 - [主 Implementation Plan](docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md)

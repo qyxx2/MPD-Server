@@ -1,0 +1,466 @@
+{
+  "provenance": {
+    "source": "Pydantic domain/public model_dump(mode=json, by_alias=True)",
+    "control_target": "actual DTO present; P3 full Gate must be freshly verified in W4"
+  },
+  "snapshot": {
+    "epoch": "fixture-epoch",
+    "sequence": 12,
+    "captured_at": "2026-10-09T08:00:00Z",
+    "revisions": {
+      "library": 3,
+      "playlist": 5
+    },
+    "playback": {
+      "song_id": "song-a",
+      "state": "PAUSED",
+      "playback_context_id": "context-a",
+      "position_seconds": 37.0,
+      "autoplay_enabled": true,
+      "updated_at": "2026-10-09T08:00:00Z"
+    },
+    "current_song": {
+      "song_id": "song-a",
+      "title": "长标题 / Song A",
+      "file_uri": "fixture/a.flac",
+      "artists": [
+        "Artist"
+      ],
+      "album_id": null,
+      "album": null,
+      "album_artists": [],
+      "track_number": null,
+      "disc_number": null,
+      "year": null,
+      "date": null,
+      "genres": [],
+      "tag_names": [],
+      "duration": null,
+      "lyrics": "[00:01]fixture",
+      "lyrics_format": "lrc",
+      "lyrics_source": null,
+      "lyrics_status": "missing",
+      "bit_depth": null,
+      "sample_rate_hz": null,
+      "channel_count": null,
+      "codec": null,
+      "metadata_status": null,
+      "last_scanned_at": null,
+      "file_size": null,
+      "file_mtime_ns": null,
+      "content_hash": null,
+      "availability_status": "AVAILABLE",
+      "last_seen_at": null,
+      "artwork": null
+    },
+    "queue": {
+      "revision": 7,
+      "items": [
+        {
+          "queue_item_id": "item-a",
+          "song_id": "song-a",
+          "position": 0,
+          "source": "MANUAL",
+          "playback_context_id": "context-a"
+        },
+        {
+          "queue_item_id": "item-b",
+          "song_id": "song-a",
+          "position": 1,
+          "source": "AUTOPLAY",
+          "playback_context_id": null
+        }
+      ]
+    },
+    "history": {
+      "has_entries": true,
+      "active_event": {
+        "history_id": null,
+        "song_id": "song-a",
+        "started_at": "2026-10-09T08:00:00Z",
+        "ended_at": null,
+        "reason": null,
+        "session_id": "session-a"
+      },
+      "session_id": "session-a"
+    },
+    "output": {
+      "states": [
+        {
+          "mode": "NAS_DAC",
+          "status": "ACTIVE",
+          "target_client_id": null,
+          "stream_url": null,
+          "format": "pcm",
+          "sample_rate": 96000,
+          "bit_depth": 24,
+          "channels": 2,
+          "error_code": null,
+          "error_message": null,
+          "updated_at": "2026-10-09T08:00:00Z",
+          "stale": false
+        },
+        {
+          "mode": "CLIENT_STREAM",
+          "status": "UNAVAILABLE",
+          "target_client_id": null,
+          "stream_url": null,
+          "format": null,
+          "sample_rate": null,
+          "bit_depth": null,
+          "channels": null,
+          "error_code": null,
+          "error_message": null,
+          "updated_at": "2026-10-09T08:00:00Z",
+          "stale": false
+        }
+      ],
+      "last_request": {
+        "mode": "NAS_DAC",
+        "enabled": false,
+        "status": "SWITCH_FAILED",
+        "error_code": "OUTPUT_FAILED",
+        "error_message": "fixture failure",
+        "updated_at": "2026-10-09T08:00:00Z"
+      }
+    },
+    "playback_observation": {
+      "actual_state": "paused",
+      "actual_current": {
+        "entry_id": 8,
+        "uri": "fixture/a.flac",
+        "position": 0
+      },
+      "actual_freshness": "fresh",
+      "bound_queue_item_id": "item-a",
+      "control_target": {
+        "queue_item_id": "item-a",
+        "token": "fixture-opaque-token"
+      },
+      "sync_status": "CONFIRMED",
+      "matches_current": true,
+      "position_seconds": 37.0,
+      "duration_seconds": null,
+      "observed_at": "2026-10-09T08:00:00Z",
+      "freshness": "fresh",
+      "reconciliation_required": false,
+      "error_code": null,
+      "error_message": null
+    },
+    "output_observation": {
+      "observed_at": "2026-10-09T08:00:00Z",
+      "freshness": "fresh",
+      "error_code": null,
+      "error_message": null
+    }
+  },
+  "empty_snapshot": {
+    "epoch": "fixture-epoch",
+    "sequence": 12,
+    "captured_at": "2026-10-09T08:00:00Z",
+    "revisions": {
+      "library": 3,
+      "playlist": 5
+    },
+    "playback": null,
+    "current_song": null,
+    "queue": {
+      "revision": 0,
+      "items": []
+    },
+    "history": {
+      "has_entries": false,
+      "active_event": null,
+      "session_id": null
+    },
+    "output": {
+      "states": [
+        {
+          "mode": "NAS_DAC",
+          "status": "ACTIVE",
+          "target_client_id": null,
+          "stream_url": null,
+          "format": "pcm",
+          "sample_rate": 96000,
+          "bit_depth": 24,
+          "channels": 2,
+          "error_code": null,
+          "error_message": null,
+          "updated_at": "2026-10-09T08:00:00Z",
+          "stale": false
+        },
+        {
+          "mode": "CLIENT_STREAM",
+          "status": "UNAVAILABLE",
+          "target_client_id": null,
+          "stream_url": null,
+          "format": null,
+          "sample_rate": null,
+          "bit_depth": null,
+          "channels": null,
+          "error_code": null,
+          "error_message": null,
+          "updated_at": "2026-10-09T08:00:00Z",
+          "stale": false
+        }
+      ],
+      "last_request": {
+        "mode": "NAS_DAC",
+        "enabled": false,
+        "status": "SWITCH_FAILED",
+        "error_code": "OUTPUT_FAILED",
+        "error_message": "fixture failure",
+        "updated_at": "2026-10-09T08:00:00Z"
+      }
+    },
+    "playback_observation": {
+      "actual_state": null,
+      "actual_current": null,
+      "actual_freshness": "unknown",
+      "bound_queue_item_id": null,
+      "control_target": null,
+      "sync_status": "UNBOUND",
+      "matches_current": null,
+      "position_seconds": null,
+      "duration_seconds": null,
+      "observed_at": null,
+      "freshness": "unknown",
+      "reconciliation_required": false,
+      "error_code": null,
+      "error_message": null
+    },
+    "output_observation": {
+      "observed_at": null,
+      "freshness": "unknown",
+      "error_code": null,
+      "error_message": null
+    }
+  },
+  "snapshot_frame": {
+    "type": "snapshot",
+    "protocol_version": 1,
+    "epoch": "fixture-epoch",
+    "sequence": 12,
+    "state": {
+      "epoch": "fixture-epoch",
+      "sequence": 12,
+      "captured_at": "2026-10-09T08:00:00Z",
+      "revisions": {
+        "library": 3,
+        "playlist": 5
+      },
+      "playback": {
+        "song_id": "song-a",
+        "state": "PAUSED",
+        "playback_context_id": "context-a",
+        "position_seconds": 37.0,
+        "autoplay_enabled": true,
+        "updated_at": "2026-10-09T08:00:00Z"
+      },
+      "current_song": {
+        "song_id": "song-a",
+        "title": "长标题 / Song A",
+        "file_uri": "fixture/a.flac",
+        "artists": [
+          "Artist"
+        ],
+        "album_id": null,
+        "album": null,
+        "album_artists": [],
+        "track_number": null,
+        "disc_number": null,
+        "year": null,
+        "date": null,
+        "genres": [],
+        "tag_names": [],
+        "duration": null,
+        "lyrics": "[00:01]fixture",
+        "lyrics_format": "lrc",
+        "lyrics_source": null,
+        "lyrics_status": "missing",
+        "bit_depth": null,
+        "sample_rate_hz": null,
+        "channel_count": null,
+        "codec": null,
+        "metadata_status": null,
+        "last_scanned_at": null,
+        "file_size": null,
+        "file_mtime_ns": null,
+        "content_hash": null,
+        "availability_status": "AVAILABLE",
+        "last_seen_at": null,
+        "artwork": null
+      },
+      "queue": {
+        "revision": 7,
+        "items": [
+          {
+            "queue_item_id": "item-a",
+            "song_id": "song-a",
+            "position": 0,
+            "source": "MANUAL",
+            "playback_context_id": "context-a"
+          },
+          {
+            "queue_item_id": "item-b",
+            "song_id": "song-a",
+            "position": 1,
+            "source": "AUTOPLAY",
+            "playback_context_id": null
+          }
+        ]
+      },
+      "history": {
+        "has_entries": true,
+        "active_event": {
+          "history_id": null,
+          "song_id": "song-a",
+          "started_at": "2026-10-09T08:00:00Z",
+          "ended_at": null,
+          "reason": null,
+          "session_id": "session-a"
+        },
+        "session_id": "session-a"
+      },
+      "output": {
+        "states": [
+          {
+            "mode": "NAS_DAC",
+            "status": "ACTIVE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": "pcm",
+            "sample_rate": 96000,
+            "bit_depth": 24,
+            "channels": 2,
+            "error_code": null,
+            "error_message": null,
+            "updated_at": "2026-10-09T08:00:00Z",
+            "stale": false
+          },
+          {
+            "mode": "CLIENT_STREAM",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": null,
+            "error_message": null,
+            "updated_at": "2026-10-09T08:00:00Z",
+            "stale": false
+          }
+        ],
+        "last_request": {
+          "mode": "NAS_DAC",
+          "enabled": false,
+          "status": "SWITCH_FAILED",
+          "error_code": "OUTPUT_FAILED",
+          "error_message": "fixture failure",
+          "updated_at": "2026-10-09T08:00:00Z"
+        }
+      },
+      "playback_observation": {
+        "actual_state": "paused",
+        "actual_current": {
+          "entry_id": 8,
+          "uri": "fixture/a.flac",
+          "position": 0
+        },
+        "actual_freshness": "fresh",
+        "bound_queue_item_id": "item-a",
+        "control_target": {
+          "queue_item_id": "item-a",
+          "token": "fixture-opaque-token"
+        },
+        "sync_status": "CONFIRMED",
+        "matches_current": true,
+        "position_seconds": 37.0,
+        "duration_seconds": null,
+        "observed_at": "2026-10-09T08:00:00Z",
+        "freshness": "fresh",
+        "reconciliation_required": false,
+        "error_code": null,
+        "error_message": null
+      },
+      "output_observation": {
+        "observed_at": "2026-10-09T08:00:00Z",
+        "freshness": "fresh",
+        "error_code": null,
+        "error_message": null
+      }
+    }
+  },
+  "invalidate_frame": {
+    "type": "invalidate",
+    "protocol_version": 1,
+    "epoch": "fixture-epoch",
+    "sequence": 13,
+    "domains": [
+      "playback"
+    ],
+    "revisions": {
+      "library": 3,
+      "playlist": 5
+    }
+  },
+  "rest_output": {
+    "states": [
+      {
+        "mode": "NAS_DAC",
+        "status": "ACTIVE",
+        "targetClientId": null,
+        "streamUrl": null,
+        "format": "pcm",
+        "sampleRate": 96000,
+        "bitDepth": 24,
+        "channels": 2,
+        "errorCode": null,
+        "errorMessage": null,
+        "updatedAt": "2026-10-09T08:00:00Z",
+        "stale": false
+      },
+      {
+        "mode": "CLIENT_STREAM",
+        "status": "UNAVAILABLE",
+        "targetClientId": null,
+        "streamUrl": null,
+        "format": null,
+        "sampleRate": null,
+        "bitDepth": null,
+        "channels": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "updatedAt": "2026-10-09T08:00:00Z",
+        "stale": false
+      }
+    ],
+    "last_request": {
+      "mode": "NAS_DAC",
+      "enabled": false,
+      "status": "SWITCH_FAILED",
+      "errorCode": "OUTPUT_FAILED",
+      "errorMessage": "fixture failure",
+      "updatedAt": "2026-10-09T08:00:00Z"
+    }
+  },
+  "playback_receipt": {
+    "song_id": "song-a",
+    "state": "PAUSED",
+    "playback_context_id": "context-a",
+    "position_seconds": 37.0,
+    "autoplay_enabled": true,
+    "updated_at": "2026-10-09T08:00:00Z"
+  },
+  "error": {
+    "error": {
+      "code": "PLAYBACK_TARGET_CONFLICT",
+      "message": "Changed",
+      "details": {
+        "target": "old"
+      }
+    }
+  }
+}

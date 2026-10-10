@@ -942,9 +942,11 @@ Rules:
 
 ## Task 8：Web/PWA 状态层与播放器
 
+2026-10-10 UI 合同修订：所有 Web 页面的视觉、稳定布局、通知位置和导航映射唯一遵守 [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md)（WEB-UI-*）。保护当前 Player 工作区成果；Task 8 完成当前 W5/W6 验收，不追加全局专辑背景/四项导航，也不因本轮文档更新重开历史通过项。当前差距及未来接入见该合同 §2/§8，本轮没有实现或重新运行验收。
+
 2026-10-09 用户验收优先级调整：先交付手机浏览器中的实际页面、显示及触摸交互，提供真实 LAN IP/端口供手机实测；不新增桌面专用布局或独立验收场景控制台。PWA manifest/SW/安装/冷离线壳范围 DEFERRED，不阻塞修订后的 Task 8 手机 Web acceptance 或 Task 9；原始 PWA 范围不据此标为已完成。具体 Gate 归 Task 8 Batch Plan，操作与报告见 [手机 Web 真人验收方法](2026-10-09-mobile-web-manual-acceptance.md)。
 
-2026-10-09 专项合同修订（已接受，尚未实施）：
+2026-10-09 专项合同修订（保留原设计入口；当前实施/Gate读取active Batch Plan与最新acceptance，不据此判断尚未实施）：
 - 后端前置：[Task 8 playback control prerequisite](2026-10-09-task-8-playback-control-prerequisite-plan.md)，交付 Architecture Spec §4.2.1 的 resume、guarded seek 与 snapshot control_target；不属于组件内临时补丁。
 - Web 执行入口：[Task 8 Batch Plan](2026-10-09-task-8-web-batch-plan.md)。共同 Web 基础可独立开展，使用 resume/seek 的 Batch 必须等待对应前置 Gate；Task-level acceptance 必须覆盖整个前置。
 - 本修订不勾选原始 Step，不表示 Task 8/后端前置已通过测试，也不授权提交或远程操作。
@@ -987,7 +989,7 @@ Files:
 - [ ] Step 2: Test reconnect triggers full snapshot refresh.
 - [ ] Step 3: Implement typed REST/WebSocket clients.
 - [ ] Step 4: Implement authoritative server-state stores.
-- [ ] Step 5: Build the confirmed dark glassmorphism player UI with reduced-motion fallback.
+- [ ] Step 5: Build/preserve the Player presentation under the sole Visual Spec (WEB-UI-BASE/STYLE/SHELL/NOTIFY), including reduced-motion fallback; do not use the old concept image as an independent requirement.
 - [ ] Step 6: Implement album art and player metadata display.
 - [ ] Step 7: Implement playback controls and progress/seek.
 - [ ] Step 8: Implement album-art ↔ lyrics toggle and timestamp-synchronized LRC scrolling.
@@ -998,6 +1000,8 @@ Files:
 
 
 ## Task 9：Web Queue、Library、Playlist、Search、Favorites、Settings
+
+2026-10-10 顺序修订：先按 [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md) §8 审计并交付持久共享壳/唯一顶部通知、全局背景、四项导航，再扩展页面内容；原 Step 12 前移为此共同前置阶段，禁止重复实施。四项映射和设置入口只引用 WEB-UI-NAV-001，不另定导航合同。本节不预拆 Batch；新证明必须覆盖共享壳→路由→背景/通知/Player 保留关系。纯壳不依赖尚待审计的 song Play Now 原子后端入口；依赖该动作的内容仍需其 prerequisite。
 
 2026-10-09 增量 prerequisite：普通 song Play Now 新建 occurrence、保留原待播项，明确 Stop 后重启会话并启用 AutoPlay（Playback Spec §3.3 已接受）。原子 song-id 接口、Context/History 生命周期由 Task 9 Contract Audit 完成；不得以现有 Start Track 或前端拼接请求替代。不在 Task 8 中实施，不据此预拆 Task 9 Batches。
 
@@ -1010,7 +1014,7 @@ Rules:
 - Reuse Task 8's typed REST/WS client, canonical realtime store, resource-cache invalidation, mutation/idempotency mechanism and degraded read-only reconnect gate.
 - Task 9 may add only view/domain-specific Contract rows for Queue/Library/Playlist/Favorites/Search/navigation; it must not redefine the shared Web client contract from Architecture Spec §4.1–4.3.
 - Library/Playlist/Favorites/Search views remain server-authoritative and obey Library/Playlist revision invalidation, including Playlist/Favorites display dependence on Library revision.
-- This section does not pre-split Task 9 into Batches; Batch boundaries are decided by the later Task 9 Contract Audit.
+- This section does not pre-split Task 9 into Batches; Batch boundaries are decided by the later Task 9 Contract Audit, with the shared UI foundation first under Visual Spec §8. Reuse the sole WEB-UI contracts; do not create per-page visual/notification/background/navigation alternatives.
 - Phone browser is the primary presentation/touch acceptance environment. Each visible interaction Batch maps applicable scenario IDs from the mobile Web manual method to explicit steps/expected results before implementation; hand off a reachable LAN URL after automated GREEN and wait for required human feedback before closing the Batch. No dedicated desktop UI, scenario console or PWA install Gate is introduced.
 
 Files:
@@ -1033,8 +1037,8 @@ Files:
 - [ ] Step 8: Implement Playlist CRUD/reorder and duplicate rejection.
 - [ ] Step 9: Implement Favorites and synchronized star state.
 - [ ] Step 10: Implement search by title, artist, album, album artist, genre and year.
-- [ ] Step 11: Implement Settings → About using MPD info API.
-- [ ] Step 12: Implement responsive bottom navigation and Player as default view.
+- [ ] Step 11: Implement Settings → About using MPD info API, and place the already-authorized Output controls in Settings under WEB-UI-NAV-001; CLIENT_STREAM remains unavailable, and Task 10 configuration features are not imported.
+- [ ] Step 12 (execute first): Establish persistent AppShell/app bar/notification ownership, the sole global artwork background and four-item navigation under WEB-UI-BASE/BG/SHELL/NOTIFY/NAV; preserve Player as default and its existing proportions/behavior. Verify the shared foundation before expanding Steps 1–11; do not duplicate this step later.
 - [ ] Step 13: Run typecheck, component tests, required server-state ↔ Web action/view relationship tests and production build.
 - [ ] Step 14: Commit: feat: add library queue playlists search and settings.
 

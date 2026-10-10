@@ -8,7 +8,7 @@
 
 1. `specs/`：产品行为、领域语义、架构边界。长期合同的权威来源。
 2. `plans/2026-09-25-mpd-server-v0-1-implementation-plan.md`：Task 依赖、Task scope、全局执行顺序和原始 Step。
-3. 当前 Task 的 active plan：只记录当前 Task 的冻结合同、Batch 边界和验收 Gate。
+3. 当前 Task 的 active plan：只记录当前 Task 的冻结合同、Batch 边界和验收 Gate。Web视觉、通知位置、背景、比例和四项导航长期规则唯一归 [全局 UI 合同](specs/2026-10-03-web-pwa-visual-design.md) WEB-UI-*；计划只引用与分配证明，不复制规则。
 4. 当前 corrective/acceptance handoff：只记录尚未关闭的 blocker 与最新可复现证据。
 5. Git、实际代码和测试：验证实现/状态是否真的存在。历史文档中的“已完成”不能替代实际核对。
 
@@ -21,7 +21,7 @@ Task 0–7、D6及Task6后端功能验收已完成；D6最终逐合同证明位�
 开始 Task 8 时默认读取：
 
 - `specs/2026-09-25-system-and-development-architecture-design.md` §4.1–4.3 与 §12：Task 8/9 共用的 Web authority/cache/reconnect/mutation/idempotency/PWA 合同；
-- 与 Player/Library/Output 范围直接相关的其它 `specs/`，包括 Web/PWA visual design；
+- [全局 UI 合同](specs/2026-10-03-web-pwa-visual-design.md)：先读当前Player保护基线与WEB-UI-*；再读与Player/Library/Output范围直接相关的领域Specs；
 - 主 Implementation Plan 的 Task 8、依赖矩阵和全局约束；
 - Task 6 plan 中仍约束客户端消费的快照、重连、actual/binding合同；
 - [手机 Web 真人验收方法](plans/2026-10-09-mobile-web-manual-acceptance.md)：手机/LAN 交付、最小场景准备、反馈复验及报告模板；必验编号归 active Batch Plan，不新建验收平台；
@@ -33,7 +33,7 @@ Task 8 的 Contract Audit / 执行计划应在开始该 Task 时另行制定，�
 
 2026-10-09 用户优先级调整：手机浏览器为主要交付/触摸验收环境，Ubuntu Firefox/Chromium 仅辅助；PWA 安装/SW/冷离线壳延期，不阻塞 Task 8 手机 Web acceptance 或 Task 9，不声明延期部分完成。详见 Architecture §4.3 和 active Batch Plan。
 
-当前入口：[Task 8 Web Batch Plan](plans/2026-10-09-task-8-web-batch-plan.md) 与 [后端控制前置计划](plans/2026-10-09-task-8-playback-control-prerequisite-plan.md)（计划待审阅，未实施）。[Contract Audit](plans/2026-10-09-task-8-contract-audit.md) 保留已接受决策与专项 rows/证明索引；公共接口已归入 Architecture §4.2.1，Task 8 尚未验收。Task 9 song Play Now 原子入口仍需其后续审计。
+当前入口：[Task 8 Web Batch Plan](plans/2026-10-09-task-8-web-batch-plan.md) 与 [W6 acceptance](archive/task-8/2026-10-10-task-8-web-w6-acceptance.md) 最新关闭记录。W1–W6 手机 Web 范围已实现，必要自动与真人 Gate 通过，满足当前 Task 9 前置；A04 歌词保护基线保持。PWA 仍延期，真实 MPD/NAS/DAC NOT RUN，不宣称原始 Task 8 整体验收完成。[Contract Audit](plans/2026-10-09-task-8-contract-audit.md)保留决策/证明索引；公共接口归Architecture §4.2.1，后端前置证据归archive/task-8，不据旧计划措辞判断未实施。Task9先审计交付共享UI基础再扩展内容，遵守全局UI合同§8；song Play Now原子入口仍需后续审计。
 
 ## Relationship / Invariant Test Gate
 

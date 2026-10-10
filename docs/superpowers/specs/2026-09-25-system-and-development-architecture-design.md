@@ -114,6 +114,8 @@ Vite 开发服务器负责前端即时更新，并将：
 
 ### 4.1 Web 客户端权威状态与缓存合同（Task 8/9 共用，2026-10-09）
 
+Web 的共享壳、背景、通知位置及四项导航只遵守 [全局 UI 合同](2026-10-03-web-pwa-visual-design.md) 的 WEB-UI-*；本文拥有状态/协议合同，不并列规定页面表达。全局通知接入只消费既有事实和 action，不另造 canonical state、mutation receipt 或 retry authority。
+
 本节是 Task 8/9 的共同客户端合同。它只规定 Web 如何消费既有服务端权威，不新增播放、Queue、Library、Playlist、History 或 Output 业务语义；Task 8 实现共同状态基础，Task 9 必须复用，不得建立第二套 authority/cache/reconnect 规则。
 
 Web 状态分为三层：

@@ -1,6 +1,6 @@
 # Task 8 Contract Audit — 实施前决策记录
 
-状态：**2026-10-09 用户已接受公共接口与任务归属方案；合同/证明索引已整理，执行计划待审阅。未实施、未验收。**
+状态：**2026-10-09 决策索引保留；2026-10-10 全局 UI 合同同步。本文不独立报告当前 implementation/GREEN；实际 W1–W5 产物及未关闭 Gate 以 Web Batch Plan、最新 acceptance 与代码/测试共同核对。Task 8 尚未整体验收，本轮仅文档修订。**
 
 审计基线：`docs/web-common-contract-preflight`，`e3a15b3`。本次基于文档和代码静态核对，未运行测试，不重新宣告 Task 0–7 验收通过。用户授权启动合同审计；下列建议不等于已经接受的产品决定。
 
@@ -19,7 +19,7 @@
 | [Playback §3–8.9](../specs/2026-09-24-playback-model-queue-semantics-design.md) | Start Track 与 Play Now 区别、Queue occurrence、进度权威、重启后明确接管、Stop |
 | [Library §3、§5–7](../specs/2026-09-24-library-playlist-tag-search-design-2-1.md) | 歌词来源与时间戳、membership 与 playable collection、Favorites、资源 revision |
 | [Output §6–8](../specs/2026-09-24-system-architecture-playback-output-design.md) | observed fact/request 分离、输出切换保留关系、未知值与 About |
-| [Visual Spec](../specs/2026-10-03-web-pwa-visual-design.md) | 唯一视觉方向、Player 层级、降级状态表达、Task 8/9 视觉分工 |
+| [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md) | WEB-UI-* 唯一视觉/通知/背景/布局/四项导航合同；保护当前 Player，Task 9 共享壳前置；不重复定义 |
 | [主 Plan](2026-09-25-mpd-server-v0-1-implementation-plan.md) | Task scope/dependency、Contract Matrix、Relationship Gate |
 
 共同合同需要实现与可执行证明；不能因为未实现而重新作为产品待决策项。
@@ -46,7 +46,7 @@ AutoPlay 意图与既有 active History 的保留、实际确认/失败/retry �
 
 建议保持既有产品语义，补服务端单次原子 song Play Now 能力；不得用 Start Track 替代，也不得前端拼接“入队→播放”冒充原子动作。相同用户意图的同 key retry/replay 不能重复创建 occurrence；新的明确用户意图使用新 key。空/停止会话如何建立 context、History 生命周期和不可用歌曲失败边界仍需完成设计。
 
-已接受的产品规则归入 Playback Spec §3.3；暂停恢复与 seek 意图归入 §7.1。本记录保留审计状态，不替代 Spec。完整接口合同及实施 Gate 尚未关闭。
+已接受的产品规则归入 Playback Spec §3.3；暂停恢复与 seek 意图归入 §7.1。本记录保留2026-10-09审计状态，不替代Spec；当前接口实现与Gate须核对active计划/最新acceptance和代码，不能据此判定仍无实现。
 
 决定后归属：Playback Spec；主 Plan 决定该 prerequisite 在 Task 8 前置范围还是 Task 9 前置范围，不默认把所有 Task 9 能力拉入 Task 8。
 
@@ -78,10 +78,10 @@ AutoPlay 意图与既有 active History 的保留、实际确认/失败/retry �
 | 进度和 seek 生命周期 | 插值已选 G8-04；待落实有效期、后台恢复、unknown duration、drag draft、发送频率、pending 结束、成功但未同步与未知结果 | 旧 observation 不串曲；HTTP receipt 不成为动态时钟；失败不伪造位置 |
 | LRC 同步 | 支持语法、offset/多时间戳/异常行；手动滚动及恢复跟随；切歌清理 | 同一展示时钟；plain text 不伪造同步；迟到歌词不串曲 |
 | mutation 交互 | 连点、并发意图、timeout、同 key retry、HTTP 成功后 read 失败 | 已失败/结果未知/已成功待同步可区分；不重复执行业务 |
-| Output | Task 8 控制入口与范围；confirmed fact 与 last_request 分层 | 失败请求不覆盖已确认输出；CLIENT_STREAM 不冒充已支持 |
+| Output | 既有合同/独立实现保留；Player卡片/启停入口已移除，设置接入归Task9；confirmed fact 与 last_request 分层 | 失败请求不覆盖已确认输出；CLIENT_STREAM 不冒充已支持 |
 | Web harness / 手机人工验收 | 测试目录、依赖选择、精确命令、DTO 一致性、LAN 手机触摸及报告边界；PWA 延期 | REST/WS→store→UI；恢复 PWA 时静态缓存不得处理 API/业务 replay |
 
-当前 `web/package.json` 只有基础 Vue/Vite 与 build/typecheck，无组件/relationship test script。审计不安装依赖；执行计划需明确选择与验证入口。
+以上工具缺口是2026-10-09审计基线；当前工作区已存在 Vitest、tests/invariants 与相关 scripts。各 Batch 的实际验证入口见 Web Batch Plan，本轮不安装依赖或将历史 GREEN 当作 fresh 证明。
 
 ## 5. Task 9 留待后续的增量
 
@@ -91,7 +91,7 @@ AutoPlay 意图与既有 active History 的保留、实际确认/失败/retry �
 - Save as Playlist：既有 Up Next 范围不重定；核对重复 occurrence 到禁止重复 membership 的规则，明确提交时最新内容与用户预览的关系。
 - Playlist/Favorites：完整排序请求与并发成员变化、draft 冲突、跨页 pending/确认；星形“立即切换”不得覆盖 Architecture 禁止 speculative commit 的规定。
 - Library/Search：Collection IDs 到 Song 表示、空查询、迟到结果、不可用项、集合操作范围；不把 playable collection 当完整 membership。
-- navigation/Settings：默认 Player、详情返回、草稿生命周期、共享连接；不提前实现 Task 10 管理功能。
+- navigation/Settings：继承 WEB-UI-NAV/SHELL/NOTIFY/BG 已冻结映射，先交付共享壳/背景/导航再扩展内容；只审计详情返回、草稿/跨页pending生命周期及证明，不重定导航项。不提前实现 Task 10 管理或 CLIENT_STREAM。
 
 当前歌曲删除、AutoPlay、Playlist 禁止重复等已有历史合同，应继承并核对实际代码/测试，不把它们重新标为未定义。
 
@@ -135,7 +135,7 @@ Contract Matrix：**REQUIRED**。Relationship / Invariant Gate：**REQUIRED**。
 
 原版 MPD 的命令并非跨客户端物理事务：请求目标保护约束本服务可验证的身份和执行边界，不能宣称消除任意外部客户端在多条 MPD 命令间插入操作。确认失败须按现有 reconciliation/部分执行合同报告，不伪装业务成功；新测试必须包含这种失败。
 
-后端 target 的 mint/失效/rollback 与现有 recovery journal 的接线由 prerequisite plan 指定；该计划待审阅，当前 API 尚不存在。
+后端target的mint/失效/rollback与recovery journal接线归prerequisite plan；“API尚不存在”是原审计基线，当前接口已存在，证明/运行时限制读取后端前置acceptance并核对代码，不由本文重新认证。
 
 ### 7.3 owner 与 Task 范围
 
@@ -145,7 +145,9 @@ Contract Matrix：**REQUIRED**。Relationship / Invariant Gate：**REQUIRED**。
 
 ## 8. Task 8 专项 Contract rows 与状态矩阵
 
-以下新 ID 只覆盖 Task-8-specific 消费行为，不复制共同 Web authority/cache/reconnect/idempotency rows。六行消费语义已确定；表中 DRAFT 表示对应执行计划尚待审阅、proof 尚未实现，不表示公共接口选择仍待决定。
+本节 rows 的诊断/错误/无候选/未知等可见说明统一引用 WEB-UI-NOTIFY-001；业务事实保持原位，不能用下表的“提示”措辞建立第二个通知位置。本文 DRAFT 是原审计设计标记，实际交付/Gate 见 active Batch Plan，不据此断言代码尚不存在。
+
+以下新 ID 只覆盖 Task-8-specific 消费行为，不复制共同 Web authority/cache/reconnect/idempotency rows。六行消费语义已确定；表中DRAFT保留原审计设计标记，不表示当前proof尚未实现或公共接口仍待决定；实际状态只读取active计划/最新acceptance并核对代码。
 
 ### 8.1 共同 row 字段
 
@@ -166,8 +168,8 @@ Contract Matrix：**REQUIRED**。Relationship / Invariant Gate：**REQUIRED**。
 | WEB-PLAYER-CONTROL-001 / DRAFT | 各状态下显式按钮操作；resume 依赖 prerequisite | pending→HTTP receipt→权威重读；明确 Stop 后不隐式 resume | resume 保留 occurrence/position；冲突不重播；Stop 不冒充取消旧请求 | `web/tests/invariants/player-controls.test.ts`：按钮→真实 client/store→模拟 HTTP/WS；重复操作、timeout、断线禁用、旧响应迟到 |
 | WEB-SEEK-001 / DRAFT | 有效 target、已知正 duration；松手提交 | draft 与 canonical 分离；一次请求；冲突撤销草稿 | 仅目标 occurrence；同 key replay；成功但 observation 未更新不伪造位置 | `web/tests/invariants/player-seek.test.ts`：拖动期间/发送后切歌、重复 URI、unknown duration、失败、成功旧样本 |
 | WEB-PROGRESS-001 / DRAFT | fresh、matches_current、bound current、actual playing | 单调时钟有限外推，新样本校准；暂停/stale/后台停止 | UI clock 不提交 position、不触发 next/history | `web/tests/invariants/player-clock.test.ts`：FakeClock、重复样本、后台恢复、duration 上界、跨 epoch |
-| WEB-LYRICS-001 / DRAFT | 当前 Song 的 API lyrics 与有效显示进度 | 同时 cue 高亮、显式恢复跟随、缺失/失败分开 | 源文本不改写；无时间文本不伪造同步；迟到歌词不串曲 | `web/tests/invariants/player-lyrics.test.ts`：clock/store→歌词、切歌、offset、同时间 cue、fallback read_error |
-| WEB-OUTPUT-001 / DRAFT | NAS_DAC 状态和显式 enable/disable；共同门禁 | confirmed fact 与 pending/last_request 分开显示 | 输出操作不改播放意图；未知参数不补值；CLIENT_STREAM 显示预留不可用 | `web/tests/invariants/player-output.test.ts`：失败保留事实、camelCase REST→snake_case realtime 显式映射、迟到回执 |
+| WEB-LYRICS-001 / DRAFT | 当前 Song 的 API lyrics 与有效显示进度 | 同时 cue 高亮、继承 Library §3.1 已冻结的3秒恢复跟随/cue seek、缺失/失败在顶部详情区分 | 源文本不改写；无时间文本不伪造同步；迟到歌词不串曲 | `web/tests/invariants/player-lyrics.test.ts`：clock/store→歌词、切歌、offset、同时间 cue、fallback read_error |
+| WEB-OUTPUT-001 / DRAFT | NAS_DAC 独立合同实现保留；Player仅confirmed摘要，设置入口归Task9；共同门禁 | confirmed fact 与 pending/last_request 分开；通知位置引用WEB-UI-NOTIFY | 输出操作不改播放意图；未知参数不补值；CLIENT_STREAM 显示预留不可用 | `web/tests/invariants/player-output.test.ts`：失败保留事实、camelCase REST→snake_case realtime 显式映射、迟到回执 |
 
 ### 8.2 Player 控件矩阵（界面限制，不改变服务端权限）
 
@@ -194,7 +196,7 @@ v0.1 Web 最多外推 6 秒减已知样本年龄，与服务端默认观察 stal
 
 建议 Vitest + Vue Test Utils + jsdom，复用 Vite 配置；原生 Vue reactive/composable store，路由使用 Vue Router。只在获准实施相应基础 Batch 时添加依赖和 lockfile，不修改 Python .venv。具体兼容版本需依据届时 Node/package lock 验证，不在当前文档猜测版本。
 
-建议入口：`npm --prefix web run test -- --run`、`npm --prefix web run test:invariants -- --run`、现有 typecheck/build。前两个 script 目前不存在，必须由基础 Batch 创建后才可作为验收命令；此处不是运行结果。
+建议入口：`npm --prefix web run test -- --run`、`npm --prefix web run test:invariants -- --run`、现有 typecheck/build。这些scripts当前工作区已存在；具体执行选择按active Batch Plan，此处不是本轮运行结果。
 
 relationship tests 使用真实 Web API client/realtime adapter/store/composable/component，替换的是网络和时间边界；不能把 store 和 client 全部 mock 后称为跨层证明。DTO 对齐使用后端实际 Pydantic 序列化的固定场景 fixture，明确 nullable、unknown enum、snake/camel alias、WS envelope 校验；TypeScript 编译不能替代 wire 校验。新协议主版本未知或首帧损坏时 fail closed，显示连接错误，不恢复 mutation。
 
@@ -206,6 +208,6 @@ relationship tests 使用真实 Web API client/realtime adapter/store/composable
 
 ## 10. 本轮输出与下一步
 
-已完成：产品规则与公共接口归属到既有 Spec；普通交互已按授权选择；Task 8 新 rows/继承 proof/Task 9 延后边界已整理；后端 P1–P3、Web W1–W6 执行计划已写出。尚未完成：执行计划审阅与执行方式选择、实施、自动/人工验收。
+2026-10-10文档同步：全局UI表达只引用唯一Visual Spec，当前Player与已冻结歌词保留；设置/导航及背景接入先于Task9内容扩展。Task8仍按active Web Batch Plan完成未关闭真人Gate与W6，不由本次审计关闭。
 
-下一步审阅两个执行计划并选择执行方式。不能把文档中的新增 endpoint、target 或测试路径当作已存在能力。
+原P1–P3/W1–W6设计与历史决策保留；当前实际产物、测试入口、未关闭Gate须核对代码/测试及最新acceptance。本文不声称本轮执行了测试，也不再以原“尚未实施”结论覆盖工作区成果。

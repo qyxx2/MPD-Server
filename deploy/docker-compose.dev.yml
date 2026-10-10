@@ -20,6 +20,8 @@ services:
     working_dir: /workspace/web
     command: >-
       sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    environment:
+      API_PROXY_TARGET: http://server:8000
     volumes:
       - ../web:/workspace/web
       - mpd_server_dev_node_modules:/workspace/web/node_modules

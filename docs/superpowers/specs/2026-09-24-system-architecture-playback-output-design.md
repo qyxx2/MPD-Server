@@ -175,6 +175,8 @@
 
 ### 7.2 约束
 
+Web 页面布局与通知入口只遵守 [全局 UI 合同](2026-10-03-web-pwa-visual-design.md) WEB-UI-NAV/NOTIFY/BASE：About 和已授权 Output 控制入口归设置，Player 保留 DAC confirmed 摘要；异常/未知/断线原因统一在 app bar 详情。以下“显示异常/更新状态”是语义要求，不授权第二处提示文字。不改变 NAS_DAC/CLIENT_STREAM 支持范围、观察/请求分离或接口。
+
 - 曲库总时长是曲库全部歌曲时长的合计；累计播放时长是 MPD 的播放统计，两者不可混淆。
 - 不展示 CPU、内存、负载、磁盘、网络吞吐等 NAS 系统监控指标。
 - MPD 未提供或当前版本无法可靠读取的字段，不得猜测补齐。

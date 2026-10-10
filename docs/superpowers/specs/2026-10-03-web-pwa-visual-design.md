@@ -1,193 +1,147 @@
-# Web/PWA Visual Design Spec
+# Web/PWA 全局 UI 合同
 
-Status: **sole authoritative visual specification for Task 8 / Task 9 presentation**. It remains subordinate to the existing business/architecture Specs and Implementation Plan for all business and contract semantics.
+修订日期：2026-10-10。状态：用户已确认本轮六项方向及集中细节方案；**本次仅修订文档，未实施新合同、未重新验收页面**。
 
-Visual reference: [`../../ui/web-pwa-mobile-reference.png`](../../ui/web-pwa-mobile-reference.png).
+## 1. 权威、范围与继承
 
-This document defines stable presentation rules only. It does not replace or duplicate the existing Playback, Library/Playlist, Output, realtime, API, or architecture specifications.
+本文是所有当前及后续 Web UI 工作流的唯一长期视觉/布局/通知/导航合同。直接维护既有 Visual Spec，不建立并列设计系统。各 Task、Batch、audit 和真人方法只能引用本文的合同 ID，分配实现及证明，不能复制一套可独立修改的规则。
 
-## 1. Authority and non-goals
+按职责划分权威：
 
-When sources disagree, use this order:
+- Playback、Library/Playlist、Output Specs：领域事实、动作及支持范围。
+- Architecture Spec §4.1–4.3、§12：客户端状态、缓存、重连、mutation/key/确认及 PWA。
+- 本文：上述事实在 Web 上的表达、共享壳、视觉尺度、通知位置和四项导航；主 Plan、Batch Plan 不得用旧视觉描述覆盖本文。
+- 主 Implementation Plan：Task scope/dependency/顺序；active Batch Plan：任务边界与验收 Gate。
+- 当前代码、测试与用户反馈：核对实现和验收是否真实存在。archive 仅保留当时证据，不作为新实现指令。
 
-1. existing business/architecture Specs in `docs/superpowers/specs/`;
-2. `docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md`;
-3. this visual specification;
-4. the concept image.
+旧 [概念图](../../ui/web-pwa-mobile-reference.png) 仅作辅助气氛参考；**当前 Player（W5-A05/A06 的已存在页面）是保护基线**，发生视觉冲突以本文为准。图中的 Account/login、Folder、额外顶级 tab、控件和示例数据不构成需求；Favorites 星标仍按业务 Spec。
 
-The concept image is a **visual and interaction-expression reference**, not a source of new business semantics. A control, tab, label, setting, entity type, or behavior shown in the image is not an implementation requirement unless an existing Spec/Plan already authorizes it.
+本轮不改变 API/DTO、后端播放/Queue/History/Output、事务、幂等或观察合同；不新增 HTTP 串流、配置管理、离线业务、认证或 PWA 交付。后续若发现必须大改后端合同，应先报告具体缺口、影响与替代方案，再单独确认；不得由 UI 计划暗中扩大。
 
-In particular:
+## 2. 当前事实与 Player 保护基线（WEB-UI-BASE-001）
 
-- the Account/login item shown in the concept is out of v0.1 scope;
-- the concept's heart-shaped favorite affordance does not override the existing Favorites contract: song rows use the specified star affordance and its authoritative states;
-- concept-only categories such as a Folder tab are not required unless the Library contract/API exposes them;
-- sample music, artwork, text, status-bar chrome, device frame, clock, and exact mock data are not product requirements;
-- this document does **not** redefine REST, WebSocket, transaction, playback, Queue, retry, or idempotency semantics. Shared Web client state/cache/reconnect/mutation/PWA consumption rules are authoritative in the architecture Spec §4.1–4.3 and realtime §12; Task 8 Contract Audit remains responsible only for Task-8-specific Contract rows and Player interaction semantics not already frozen there, such as seek/progress presentation and confirmation.
+2026-10-10 核对当前分支 `feature/task-8-web-player` 的工作区源码、W5 acceptance 和已有 A05/A06 截图；有未提交修改，不能把 HEAD 当作完整页面版本。本轮未启动服务、未操作播放、未重新执行自动/真人验收。截图是历史辅助证据，不是本轮真机测量。
 
-## 2. Visual language
+| 项目 | 当前存在的基线 | 新合同尚待落实的差距 |
+|---|---|---|
+| Shell | 单 AppShell 拥有 realtime 生命周期；Player 单路由；header 仍在 Player 内 | 持久全局 app bar/四项导航与跨页生命周期 |
+| 比例 | 手机竖向单列、内容限宽 28rem；动态视口高度、伸缩媒体区；底部预留 4rem + safe-area | 把预留转为唯一导航预算，跨页固定框架 |
+| 顶部状态 | app bar 中心固定图标；同步 spinner；点击异常详情及原 retry/read；浮层不入流 | 目前仅播放操作归顶部，连接标签、文件/读取异常、歌词说明、需选曲提示等尚未全部归一 |
+| 背景 | 深蓝黑默认径向氛围背景 | 当前专辑高斯模糊 + 薄蒙版的唯一全局背景尚未实现 |
+| Player | 方形封面/同区透明歌词；标题/艺术家/源格式、DAC事实、进度、三按钮；无 Stop UI/Output卡片 | 保持这些成果，仅做必要的壳/背景/通知接入 |
+| 进度 | W1–W4 产物存在；A04 歌词有 HUMAN PASSED/FROZEN 记录 | W5-A06 比例/状态仍 HUMAN PENDING，W6/Task 9 未验收；本轮不晋升 Gate |
 
-The Web/PWA uses a modern **dark glassmorphism** language consistent with the existing web shell and the concept image:
+后续必须保留：媒体区和歌词交互、3秒恢复跟随/选择不误 seek、封面点击进入歌词/右上角返回、共享展示时钟、进度与按钮能力、无 Stop UI、无 Output 底部卡片、DAC 确认事实与源格式分离。长期歌词行为仍以 Library Spec §3.1 为准，不在本文重定义解析/计时。
 
-- a near-black/navy atmospheric base rather than pure black;
-- translucent dark surfaces with restrained blur, subtle borders, and soft depth;
-- cool blue/cyan accent for active navigation, focus, progress, and primary interactive emphasis;
-- high-contrast near-white primary text with progressively quieter secondary/muted text;
-- artwork may contribute a softly blurred ambient backdrop on the Player, but content contrast must remain stable and a neutral dark fallback must always exist;
-- decorative glow is secondary to legibility. Glass, blur, shadow, or gradients must never obscure state or controls.
+已完成的行为不得为“统一风格”重做或改值。接入时允许将通知说明迁入 app bar、将 header/底部预算迁入共享壳，以及增加背景资源展示；通知接线涉及歌词组件时仅迁移提示，不更改已冻结的歌词正文样式、解析、跟随/选择/cue 行为。必须先记录当前基线，再做最小接入及指定回归。历史通过项不因本文重开；触及对应合同仍须回归。新规则不能冒充当前实现已满足。
 
-Do not reproduce the phone frame or iOS status bar from the reference. The application fills the browser/PWA viewport and respects safe-area insets where present.
+## 3. 视觉语言与对比度（WEB-UI-STYLE-001）
 
-## 3. Responsive composition
+沿用 Player 的深蓝黑、轻薄透明、近白正文、冷蓝/cyan 强调、柔和深度和系统无衬线字体。媒体/内容与 app bar、导航自然过渡；不得用生硬分割线、独立厚卡片或不同底色将三者切成三块。既有控件/进度内部细线可保留，不作为新页面分区模板。列表与设置用留白、字重及轻量选择态分组，菜单/详情浮层可有足够实色底以保证可读性。
 
-Design for the phone browser as the primary usage and acceptance surface (user clarification, 2026-10-09). The narrow-screen hierarchy is canonical. Ubuntu Firefox/Chromium are auxiliary inspection environments; no dedicated desktop composition, multi-column layout, or desktop visual acceptance matrix is required.
+基线 tokens 来自 `web/src/styles/tokens.css`：
 
-- Prefer fluid sizing, `rem`, `clamp()`, intrinsic grids, flex/grid gaps, and content constraints over device-specific pixel coordinates.
-- Avoid horizontal overflow for ordinary content. Long labels and metadata must truncate or wrap according to their importance.
-- Keep primary actions reachable on touch screens and preserve clear focus treatment for keyboard input.
-- On wider viewports, retain the mobile composition with bounded content/artwork width; no additional desktop navigation or grouping is required.
-- Task 9 owns the responsive bottom navigation and Player-as-default application navigation defined by the Implementation Plan. Safe-area padding is part of that navigation shell.
-- Persistent navigation, focused inputs, overlays, and primary controls must remain reachable as mobile browser chrome or the on-screen keyboard changes the usable viewport. Layout must not depend on one fixed viewport height.
+| 角色 | 基线值 |
+|---|---|
+| 默认背景 / 氛围 | `#080d18` / `#142438` |
+| 主 / 次 / muted 文字 | `#f3f7fc` / `#bdcadb` / `#9cacc2` |
+| accent / focus | `#82d5f8` / `#a4e4ff` |
+| success / warning / error | `#9be4bb` / `#f3cc91` / `#ffb6b4` |
+| glass / overlay | `rgba(21,31,47,.85)` / `#1b293c` |
+| 字体 | Inter、ui-sans-serif、系统字体；无网络字体依赖 |
+| 圆角层级 | `.6rem / 1.1rem / 1.7rem`；不要求增加卡片 |
 
-Exact breakpoints, dimensions, and component metrics are implementation details unless accessibility or an existing Spec requires otherwise.
+使用统一语义 tokens，不让各页散落另一套值。颜色值是当前基线，不证明覆在任意专辑图上都可读。必要验收阈值：普通文本对比度至少 4.5:1，大文字至少 3:1，操作图标/焦点等必要非文本至少 3:1；成功/异常/禁用不能仅靠颜色。字体随系统缩放，禁止通过关闭缩放保证布局。
 
-## 4. Player visual hierarchy — Task 8
+Player 标题沿用 `clamp(1.5rem,6vw,2rem)`、行高1.3；艺术家行高1.5；源格式/时间约 `.8rem`、compact标签约 `.75rem`。新页面标题/正文采用同一角色体系，不能每页扩大标题导致框架变化。通知详情采用紧凑正文约 `.8–.875rem`，随用户缩放；长说明在浮层内部滚动，不能变成超大标题。
 
-The Player is Task 8's primary visual surface. Its information hierarchy is:
+## 4. 唯一全局背景（WEB-UI-BG-001）
 
-1. compact page/context header;
-2. dominant media stage;
-3. song identity;
-4. technical metadata;
-5. progress/time presentation;
-6. primary playback controls;
-7. output/connection presentation and secondary actions.
+所有页面共用一个由持久 shell 持有的全视口背景：**Player 已确认的当前专辑图片，高斯模糊 + 轻薄深色蒙版**。页面内容不另铺专辑图、渐变大卡片或页级背景。沿用 Task 5 artwork API 与既有 Player 表示/资源身份保护，不从 Queue、列表选中项、最后业务歌曲猜当前封面。
 
-### 4.1 Media stage and artwork / lyrics
+- 背景图采用 cover、适度 overscan，模糊边缘不能漏白/黑缝；覆盖 app bar、内容及导航。前景封面仍清晰、contain、正方形，不随背景模糊。
+- 浏览 Queue/Library/Settings 或打开详情不更换背景、不卸载或重新请求同一背景；只有已确认当前歌曲/专辑或合法资源版本改变才更新。断线/stale时可保留最后接受的当前专辑背景，与顶部read-only/过期说明配合；身份明确失效或从未确认时使用当前默认背景，不能拿最后业务歌曲伪装当前背景。
+- 缺图、404、无当前歌曲或图片读取/解码失败采用当前默认径向背景；真正读取失败在 app bar 表达。正常“没有封面”不是确定错误，缺失与失败在顶部详情中可区分。
+- 读取/解码期间保留稳定的默认底层；图片只在完成解码且身份仍有效时显示，切歌迟到图片不得倒灌。布局不随 loading/成功/失败改变。既有已确认 handoff 展示不能被当成新确认身份。
+- blur 半径和蒙版透明度属于后续实施参数，先以薄蒙版满足对比度；对极亮/杂乱封面允许统一调节蒙版保证第3节阈值，不能为每页再造遮罩。不在本文凭截图编造已验收数值。
+- 背景层不参加布局、不拦截触摸、不随内容滚动；无 blur 支持时使用默认背景，保持文字可读。切歌可短暂淡入，禁闪白、缩放或影响布局；reduced-motion 使用静态替换。
 
-- Artwork is the dominant visual object and remains square when artwork is shown.
-- Artwork and lyrics occupy the same primary media stage; switching between them should not create a second competing content hierarchy.
-- Artwork and lyrics use one explicit two-state selector associated with that shared media stage. The selected mode must be visually apparent; the selector does not define playback or timing semantics.
-- Missing artwork uses a neutral, deliberate placeholder that preserves layout and contrast. Do not stretch low-information placeholders or fabricate cover art.
-- LRC retains server-provided timestamps. When authoritative playback/timing state identifies a current LRC line, that line should receive distinct visual emphasis while nearby context remains readable. Plain text lyrics remain plain text and must not imply synchronized timing.
-- Lyrics should prioritize the current line while retaining nearby context. Text remains selectable/readable where practical.
-- The visual spec does not define how playback time is predicted, confirmed, or reconciled; it only defines presentation once authoritative state is available.
+## 5. 持久框架、比例与稳定性（WEB-UI-SHELL-001）
 
-### 4.2 Song identity and metadata
+固定组合为 **app bar → 中间内容 → 四项导航**。app bar、导航、背景、连接/通知生命周期属于唯一持久 AppShell；路由只替换中间内容。不能每个页面各建 header/navigation、各挂连接或各建通知系统。原请求/回执的恢复上下文不能因切换页面丢失，也不能因路由卸载被自动重试；仍由 Architecture 的共享 client/key 合同约束。
 
-- Title is the strongest text below the media stage; artist is secondary; album/context is tertiary when present.
-- Codec, bit depth, sample rate, and similar source-file metadata use compact secondary treatment such as chips or a concise inline group.
-- Unknown metadata is omitted or represented as unknown only when the authoritative state explicitly requires that distinction. Never invent values or turn unknown into zero.
-- File metadata must not be visually labelled as DAC/output format. Source-file specification and output state are separate concepts.
-- Long titles/artists may wrap in the Player within a bounded number of lines; dense rows elsewhere prefer ellipsis. No automatic marquee is required.
+必须保留当前尺度：
 
-### 4.3 Progress and controls
+- 手机单列为标准，内容区 max-width `28rem`，宽屏保持合理限宽，不新增桌面多栏或第二套导航。
+- 壳以 `100svh` 为 fallback、支持时使用 `100dvh`；顶部 inset `max(.75rem,safe-area-inset-top)`，左右 `max(1rem,对应safe-area)`。
+- 底部导航预算唯一为 `4rem`（默认根字号下64 CSS px）+ `safe-area-inset-bottom`。把现有 Player padding 的预算迁到共享壳后不得重复相加；导航未接入时同尺寸保留。
+- app bar 保留当前紧凑比例、顶部状态居中位置和对齐；未来接入前记录其实际行高，再由全局 token 固定，不能按路由文字/通知长度改变。图标可见尺寸沿用20px、状态槽当前32px；保证可点目标至少44px且不挤占结构，不将当前32px目标误标为已满足。
+- Player 媒体区吸收可用剩余高度，最小4rem；封面以媒体区宽高较小值保持正方形，封面↔歌词不改变结构尺寸。正常视口的现有按钮位置和留白不因接入导航额外上移/下移。
+- 现有 A05 约320×510、355×601、411×900 为后续复验参考点，历史截图/测量不能冒充新版本已通过；不把媒体区历史像素尺寸做成硬编码。
 
-- Progress is visually prominent enough for touch interaction but subordinate to title/artwork.
-- Elapsed/duration/remaining presentation must degrade cleanly when values are unavailable; unavailable data must not appear as a fabricated `0:00` fact.
-- The exact seek request/confirmation lifecycle is outside this document and must be resolved by Task 8's contract work.
-- The primary play/pause affordance receives the strongest control emphasis. Other controls use a consistent icon-button language and clear enabled/disabled/active states.
-- The concept image does not define the required control set. Existing Playback Specs determine which actions exist and their semantics.
+结构稳定优先于完整展开长文本：标题/艺术家/专辑设固定行数预算（Player 基线最多2行）及保留槽位，字段缺失、单行变双行不得推挤媒体/进度/按钮。密集行用 ellipsis，完整文本通过可访问详情查看；`min-width:0`、正确换行应覆盖连续字符、中文、emoji、组合字符及超长 URI。歌词/列表长内容在中间区域滚动；通知浮层独立滚动。字体缩放/极短屏不足时允许中间区域必要滚动，不覆盖控件、不裁切内容，不把字体强行缩小；改变视口/系统字号所需适配与异步状态导致的跳动区别记录。
 
-### 4.4 Output and status
+加载、空、失败、unknown、长文本以及路由切换都不得使 app bar/导航/背景几何改变。相同视口/缩放下，切导航只更换内容；不得短暂卸载壳、闪现默认背景、重置共享连接、因详情出现推动布局。输入软键盘出现/收起时内容可达，收起后恢复原框架；导航或主操作不遮输入。
 
-- Output is a compact, lower-hierarchy status/control region: recognizable, readable, and not visually confused with source-file metadata.
-- Unavailable, stale, unknown, disconnected, or error states use text/icon treatment in addition to color.
-- When authoritative data exposes both a confirmed output fact and transient operation/request feedback, keep them as distinct visual layers. Transient progress or failure feedback must not visually masquerade as, or replace, the confirmed output fact.
-- This spec does not define output switching semantics or reconnection behavior; it only requires their existing authoritative states to be visually distinguishable.
+## 6. 顶部唯一通知合同（WEB-UI-NOTIFY-001）
 
-## 5. Task 9 page mapping
+所有通知内容只从 **app bar 固定中心图标及其一个详情浮层**展示。包括状态切换、加载/同步、连接恢复、stale/read-only、未知/失败、缺媒体/无歌词/无法同步的原因、扫描或收藏等操作结果。禁止 toast/snackbar/banner、页面底部提示、控件旁错误行、第二个全局或页面通知中心。现有右侧连接标签的正常/异常说明也在后续统一接入时归顶部入口，不并列保留第二条通知文字。
 
-The concept board contains Library, Queue, Search, Playlist, and Settings views. Task 9 may use their composition as the visual reference while keeping existing business rules authoritative.
+| 状态 | 顶部表达 |
+|---|---|
+| pending/读取更新/确认后待新观察 | 同一固定位置的 spinner；点击可看处理详情 |
+| 失败、结果未知、stale/断线等需解释状态 | 异常图标，点击看具体原因、事实新鲜度及既有允许的恢复动作 |
+| 普通信息/已完成但需查看的结果 | 同槽位静态信息/结果图标；详情显示结果，不自动弹出长文字 |
+| 无待处理通知 | 保留几何槽位、图标可消失；不能让其它元素补位 |
 
-- **Queue:** use the compact artwork/list-row language from the concept, while preserving the required Now Playing / Played / Up Next structure. Played is visually collapsible according to the Task 9 Plan. Reorder handles appear only where reorder is actually allowed. When authoritative state exposes MANUAL/AUTOPLAY provenance, present it as compact secondary metadata or a badge; it must remain distinguishable without color alone and must not compete with song identity.
-- **Library:** use artwork-forward responsive grids/lists, restrained segmented filters, and clear collection hierarchy. The actual collection types/tabs come from existing Library contracts, not from every tab drawn in the concept.
-- **Search:** place the query field prominently and use predictable result rows. Expose filters or result categories only when they are authorized and represented by the authoritative contract/API. Empty query, no results, and unavailable/index-updating states must be visually different.
-- **Playlists/Favorites:** use consistent list/card surfaces and overflow actions. Favorite state remains the business-Spec star control, independent from the SongRow playback action. FavoriteStar is a domain-specific exception to the general accent rule: its selected/unselected appearance follows the authoritative Favorites specification rather than the general cyan accent.
-- **Settings:** use simple grouped glass rows. Only settings/features authorized by the Plan/Specs are shown. The concept's Account/login row is excluded from v0.1. `Settings → About` follows the existing MPD information contract and must preserve unknown/disconnected presentation.
-- **Bottom navigation:** Task 9 provides the responsive app navigation with Player as the default view. The concept's exact labels/order are reference material, not a new routing contract.
+多个事项汇总到同一个浮层，以异常/未知优先、同步其次、普通信息最后；不同事项不可互相覆盖吞掉未解决错误。每项保留来源/动作/资源身份、结果与现有恢复上下文；资源不再相关时不能把旧错误标成新歌曲错误。关闭浮层只关闭展示，不代表操作成功或清除未解决异常。业务成功/错误的语义仍以 API/observation 合同为准，不建立第二套服务器事实。
 
-## 6. Design-token principles
+详情浮层不参加正文排版，宽度沿用 `min(20rem,100vw - 2rem)` 的紧凑尺度并限制可用高度，提供关闭/Escape、焦点及可访问名称。screen-reader live region 位于同一顶部系统；颜色和旋转不是唯一辨识手段，reduced-motion 的静态忙碌图标仍有明确名称。
 
-Implementation should expose semantic CSS variables/tokens rather than scattering one-off values.
+重试原操作/重新读取继续使用既有 action API：unknown 重试原 intent/payload/key；HTTP 已确认但读取失败只重读，不自动新 key 重做业务；断线禁写。没有既有恢复动作的状态仅展示原因，不能为了通知统一新增后端动作。
 
-### Color roles
+**业务内容与通知的边界：** 歌曲身份、源格式、DAC已确认事实、进度数字、行内 availability 标记、收藏选中态、空集合自身内容可以留在原区域；未知字段用空值/破折号或已有事实表示，不能伪造为零。这些不能变成重复解释/恢复提示。最后业务歌曲如保留，必须在稳定的内容槽中明确“最后业务歌曲”，不能伪装 actual。缺图/空列表使用稳定占位；无歌词、读取失败、不可播放、需明确选曲、无候选及统计未知原因的说明统一在顶部详情。普通歌词正文仍保留，高亮不可用不能猜高亮。禁用/选中/aria-busy 等控件状态可原位表达，但不再附加通知文字。
 
-At minimum distinguish: page background, ambient background, glass surface, raised surface, overlay surface, subtle border, primary/secondary/muted text, accent, focus, success, warning, error, and disabled states. Semantic status colors must remain understandable without color alone.
+## 7. 四项导航与页面映射（WEB-UI-NAV-001）
 
-### Surface hierarchy
+顶级导航仅四项，顺序固定：
 
-Use a small hierarchy rather than many visually unrelated cards:
+| 导航 | 表现与默认入口 | 内部归属 |
+|---|---|---|
+| 正在播放 | 播放图标；Player 默认入口 `/` 保留 | 现有 Player 与媒体切换；不追加设置面板 |
+| Queue | 队列图标 | Now Playing / Played / Up Next、已有 Queue 操作 |
+| 音乐库 | 音乐库图标 | Collections、歌曲/专辑等详情、Search、Playlists、Favorites |
+| 设置 | 设置图标 | About、已授权的输出控制/输出模式，以及后续获授权的可设置项目 |
 
-- base/background;
-- glass/content surface;
-- raised/selected surface;
-- overlay/menu/sheet surface.
+图标为主，每项有可访问名称、选中态与足够触摸区域；可保留统一紧凑标签，但不能不同页切换成不同高度。Library 内搜索/歌单/收藏及详情沿用同一 app bar/navigation/background，不成为第五项导航；返回/刷新/深链接的顶级选中归属一致。具体非默认路径与草稿生命周期由 Task 9 audit 确定，不在此新增路由实现。
 
-Blur and transparency decrease gracefully when `backdrop-filter` is unavailable; the fallback remains an opaque/semi-opaque dark surface with sufficient contrast.
+NAS_DAC enable/disable 的 UI 入口归设置，复用既有 Output API/事实分离及自动测试；Player 只保留原 DAC confirmed 摘要。CLIENT_STREAM/HTTP 首期尚未支持，不提供可点击的假切换、更不增加浏览器播放。未来获授权实现串流后切换仍归设置；Task 10 配置/备份等也只能在自身任务授权后接入，设置导航不提前授权它们。
 
-### Typography
+## 8. 工作顺序与所有权（WEB-UI-DELIVERY-001）
 
-Use the existing system-sans/Inter-style stack without requiring a network font. Establish semantic roles for page title, song title, section title, body, secondary metadata, compact label, and numeric/time text. Favor weight/size/contrast hierarchy over many font families.
+本轮只修订合同和活动文档，不创建/修改产品代码、测试、依赖、数据库、构建产物，不启动服务，不提交或远程操作。
 
-### Spacing, radius, and depth
+1. 保留 Task 8 W1–W5 当前成果和仍待用户确认的 W5-A06 Gate；完成 W5 适用反馈与 W6 当前范围综合验收。不能将新背景/四项导航加进 W6，也不能声称它们被 W6 通过抵扣。
+2. Task 8 修订后的手机 Web acceptance 满足后，Task 9 增量审计最先安排**共享壳/通知迁移 → 唯一背景 → 四项导航**，在同一前置阶段完成集成并复验受影响 Player。此阶段可使用稳定空内容占位，不能把未实施的 Queue/Library/Settings 标为完成。
+3. 前置阶段 Gate 通过后再扩展 Queue、Library（含搜索/歌单/收藏）与 Settings（含现有输出入口/About）；需要 song Play Now 原子接口的功能等待自身后端 prerequisite，纯壳/导航/背景不依赖新增 Play Now 接口。
+4. 不预拆 Task 9 Batch，不改变 Task 0–7/后端已冻结合同，不由文档修订关闭 Task 8。将来执行须读取本文及 active plan，保护实际 dirty 成果并最小修改。
 
-Use a small spacing rhythm and reusable radius tiers: tighter for chips/inputs, medium for rows/cards, larger for dominant artwork containers/sheets, pill radius only for pill-shaped controls. Shadows remain soft and low-contrast; border plus surface contrast should carry most grouping.
+## 9. 必需证明与验收
 
-No token in this document is a pixel-perfect screenshot measurement.
+涉及共享壳/背景/通知/导航的未来 Batch：Contract Matrix、Relationship / Invariant Gate **REQUIRED**。精确文件/命令由其 Batch Plan 分配，本轮不声称这些 proof 已存在/通过。
 
-## 7. Motion and reduced motion
+| 合同 | 未来必须验证的关系/可见结果 |
+|---|---|
+| BASE/STYLE | 既有 Player facts、controls、seek、clock、lyrics、output 回归；主题 tokens 一致；亮/暗/杂乱封面下文字与图标阈值；紧凑详情仍可读 |
+| BG | 当前确认身份→资源请求→解码→共享背景；无封面/404/error fallback、迟到拒绝、跨导航保持身份/资源、不重复加载，背景不影响布局/触摸 |
+| SHELL/NAV | 四项导航/内部详情/返回/刷新保持同一壳与选中态；只一条连接生命周期、唯一底部预算；操作pending跨页不丢 intent/retry；同视口app bar/导航位置与尺寸不变 |
+| NOTIFY | 各页 loading/stale/未知/失败只进顶部；一个入口/浮层，无第二处提示文字；并发错误不吞掉；原key重试/read-only门禁/HTTP确认后只重读保持 |
+| 稳定性 | 同视口状态更新、字段缺失→长文本、封面↔歌词、通知开关无结构位移；中文/特殊字符/放大字体/极短屏、键盘/浏览器工具栏、reduced-motion/no blur可用 |
 
-Motion communicates continuity, not decoration.
+真人方法以 [手机 Web 真人验收方法](../plans/2026-10-09-mobile-web-manual-acceptance.md) 为准，Batch Plan 选择具体必验卡。前置阶段必须在实际手机复验 Player 比例与歌词、四项导航稳定性、背景连续性和顶部异常详情；桌面辅助截图/测试不能抵扣。Implementation、automated、native/LAN、phone HUMAN、真实MPD/NAS及PWA分别记录。
 
-Suitable motion includes short opacity/transform transitions for page/overlay changes, artwork↔lyrics switching, selection indicators, control state changes, and reorder feedback. Avoid continuous parallax, decorative looping motion, or large layout shifts.
+## 10. 活动文档同步与上下文交接
 
-With `prefers-reduced-motion: reduce`:
+本轮扫描 README、全部 `specs/`、`plans/`；修改同职责冲突或会影响后续 UI 决策的条目。后端-only 的 Task6、D6 corrective、Task8 playback prerequisite 没有页面布局/通知位置权威，保留协议内容；不机械把服务端“通知/背景任务”等词替换为 UI 规则。archive 保留历史措辞及验收结果。
 
-- remove nonessential transitions/animations and shimmer;
-- avoid animated auto-scrolling; synchronized lyrics may update/highlight the active line and reposition without smooth travel;
-- preserve all state changes and interaction feedback through static visual changes;
-- do not make reduced motion a separate visual theme.
-
-## 8. Visual states
-
-Every major Task 8/9 surface must have deliberate visual treatment for these states when they are exposed by authoritative data:
-
-- **Loading:** preserve the expected layout with restrained skeleton/static placeholders; do not flash fabricated metadata.
-- **Empty:** concise explanation plus an action only when an authorized action exists. Empty Queue/Library/Search/Playlist are distinct states.
-- **Missing artwork:** stable neutral artwork placeholder with the same layout footprint.
-- **Missing/unavailable media:** retain recognizable song identity where the business model does, visibly mark availability, and avoid presenting it as normally playable.
-- **No lyrics / lyrics read failure:** visually distinct when the underlying API distinguishes them; do not manufacture lyrics.
-- **Long text:** Player may wrap important identity text; dense rows truncate with ellipsis while preserving access to the full value through normal accessible UI techniques.
-- **Disconnected / stale / unknown:** use a persistent but non-obscuring status treatment and visibly distinguish stale/unknown data. Per architecture Spec §4.1, the last accepted state may remain visible as stale/read-only while server-authoritative mutation controls are unavailable; only a newly accepted initial snapshot restores writable state. This document defines the visual expression of that contract, not a second recovery rule.
-- **Operation error:** show local, specific feedback near the affected control/surface when possible without replacing authoritative state with optimistic fiction. Recovery actions appear only when already authorized by the authoritative Specs/Plan.
-
-## 9. Accessibility and interaction quality
-
-- Maintain readable contrast over translucent/ambient backgrounds.
-- Interactive controls require visible focus states and sufficiently large touch targets.
-- Icon-only controls require accessible names; selected/disabled/error state must not rely on color alone.
-- Glass/blur effects must have a contrast-safe fallback.
-- Content must remain usable with text scaling and narrow mobile widths.
-
-## 10. Visual acceptance
-
-Task 8/9 visual review primarily uses the user’s actual phone browser over a reachable LAN URL. Exercise display, touch, scrolling, mobile browser chrome, on-screen keyboard where relevant, and background return. Auxiliary narrow-viewport checks cover long/scaled text, reduced motion and no-`backdrop-filter` fallback; loading/empty/disconnected states follow authoritative data. Desktop-specific presentation is not an acceptance requirement.
-
-PWA installation, standalone mode, Service Worker and cold-offline review are deferred under Architecture §4.3 (2026-10-09 priority adjustment); they do not block phone Web acceptance. The manual method and report format live in [mobile Web manual acceptance](../plans/2026-10-09-mobile-web-manual-acceptance.md); Batch Plans own required scenario selection. No independent scenario console or test platform is required.
-
-Compare implementation with the reference for hierarchy, density, surface language, and composition rather than pixel equality. Visual acceptance must not invent missing business states, routes, controls, or recovery actions merely to make a screenshot match the concept.
-
-## 11. Task boundary summary
-
-**Task 8** owns the typed Web state layer and the Player visual surface: shared visual foundations/styles, Player layout, artwork/lyrics stage, player metadata, progress presentation, playback controls, output/status presentation, responsive Player composition, and reduced-motion behavior.
-
-**Task 9** owns the remaining application views and application navigation: Queue, Library, Playlist/Favorites, Search, Settings/About, shared list/grid patterns, FavoriteStar presentation, and responsive bottom navigation.
-
-This split is visual ownership only. It does not move or redefine server/client contracts and does not change the dependency order in the Implementation Plan. Task 8 implements the shared Web client foundation frozen in architecture Spec §4.1–4.3; Task 9 inherits it rather than creating a second state/cache/retry model.
-
-## 12. Reference-use rule
-
-During Task 8/9 implementation, treat `docs/ui/web-pwa-mobile-reference.png` as the baseline for **mood, density, surface treatment, hierarchy, and mobile composition**. Do not trace it pixel-for-pixel, and do not use it to override authoritative semantics.
-
-Any future intentional visual-direction change should update this specification and/or its reference explicitly rather than letting individual components drift into a second undocumented design system.
+后续窗口最小读取：本文 → Architecture §4.1–4.3/§12 → 对应领域 Spec → 主 Plan Task8/9 → 当前 Batch Plan/最新未关闭 acceptance → 实际代码与测试。规则更新直接回到本文，执行计划只更新引用及 Gate；不得新增补丁合同、另一个主题文件或重复数字表绕开本文。
