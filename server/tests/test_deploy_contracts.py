@@ -91,5 +91,7 @@ def test_ci_image_publication_requires_validation_and_uses_commit_identity():
     assert 'platforms: linux/amd64,linux/arm64' in workflow
     assert '${{ github.sha }}' in workflow
     assert ':latest' not in workflow
+    assert 'ruff==0.16.9' in workflow
+    assert '-c "$RUNNER_TEMP/ci-lint-constraints.txt"' in workflow
     for action in re.findall(r'uses: ([^\s]+)', workflow):
         assert re.fullmatch(r'[\w-]+/[\w-]+@[a-f0-9]{40}', action), action

@@ -29,3 +29,14 @@
 - `.venv/bin/python -m ruff check server/app server/tests`、Web typecheck、生产build（自有临时outDir保护旧web/dist）、actionlint及git diff --check → **passed**。
 
 完整本地回归是本次授权提交的验证，不宣布B09完成。NAS Docker/真实MPD/手机声音、真实持久化重启仍NOT RUN；CI远程结果在完成后单独报告，不预记通过。
+
+## 首轮远程运行与工具基线修正
+
+[c442028 首轮Actions](https://github.com/qyxx2/MPD-Server/actions/runs/38191189875)
+后端 **1544 passed**；之后Ruff **73 failed**，镜像job按门禁SKIPPED。
+完整日志确认CI选择范围内新Ruff0.17.0，本地已验证0.16.9；没有repository
+Ruff配置。未进行全库自动fix或ignore规则，也不把镜像跳过记为构建通过。
+CI在runner临时constraints文件固定`ruff==0.16.9`，仍按原requirements安装，
+只固定CI检查工具，不修改项目依赖声明、Docker运行依赖或本机.venv。
+workflow结构精确节点RED→GREEN，文件4 passed；本地广域Ruff/actionlint/diff检查
+通过。后续远程运行结果待实际确认。

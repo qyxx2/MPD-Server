@@ -43,7 +43,9 @@ jobs:
       - name: Install declared dependencies in the CI runner
         run: |
           mkdir -p "$CONFIG_DIR" "$MUSIC_ROOT"
-          python -m pip install -r server/requirements.txt
+          # Keep lint aligned with the validated local tool, within requirements.
+          printf 'ruff==0.16.9\n' > "$RUNNER_TEMP/ci-lint-constraints.txt"
+          python -m pip install -r server/requirements.txt -c "$RUNNER_TEMP/ci-lint-constraints.txt"
           npm --prefix web ci
       - name: Backend regression and lint
         run: |
