@@ -62,8 +62,12 @@ class ExecutionSynchronizer:
         entries = [(e.mpd_song_id, e.song_uri) for e in before.entries]
         status = before.status.model_dump()
         version = before.playlist_version
-        mpd_id = command.mpd_song_id if command.kind == "delete" else self._id(intent, command.item_id)
-        if command.kind == "add":
+        mpd_id = command.mpd_song_id if command.kind in {"delete", "clear"} else self._id(intent, command.item_id)
+        if command.kind == "clear":
+            version += int(bool(entries))
+            entries = []
+            status.update(state=PlayerState.STOPPED, song_id=None, song_uri=None, song_position=None)
+        elif command.kind == "add":
             if receipt.returned_id is None or any(e[0] == receipt.returned_id for e in entries):
                 raise self.journal.conflict("UNKNOWN add response identity")
             entries.append((receipt.returned_id, command.uri))
@@ -123,7 +127,9 @@ class ExecutionSynchronizer:
     async def _send(self, intent, command):
         if command.kind == "add":
             return await self.player.queue_add(command.uri)
-        if command.kind == "delete":
+        if command.kind == "clear":
+            await self.player.queue_clear()
+        elif command.kind == "delete":
             await self.player.queue_delete(command.mpd_song_id)
         elif command.kind == "move":
             await self.player.queue_move(self._id(intent, command.item_id), (command.before_mpd_song_id if command.before_item_id is None else self._id(intent, command.before_item_id)))

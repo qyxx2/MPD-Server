@@ -131,7 +131,7 @@
         "playback_observation": {
           "actual_state": "playing",
           "actual_current": {
-            "entry_id": 2,
+            "entry_id": 1,
             "uri": "a.flac",
             "position": 0
           },
@@ -603,7 +603,7 @@
         "playback_observation": {
           "actual_state": "playing",
           "actual_current": {
-            "entry_id": 2,
+            "entry_id": 1,
             "uri": "a.flac",
             "position": 0
           },
@@ -1074,7 +1074,7 @@
         "playback_observation": {
           "actual_state": "playing",
           "actual_current": {
-            "entry_id": 2,
+            "entry_id": 1,
             "uri": "a.flac",
             "position": 0
           },
@@ -1586,7 +1586,7 @@
         "playback_observation": {
           "actual_state": "playing",
           "actual_current": {
-            "entry_id": 6,
+            "entry_id": 5,
             "uri": "b.flac",
             "position": 0
           },

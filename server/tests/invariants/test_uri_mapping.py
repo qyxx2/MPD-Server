@@ -99,7 +99,7 @@ def test_mapped_execution_and_current_confirmation_preserve_occurrences(real_cli
             first, second = items[:2]
             assert first.queue_item_id != second.queue_item_id
             binding = await service.get_execution_binding()
-            assert binding.entries == ((first.queue_item_id, 2, local), (second.queue_item_id, 3, local))
+            assert binding.entries == ((first.queue_item_id, 1, local), (second.queue_item_id, 2, local))
             sample = await adapter.read_execution_sample()
             assert tuple(e.song_uri for e in sample.entries) == (local, local)
             assert sample.status.song_uri == local
@@ -113,14 +113,14 @@ def test_mapped_execution_and_current_confirmation_preserve_occurrences(real_cli
             assert state.song_id == 'a'
             current = next(i for i in await service.queue_manager.list_items() if i.position == 0)
             assert current.queue_item_id == second.queue_item_id
-            assert (await adapter.read_execution_sample()).status.song_id == 3
+            assert (await adapter.read_execution_sample()).status.song_id == 2
             history = await service.history_service.list_history()
             assert len(history) == 1 and history[0].song_id == 'a'
             assert service.history_service.active_event.song_id == 'a'
             await adapter.play(local)
-            assert peer.received[-1] == 'playid 3'
+            assert peer.received[-1] == 'playid 2'
             assert [c for c in peer.received if c.startswith('addid')] == [
-                'addid "shared/A/中文 空格.flac"'] * 3
+                'addid "shared/A/中文 空格.flac"'] * 2
             assert (await library.get_song('a')).file_uri == local
             # A same-URI replacement is still a different occurrence: no repair controls.
             async def business_snapshot():
@@ -144,7 +144,7 @@ def test_mapped_execution_and_current_confirmation_preserve_occurrences(real_cli
             assert all(c in {'status', 'playlistinfo', 'currentsong'} for c in peer.received[before:])
             assert all(e.song_uri == local for e in await adapter.queue_entries())
             business = await business_snapshot()
-            await peer.player.queue_delete(3)
+            await peer.player.queue_delete(2)
             await peer.player.queue_add(raw)
             before = len(peer.received)
             assert (await service.reconcile_external_status()).outcome == 'UNKNOWN'

@@ -28,3 +28,17 @@
 用户随后明确允许改consume=0并验证。原生MPD TCP consume 0返回OK，status核对为0；通过新key调用SONGS单曲集合明确选曲，HTTP200（旧容器清理400余项耗时27.76秒），GET state观察CONFIRMED/matches_current=true，曲库SYNCED。seekcur定位歌曲结束前2秒后等待实际自然换曲，业务song_id变化，实际下一首位置已由Service归并至0，观察仍CONFIRMED/matches_current=true、fresh、无error、reconciliation_required=false。没有删DB或重启容器；设置MPD模式后无需删DB即可恢复。MPD重启后模式是否持久取决于该MPD自己的state_file配置，未读取NAS配置。
 
 最终本地针对性后端包含406首参数化共134通过（13.65秒）；完整suite数字仍属于前述轮次。修复Web使用实机API在背景快照更新后保持scrollTop=1440、无歌曲行焦点，向上滚动可到720。容器中的新版代码尚未部署，因此新版容器首次启动及大库实际耗时仍待重部署验证；未冒称已在NAS验证代码性能。
+
+## 用户复测后的第二次整改：集合准备期间提前播放
+
+用户复测全部歌曲展示已正常，但Queue/控件仍异常。重新读取实机：consume=0、MPD连接正常，实际队列413项、暂停current position=7；SQLite业务Queue15项，observed actual_freshness=fresh、sync_status=UNBOUND、control_target=null。当前URI展示与控制禁用源于失绑，不能宣称MPD连接失败；此前单曲重绑/一次自然换曲通过不能证明全库播放问题关闭。
+
+新永久RED：`test_collection_does_not_start_current_until_the_complete_queue_is_prepared`，真实Service→Adapter→TCP fake，在addid期间模拟顺序模式（consume=false）的当前转移，旧代码报UNKNOWN current changed during execution。原因是play_context先播放临时当前项，然后慢慢准备全库；中途当前变化导致本地事务回滚，但MPD已添加的前缀无法由SQLite回滚。
+
+修复：仅用户明确替换集合的play_context走固定context执行计划；已有MPD队列使用经过能力检查的clear，按固定occurrence顺序add全部项目，最后才play一次。普通队列增删/移动不改。clear纳入逐命令sent/ACK/confirmed回执、独特结果核验与generation/connection/partition/version fences，不因成功clear就假称业务提交。目标endpoint既有`deploy/config/mpd-capabilities.json`与能力文档实测已证明queue_clear；未改能力证据、未绕过VerifiedPlayerPort。
+
+已确认准备保留为私有synced_entries/sync_sample，退役旧binding而不提前增加generation，最终Queue sync才bind；独立审阅发现的旧binding丢弃准备、再次全库加歌问题已用bound=True参数RED→GREEN修正。已有后续Queue执行计划的rollback/key重试复用原固定后缀；新连接只允许结果已知的明确接管，sent或未完成UNKNOWN不重发clear/add。历史业务、Queue、terminal与通知仍由原外层事务联合提交；不新增持久绑定或重启自动接管合同。
+
+受影响golden/URI证明的MPD数字ID少一次临时add，按真实生成器更新（golden仅四处entry_id减1）。Stock fake补充真实协议clear实现及相应本地能力声明，不能当作目标新实测。没有减弱未知漂移、同URI不同occurrence、失败回滚或重试断言。
+
+第二次fresh验证：针对性138项（丢失响应追加前）、Stock/URI25项、context请求重试与丢失clear/add响应再连接3项、完整后端1667项（新增丢失响应2项收集前）全部通过；完整Web318、typecheck/build、全后端Ruff/diff通过。两轮独立审阅发现已修正，最终无Critical/Important。CI将运行最终包含全部新增测试的suite。没有删DB/重启容器/再次修改consume；新代码尚未部署到NAS，不将自动回归或上一轮consume调整误记为当前实机问题已关闭。

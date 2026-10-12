@@ -501,7 +501,7 @@ class PlaybackService:
 
         await self.queue_manager.replace_with_context(context)
 
-        status = await self._prepare_play(songs[0])
+        status = await self._prepare_context_execution(songs[0])
         state = await self._save_confirmed_playing(
             context.ordered_song_ids[0],
             context_id=context.context_id,
@@ -1469,6 +1469,64 @@ class PlaybackService:
         journal.commit(identity, result)
         return result
 
+    async def _prepare_context_execution(self, song: Song) -> PlayerStatus:
+        """Prepare an explicitly replaced collection before starting its current."""
+        self._control_targets.invalidate()
+        queue = await self.queue_manager.get_snapshot()
+        uris = await self._desired_song_uris()
+        execution = sorted((item for item in queue.items if item.position >= 0), key=lambda item: item.position)
+        items = tuple((item.queue_item_id, uri) for item, uri in zip(execution, uris, strict=True))
+        journal = self._recovery
+        allocation_id = self._execution_owner[1]
+        attempt_id = journal.execution_attempts.get(allocation_id, allocation_id)
+        if attempt_id + '/queue' in journal.execution_intents:
+            # A later refill/sync may already be externally confirmed when the
+            # outer commit rolls back. Resume that fixed suffix, never clear it.
+            return await self._prepare_play(song)
+        operation_id = attempt_id + '/context'
+        intent = journal.execution_intents.get(operation_id)
+        sample = None
+        if intent is not None:
+            sample = await self._read_execution_sample()
+            if sample.connection_epoch != intent.baseline.connection_epoch:
+                receipts = journal.command_receipts[operation_id]
+                confirmed = len(receipts) == len(intent.commands) and all(
+                    receipt.phase == 'confirmed' for receipt in receipts.values()
+                )
+                if (any(receipt.phase == 'sent' for receipt in receipts.values())
+                        or (operation_id in journal.unknown_executions and not confirmed)):
+                    raise PlaybackReconciliationError('UNKNOWN lost collection response cannot be taken over by retry')
+                journal.unknown_executions.add(operation_id)
+                attempt_id = allocation_id + '/takeover/' + sample.connection_epoch
+                journal.execution_attempts[allocation_id] = attempt_id
+                operation_id = attempt_id + '/context'
+                intent = None
+        if intent is None:
+            sample = sample or await self._read_execution_sample()
+            commands = ([ExecutionCommand('clear')] if sample.entries else [])
+            commands.extend(ExecutionCommand('add', item_id, uri=uri) for item_id, uri in items)
+            commands.append(ExecutionCommand('play', items[0][0], uri=song.file_uri))
+            intent = ExecutionIntent(
+                journal.service_epoch, journal.binding.binding_generation if journal.binding else journal._binding_generation,
+                operation_id, queue.revision, sample, (), items, tuple(commands),
+                items[0][0], 'PLAYING', True,
+            )
+        elif intent.items != items or intent.queue_revision != queue.revision:
+            raise PlaybackReconciliationError('Execution identity conflict: fixed collection changed')
+        journal.preserve_binding()
+        executor = ExecutionSynchronizer(self.player, journal)
+        final = await executor.execute(intent)
+        status = await self.player.status()
+        if (status.state, status.song_id, status.song_position, status.song_uri) != (
+                PlayerState.PLAYING, final.status.song_id, 0, song.file_uri):
+            raise PlaybackReconciliationError('UNKNOWN current changed after collection confirmation')
+        # Keep the verified preparation without advancing the binding generation
+        # before the final Queue sync; its fixed retry fence must survive rollback.
+        journal.binding = None
+        journal.synced_entries, journal.sync_sample = executor.mapping(intent), final
+        journal.commit_execution(operation_id, RecoveryResult('APPLIED', None, operation_id))
+        return status
+
     async def _prepare_play(self, song: Song) -> PlayerStatus:
         self._control_targets.invalidate()
         journal = self._recovery
@@ -1587,10 +1645,19 @@ class PlaybackService:
                 and sample.playlist_version == stopped_sample.playlist_version
                 and sample.entries == stopped_sample.entries
             )
+            prepared_owned = (
+                explicit and stopped_sample is not None
+                and sample.connection_epoch == stopped_sample.connection_epoch
+                and sample.partition == stopped_sample.partition
+                and sample.playlist_version == stopped_sample.playlist_version
+                and sample.entries == stopped_sample.entries
+                and (sample.status.state, sample.status.song_id, sample.status.song_position)
+                == (stopped_sample.status.state, stopped_sample.status.song_id, stopped_sample.status.song_position)
+            )
             if binding is None and not explicit and not stopped_owned and state is not None:
                 journal.invalidate_binding()
                 raise PlaybackReconciliationError("Queue mutation requires an execution binding")
-            mapping = binding.entries if binding else journal.synced_entries if stopped_owned else ()
+            mapping = binding.entries if binding else journal.synced_entries if stopped_owned or prepared_owned else ()
             if (binding is not None and execution and binding.entries
                     and execution[0].queue_item_id == binding.entries[0][0] and not explicit
                     and state is not None and state.state != "STOPPED"

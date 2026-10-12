@@ -81,6 +81,40 @@ def test_library_replacement_appends_in_order_without_moving_every_new_entry(com
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize('bound', [False, True])
+def test_collection_does_not_start_current_until_the_complete_queue_is_prepared(components, bound):
+    async def scenario():
+        async with mpd_runtime(components) as runtime:
+            song_ids = tuple(str(index) for index in range(20))
+            await seed_songs(runtime['library'], *song_ids)
+            fake = runtime['fake']
+            if bound:
+                await runtime['service'].start_track(song_ids[-1])
+                fake.received.clear()
+
+            async def elapsed_during_build(request):
+                if request.startswith('addid ') and fake.player_state == 'play':
+                    current = next(i for i, entry in enumerate(fake.queue)
+                                   if entry.mpd_song_id == fake.current_song_id)
+                    if current + 1 < len(fake.queue):
+                        fake.current_song_id = fake.queue[current + 1].mpd_song_id
+                        fake.elapsed = 0.0
+
+            fake.after_request = elapsed_during_build
+            state = await runtime['service'].play_context(PlaybackContext(
+                context_id='slow-collection', source_type='LIBRARY', ordered_song_ids=song_ids,
+            ))
+            assert state.song_id == song_ids[0]
+            assert (await runtime['service'].observe()).sync_status == 'CONFIRMED'
+            plays = [i for i, command in enumerate(fake.received) if command.startswith('playid ')]
+            adds = [i for i, command in enumerate(fake.received) if command.startswith('addid ')]
+            assert len(plays) == 1
+            assert plays[0] > max(adds)
+            assert [entry.song_uri for entry in fake.queue] == [f'music/{s}.mp3' for s in song_ids]
+
+    asyncio.run(scenario())
+
+
 async def server_queue_song_ids(queue: QueueRepository) -> list[str]:
     return [
         item.song_id

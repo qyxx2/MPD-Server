@@ -35,6 +35,10 @@ def execution_case(real_client, command):
     elif command == "move":
         commands = (recovery.ExecutionCommand("move", items[2][0], before_item_id=items[1][0]),)
         items = (items[0], items[2], items[1], *items[3:])
+    elif command == 'clear':
+        commands = (recovery.ExecutionCommand('clear'),)
+        items = ()
+        target = None
     else:
         target = items[1][0]
         commands = (recovery.ExecutionCommand("play", target),)
@@ -42,12 +46,12 @@ def execution_case(real_client, command):
         service_epoch=journal.service_epoch, binding_generation=binding.binding_generation,
         operation_id=f"proof-{command}", queue_revision=binding.queue_revision,
         baseline=sample, entries=binding.entries, items=items, commands=commands,
-        target_item_id=target, target_state="PLAYING", allow_start=True,
+        target_item_id=target, target_state='STOPPED' if command == 'clear' else "PLAYING", allow_start=True,
     )
     return library.path, player, service, journal, ExecutionSynchronizer(player, journal), intent
 
 
-@pytest.mark.parametrize("command", ["add", "delete", "move", "play"])
+@pytest.mark.parametrize("command", ["add", "delete", "move", "play", "clear"])
 @pytest.mark.parametrize("failure", ["before-send", "after-ack", "after-confirm"])
 def test_each_command_prefix_is_retried_only_when_owned(real_client, monkeypatch, command, failure):
     path, player, service, journal, executor, intent = execution_case(real_client, command)
@@ -95,7 +99,8 @@ def test_each_command_prefix_is_retried_only_when_owned(real_client, monkeypatch
     assert controls == []
     assert run(service.queue_manager.get_snapshot()).revision == revision
     with pytest.raises(PlaybackReconciliationError, match="conflict"):
-        journal.prepare_execution(replace(intent, items=intent.items[:-1]))
+        journal.prepare_execution(replace(intent, commands=() if command == 'clear' else intent.commands,
+                                          items=intent.items[:-1]))
 
 
 def test_lost_add_response_never_guesses_or_resends(real_client, monkeypatch):
@@ -337,6 +342,35 @@ def test_collection_request_retry_preserves_context_and_random_plan(real_client,
     assert replay.json() == response.json()
     assert len(snapshots) == 2
     assert controls == []
+
+
+@pytest.mark.parametrize('lost', ['clear', 'add'])
+def test_collection_lost_response_cannot_clear_or_add_again_after_reconnect(real_client, monkeypatch, lost):
+    from server.tests.support.playback import mutate
+
+    client, _, player, service = real_client
+    start(client)
+    before = server_snapshot(service)
+    method = 'queue_clear' if lost == 'clear' else 'queue_add'
+    original = getattr(player, method)
+
+    async def lose(*args):
+        await original(*args)
+        raise PlayerUnavailable('lost collection response')
+
+    monkeypatch.setattr(player, method, lose)
+    body = {'source_type': 'SONGS', 'song_ids': ['b', 'a', 'c']}
+    response = mutate(client, 'POST', '/api/playback/collections/play', body, key='lost-collection')
+    assert response.status_code == 503
+    assert server_snapshot(service) == before
+    monkeypatch.setattr(player, method, original)
+    player.reconnect()
+    controls = capture_controls(monkeypatch, player)
+    retry = mutate(client, 'POST', '/api/playback/collections/play', body, key='lost-collection')
+    assert retry.status_code == 502
+    assert retry.json()['error']['code'] == 'PLAYBACK_RECONCILIATION_FAILED'
+    assert controls == []
+    assert server_snapshot(service) == before
 
 
 def test_protocol_read_failure_seals_the_acknowledged_prefix(real_client, monkeypatch):
