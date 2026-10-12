@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from server.app.models.library import Song
+from server.app.models.queue import PlaybackContext
 from server.app.player.mpd_adapter import MPDAdapter
 from server.app.player.ports import PlayerCommandError
 from server.app.repositories.database import initialize_database
@@ -52,6 +54,31 @@ async def seed_songs(library: LibraryRepository, *song_ids: str) -> None:
                 identity_key=f"identity-{song_id}",
             )
         )
+
+
+@pytest.mark.parametrize('randomize', [False, True])
+def test_library_replacement_appends_in_order_without_moving_every_new_entry(components, randomize):
+    async def scenario():
+        async with mpd_runtime(components) as runtime:
+            song_ids = tuple(str(index) for index in range(406))
+            await seed_songs(runtime['library'], *song_ids)
+            await runtime['service'].start_track(song_ids[-1])
+            runtime['fake'].received.clear()
+            if randomize:
+                shuffled = list(song_ids)
+                random.Random(9).shuffle(shuffled)
+                song_ids = tuple(shuffled)
+            await runtime['service'].play_context(PlaybackContext(
+                context_id='all-songs', source_type='LIBRARY', ordered_song_ids=song_ids,
+            ))
+            assert await server_queue_song_ids(runtime['queue']) == list(song_ids)
+            assert [entry.song_uri for entry in runtime['fake'].queue] == [
+                f'music/{song_id}.mp3' for song_id in song_ids
+            ]
+            assert not any(command.startswith('moveid ') for command in runtime['fake'].received)
+            assert (await runtime['service'].observe()).sync_status == 'CONFIRMED'
+
+    asyncio.run(scenario())
 
 
 async def server_queue_song_ids(queue: QueueRepository) -> list[str]:

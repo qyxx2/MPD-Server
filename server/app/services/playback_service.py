@@ -1601,6 +1601,12 @@ class PlaybackService:
             ids = {item_id: mpd_id for item_id, mpd_id, _ in mapping}
             names = {mpd_id: item_id for item_id, mpd_id, _ in mapping}
             simulated = [(entry.mpd_song_id, names.get(entry.mpd_song_id)) for entry in sample.entries]
+            wanted = {item_id for item_id, _ in items}
+            # Entries being removed do not constrain the final relative order.
+            # Keep them in MPD until the replacement is prepared, without moving
+            # every appended entry around the obsolete current/pending prefix.
+            obsolete = [row for row in simulated if row[1] not in wanted]
+            simulated = [row for row in simulated if row[1] in wanted]
             commands = []
             for position, (item_id, uri) in enumerate(items):
                 if item_id not in ids:
@@ -1613,10 +1619,8 @@ class PlaybackService:
                                                      before_mpd_song_id=before_id if before_item is None else None))
                     row = simulated.pop(index)
                     simulated.insert(position, row)
-            wanted = {item_id for item_id, _ in items}
-            for mpd_id, item_id in reversed(simulated):
-                if item_id not in wanted:
-                    commands.append(ExecutionCommand("delete", mpd_song_id=mpd_id))
+            for mpd_id, _ in reversed(obsolete):
+                commands.append(ExecutionCommand("delete", mpd_song_id=mpd_id))
             target = items[0][0] if items and state is not None and state.state != "STOPPED" else None
             if target is not None and (ids.get(target) != sample.status.song_id
                                        or sample.status.state == PlayerState.STOPPED):

@@ -23,7 +23,7 @@ onUnmounted(() => { if (noticeId) notices.remove(noticeId) })
 const open = ref(false), opener = ref<HTMLButtonElement | null>(null)
 const available = computed(() => Boolean(props.song.song_id) && props.song.availability_status === 'AVAILABLE')
 const disabled = computed(() => !actions || actions.locked.value || !available.value || props.fresh === false)
-function close() { open.value = false; opener.value?.focus() }
+function close() { if (!open.value) return; open.value = false; opener.value?.focus({ preventScroll: true }) }
 function operate(operation: 'now' | 'next' | 'add') {
   if (disabled.value || !props.song.song_id) return
   const id = props.song.song_id, title = props.song.title; close()
@@ -31,7 +31,7 @@ function operate(operation: 'now' | 'next' | 'add') {
   else if (operation === 'next') void actions?.playNext(id, title, available.value)
   else void actions?.add(id, title, available.value)
 }
-watch(() => [props.song.song_id, player.marker.epoch], close)
+watch([() => props.song.song_id, () => player.marker.epoch], close)
 </script>
 <template>
   <li class="song-row" :data-song-id="song.song_id">

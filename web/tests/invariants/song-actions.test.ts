@@ -1,7 +1,26 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { libraryPage, wire } from '../support/library'
 import { deferred } from '../support/transport'
+import { playerState } from '../support/player'
+
+it('background_snapshots_do_not_focus_closed_song_rows_or_close_an_open_menu', async () => {
+  const h = await libraryPage('/library?kind=songs')
+  const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+  const state = playerState(); state.sequence++
+  h.store.acceptRefresh(state, 1)
+  await flushPromises()
+  expect(focus).not.toHaveBeenCalled()
+  await h.wrapper.get('[data-song-id="a"] .song-open').trigger('click')
+  await flushPromises()
+  focus.mockClear()
+  state.sequence++
+  h.store.acceptRefresh(state, 1)
+  await flushPromises()
+  expect(h.wrapper.find('.song-menu').exists()).toBe(true)
+  expect(focus).not.toHaveBeenCalled()
+  h.wrapper.unmount()
+})
 
 const writes = (h: Awaited<ReturnType<typeof libraryPage>>) => h.requests.filter(r => r.init?.method !== 'GET')
 async function openSongs(h: Awaited<ReturnType<typeof libraryPage>>) {
