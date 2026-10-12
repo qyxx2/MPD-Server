@@ -1,0 +1,173 @@
+{
+  "status": {
+    "volume": "100",
+    "repeat": "0",
+    "random": "0",
+    "single": "0",
+    "consume": "1",
+    "partition": "default",
+    "playlist": "4708",
+    "playlistlength": "1095",
+    "mixrampdb": "0",
+    "state": "play",
+    "song": "998",
+    "songid": "4491",
+    "time": "68:286",
+    "elapsed": "67.738",
+    "bitrate": "1471",
+    "duration": "285.586",
+    "audio": "48000:24:2",
+    "nextsong": "999",
+    "nextsongid": "4492"
+  },
+  "current_window_pairs": [
+    [
+      "file",
+      "天后 - 陈势安.flac"
+    ],
+    [
+      "Last-Modified",
+      "2024-11-10T15:03:49Z"
+    ],
+    [
+      "Format",
+      "48000:24:2"
+    ],
+    [
+      "Album",
+      "天后"
+    ],
+    [
+      "Artist",
+      "陈势安"
+    ],
+    [
+      "Date",
+      "2011"
+    ],
+    [
+      "Title",
+      "天后"
+    ],
+    [
+      "Time",
+      "286"
+    ],
+    [
+      "duration",
+      "285.586"
+    ],
+    [
+      "Pos",
+      "998"
+    ],
+    [
+      "Id",
+      "4491"
+    ],
+    [
+      "file",
+      "我知道 - By2.flac"
+    ],
+    [
+      "Last-Modified",
+      "2024-11-10T15:03:26Z"
+    ],
+    [
+      "Format",
+      "44100:16:2"
+    ],
+    [
+      "Album",
+      "Twins"
+    ],
+    [
+      "AlbumArtist",
+      "By2"
+    ],
+    [
+      "Artist",
+      "By2"
+    ],
+    [
+      "Date",
+      "2009-04-10"
+    ],
+    [
+      "Genre",
+      "Musiques du monde"
+    ],
+    [
+      "Label",
+      "北京海蝶音樂有限公司"
+    ],
+    [
+      "Title",
+      "我知道"
+    ],
+    [
+      "Track",
+      "1"
+    ],
+    [
+      "Time",
+      "246"
+    ],
+    [
+      "duration",
+      "245.951"
+    ],
+    [
+      "Pos",
+      "999"
+    ],
+    [
+      "Id",
+      "4492"
+    ],
+    [
+      "file",
+      "无赖 - 郑中基.flac"
+    ],
+    [
+      "Last-Modified",
+      "2024-11-10T15:03:21Z"
+    ],
+    [
+      "Format",
+      "96000:24:2"
+    ],
+    [
+      "Album",
+      "玩咗先至瞓"
+    ],
+    [
+      "Artist",
+      "郑中基"
+    ],
+    [
+      "Date",
+      "2021"
+    ],
+    [
+      "Title",
+      "无赖"
+    ],
+    [
+      "Time",
+      "244"
+    ],
+    [
+      "duration",
+      "243.720"
+    ],
+    [
+      "Pos",
+      "1000"
+    ],
+    [
+      "Id",
+      "4493"
+    ]
+  ]
+}

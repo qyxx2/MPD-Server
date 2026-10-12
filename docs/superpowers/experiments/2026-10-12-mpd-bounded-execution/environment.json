@@ -1,0 +1,74 @@
+[
+  {
+    "command": [
+      "git",
+      "status",
+      "--short"
+    ],
+    "returncode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "branch",
+      "--show-current"
+    ],
+    "returncode": 0,
+    "stdout": "refactor/mpd-bounded-execution\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "log",
+      "-5",
+      "--oneline"
+    ],
+    "returncode": 0,
+    "stdout": "92b44c9 docs: freeze MPD actual-state authority and three-track execution observation\nc051aac docs: freeze MS-authoritative bounded MPD execution refactor contract\n098d6ea docs: record deployment capability checks and compose configuration\n38d87a5 fix: resume paused playback with unchanged consume mode\n81129b9 ci: align lint tool with validated local baseline\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "returncode": 0,
+    "stdout": "92b44c913e49052d2fd113b77eda0b13c429c0fc\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/home/Gold/WorkSpace/MPD-Server/MPD-Server/.venv/bin/python",
+      "--version"
+    ],
+    "returncode": 0,
+    "stdout": "Python 3.14.4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/home/Gold/WorkSpace/MPD-Server/MPD-Server/.venv/bin/python",
+      "-m",
+      "pytest",
+      "--version"
+    ],
+    "returncode": 0,
+    "stdout": "pytest 9.1.1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/home/Gold/WorkSpace/MPD-Server/MPD-Server/.venv/bin/python",
+      "-m",
+      "ruff",
+      "--version"
+    ],
+    "returncode": 0,
+    "stdout": "ruff 0.16.9\n",
+    "stderr": ""
+  }
+]
