@@ -47,6 +47,7 @@ OPERATION_COMMANDS: dict[str, frozenset[str]] = {
     "set_random": frozenset({"random"}),
     "set_volume": frozenset({"setvol"}),
     "update_database": frozenset({"update"}),
+    "has_library_uri": frozenset({"find"}),
     "outputs": frozenset({"outputs"}),
     "queue_entries": frozenset({"playlistinfo"}),
     "queue_clear": frozenset({"clear"}),
@@ -62,6 +63,7 @@ OPERATION_COMMANDS: dict[str, frozenset[str]] = {
 
 RUNTIME_VERIFIED_OPERATIONS = frozenset(
     {
+        "has_library_uri",
         "queue_entries",
         "queue_clear",
         "queue_add",
@@ -196,6 +198,10 @@ class VerifiedPlayerPort(PlayerPort):
     async def set_volume(self, volume: int) -> None:
         self._require("set_volume")
         await self._delegate.set_volume(volume)
+
+    async def has_library_uri(self, song_uri: str) -> bool:
+        self._require("has_library_uri")
+        return await self._delegate.has_library_uri(song_uri)
 
     async def update_database(self) -> None:
         self._require("update_database")

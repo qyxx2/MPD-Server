@@ -62,7 +62,6 @@ def test_mpd_get_preserves_null_zero_and_source_errors(monkeypatch):
 
 
 def test_startup_wires_shared_system_services_fail_closed(tmp_path, monkeypatch):
-    from server.app import main
     from server.app.player.mock_mpd import MockMPD
 
     player = MockMPD()
@@ -74,7 +73,7 @@ def test_startup_wires_shared_system_services_fail_closed(tmp_path, monkeypatch)
         return original(command)
 
     monkeypatch.setattr(player, "_check", check)
-    monkeypatch.setattr(main, "MPDAdapter", lambda *args, **kwargs: player)
+    monkeypatch.setattr(app.state, "player", player, raising=False)
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "system.db"))
     monkeypatch.delattr(app.state, "mpd_capabilities", raising=False)
     player.disconnect()
@@ -90,8 +89,11 @@ def test_startup_wires_shared_system_services_fail_closed(tmp_path, monkeypatch)
         assert info.json()["connected"] is None
         assert info.json()["version"] is None
         assert {error["code"] for error in info.json()["errors"].values()} == {"CAPABILITY_UNVERIFIED"}
-        assert client.get("/api/health").json() == {"status": "ok"}
-    assert calls == []
+        health = client.get("/api/health")
+        assert health.status_code == 200
+        assert health.json()["status"] == "ok"
+        assert health.json()["mpd"]["status"] == "unavailable"
+    assert calls == ["status"]
 
 
 def test_output_get_preserves_preparing_as_request_fact(monkeypatch):

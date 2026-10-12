@@ -137,6 +137,18 @@ async def initialize_database(path: str) -> None:
             connection.close()
 
 
+async def read_health(path: str) -> None:
+    """Bounded read-only probe; never create a missing DB or run migrations."""
+    def read():
+        connection = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True, timeout=0.1)
+        try:
+            connection.execute("SELECT song_id FROM songs LIMIT 1").fetchone()
+        finally:
+            connection.close()
+
+    await asyncio.to_thread(read)
+
+
 async def check_integrity(path: str) -> bool:
     connection = _connect(path)
     try:

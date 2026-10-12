@@ -5,6 +5,7 @@
   },
   "snapshot": {
     "epoch": "fixture-epoch",
+    "explicit_stop_generation": 2,
     "sequence": 12,
     "captured_at": "2026-10-09T08:00:00Z",
     "revisions": {
@@ -152,10 +153,123 @@
       "freshness": "fresh",
       "error_code": null,
       "error_message": null
+    },
+    "library_sync": {
+      "status": "IDLE",
+      "generation": 0,
+      "activity_id": null,
+      "trigger": null,
+      "pending_count": 0,
+      "confirmed_count": 0,
+      "failed_count": 0,
+      "updated_at": "2026-10-09T08:00:00Z",
+      "error_code": null,
+      "reason": null
     }
+  },
+  "song_resource": {
+    "song_id": "song-a",
+    "title": "长标题 / Song A",
+    "file_uri": "fixture/a.flac",
+    "artists": [
+      "Artist"
+    ],
+    "album_id": null,
+    "album": null,
+    "album_artists": [],
+    "track_number": null,
+    "disc_number": null,
+    "year": null,
+    "date": null,
+    "genres": [],
+    "tag_names": [],
+    "duration": null,
+    "lyrics": "[00:01]fixture",
+    "lyrics_format": "lrc",
+    "lyrics_source": null,
+    "lyrics_status": "missing",
+    "bit_depth": null,
+    "sample_rate_hz": null,
+    "channel_count": null,
+    "codec": null,
+    "metadata_status": null,
+    "last_scanned_at": null,
+    "file_size": null,
+    "file_mtime_ns": null,
+    "content_hash": null,
+    "availability_status": "AVAILABLE",
+    "last_seen_at": null,
+    "artwork": null
+  },
+  "song_list_resource": {
+    "items": [
+      {
+        "song_id": "song-a",
+        "title": "长标题 / Song A",
+        "file_uri": "fixture/a.flac",
+        "artists": [
+          "Artist"
+        ],
+        "album_id": null,
+        "album": null,
+        "album_artists": [],
+        "track_number": null,
+        "disc_number": null,
+        "year": null,
+        "date": null,
+        "genres": [],
+        "tag_names": [],
+        "duration": null,
+        "lyrics": "[00:01]fixture",
+        "lyrics_format": "lrc",
+        "lyrics_source": null,
+        "lyrics_status": "missing",
+        "bit_depth": null,
+        "sample_rate_hz": null,
+        "channel_count": null,
+        "codec": null,
+        "metadata_status": null,
+        "last_scanned_at": null,
+        "file_size": null,
+        "file_mtime_ns": null,
+        "content_hash": null,
+        "availability_status": "AVAILABLE",
+        "last_seen_at": null,
+        "artwork": null
+      }
+    ],
+    "count": 1
+  },
+  "playlist_resource": {
+    "playlist_id": "playlist-wire",
+    "name": "手机保存",
+    "created_at": "2026-10-09T08:00:00Z",
+    "updated_at": "2026-10-09T08:00:00Z",
+    "is_system": false,
+    "song_ids": [
+      "song-b",
+      "hidden-song"
+    ]
+  },
+  "playlist_list_resource": {
+    "items": [
+      {
+        "playlist_id": "playlist-wire",
+        "name": "手机保存",
+        "created_at": "2026-10-09T08:00:00Z",
+        "updated_at": "2026-10-09T08:00:00Z",
+        "is_system": false,
+        "song_ids": [
+          "song-b",
+          "hidden-song"
+        ]
+      }
+    ],
+    "count": 1
   },
   "empty_snapshot": {
     "epoch": "fixture-epoch",
+    "explicit_stop_generation": 2,
     "sequence": 12,
     "captured_at": "2026-10-09T08:00:00Z",
     "revisions": {
@@ -234,6 +348,18 @@
       "freshness": "unknown",
       "error_code": null,
       "error_message": null
+    },
+    "library_sync": {
+      "status": "IDLE",
+      "generation": 0,
+      "activity_id": null,
+      "trigger": null,
+      "pending_count": 0,
+      "confirmed_count": 0,
+      "failed_count": 0,
+      "updated_at": "2026-10-09T08:00:00Z",
+      "error_code": null,
+      "reason": null
     }
   },
   "snapshot_frame": {
@@ -243,6 +369,7 @@
     "sequence": 12,
     "state": {
       "epoch": "fixture-epoch",
+      "explicit_stop_generation": 2,
       "sequence": 12,
       "captured_at": "2026-10-09T08:00:00Z",
       "revisions": {
@@ -390,6 +517,18 @@
         "freshness": "fresh",
         "error_code": null,
         "error_message": null
+      },
+      "library_sync": {
+        "status": "IDLE",
+        "generation": 0,
+        "activity_id": null,
+        "trigger": null,
+        "pending_count": 0,
+        "confirmed_count": 0,
+        "failed_count": 0,
+        "updated_at": "2026-10-09T08:00:00Z",
+        "error_code": null,
+        "reason": null
       }
     }
   },

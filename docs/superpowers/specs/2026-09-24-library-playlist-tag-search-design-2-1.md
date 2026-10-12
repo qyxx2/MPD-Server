@@ -13,7 +13,7 @@ History / Playback Context / AutoPlay 语义衔接。
     都能生成可供播放服务使用的歌曲集合。
 -   分类浏览和搜索中的歌曲条目采用统一交互：点击具体歌曲后显示 Playback
     Action（Play Now、Play Next、Add to Queue）。
--   收藏是持久化的用户列表，能从所有歌曲展示位置直接切换收藏状态。
+-   收藏是持久化的用户列表，按§5.3的Player与单曲菜单入口切换收藏状态。
 -   保存必要的歌词及音频技术信息，便于歌词显示和音频信息展示。
 
 本章不定义具体 UI 排版、MPD
@@ -223,10 +223,10 @@ Playlist 是用户创建并持久保存的有序歌曲列表。
 
 ### 5.2 Favorites（收藏列表）
 
-Favorites 是系统预置的持久列表，作为 Playlist 体系中的特殊列表呈现：
+Favorites 是系统提供的持久收藏列表，由现有独立Favorites表保存（完整读取合同见§5.4）：
 
--   系统初始化时提供固定的 Favorites 列表，不要求用户手动创建。
--   用户可通过歌曲条目上的星形图标收藏或取消收藏。
+-   系统提供固定Favorites入口，不要求用户创建Playlist实体。
+-   用户通过§5.3定义的入口收藏或取消收藏。
 -   Favorites
     按收藏状态维护成员关系；取消收藏只移除该列表中的关联，不删除
     Song、音频文件或其他 Playlist 中的引用。
@@ -234,31 +234,23 @@ Favorites 是系统预置的持久列表，作为 Playlist 体系中的特殊列
     补充歌曲或重启应用而清空。
 -   Favorites 可像其他 Playlist
     一样打开并播放；播放时按第一章规则替换当前 Queue。
--   收藏列表中的歌曲顺序应有稳定规则。初版建议按收藏时间倒序展示，最新收藏的歌曲位于前面；若用户后续需要手动排序，可作为扩展。
+-   收藏列表按§5.4服务端完整顺序展示，收藏时间倒序、song_id倒序作稳定tie-break；本批次不提供手动排序。
 
-### 5.3 收藏图标与交互一致性
+### 5.3 收藏图标与交互一致性（2026-10-11，LIB-FAV-UI-001 FROZEN）
 
-所有展示具体歌曲的列表项均显示星形收藏控件，包括：
+用户本次B08设计优先于旧的全列表直接收藏标志控件：正在播放页在艺术家同行靠右提供独立44px爱心收藏标志，未收藏空心、已收藏主题强调色实心，可点击切换。其余任何具体Song位置（Library、Search、Playlist、Favorites、Queue及选歌列表）仅已收藏显示实心爱心，爱心仅展示、不响应点击；未收藏不显示爱心。已有单曲菜单内提供且仅提供一个当前状态收藏项，纯文字收藏或取消收藏，可点击切换；Queue保持整行按occurrence播放，从既有更多菜单操作收藏。收藏不触发播放/菜单打开，不改变Queue。
 
--   专辑页面
--   歌手页面
--   年代、Genre 及其他分类页面
--   搜索结果
--   Playlist 页面
--   Favorites 页面及其他歌曲列表
+状态来自同一完整membership owner；不可用成员仍保留已收藏标志并可取消，收藏写权限不以播放availability判定。pending/unknown不能猜造confirmed收藏标志，同song互斥，HTTP后权威重读、失败保留最后事实、unknown原key恢复、跨页不补发、断线禁写及epoch退役继承Architecture §4.1–4.2。
 
-状态表现：
+### 5.4 完整收藏读取（2026-10-11，LIB-FAV-MEMBERS-001 FROZEN）
 
--   未收藏：空心五角星。
--   已收藏：黄色实心五角星。
+用户批准B08最小只读补充。实际Favorites持久表独立于playlist_items，没有自动初始化的系统Playlist投影；本节覆盖§5.2关于系统Playlist实体及旧B08按系统Playlist读取的假设，不迁移模型或新建系统Playlist。
 
-点击图标立即切换收藏状态，并同步更新所有可见位置的图标和 Favorites
-列表。该操作不应触发歌曲的 Playback Action，也不应改变当前播放曲目或
-Queue。
-
-歌曲条目本身的点击仍遵循第一章：弹出 Playback Action 选项（Play
-Now、Play Next、Add to
-Queue）。星形控件是独立操作区域，点击星形不得误触歌曲条目。
+- Authority：PlaylistService.list_favorite_song_ids → 既有Favorites repository，按created_at DESC、song_id DESC稳定排序，包含不可用成员。
+- API：GET /api/favorites/members → {song_ids: string[]}；空收藏返回200和空数组，读取失败按既有错误边界失败，不能伪装空集合。不加revision字段，继承shared cache的epoch/generation及library+playlist revision失效。
+- 只读，不改变任何membership/revision、Queue、Playback、History或MPD；无新DB/schema/依赖。GET /api/favorites的可播放Collection和现有PUT/DELETE语义保持。
+- Favorites展示严格按该完整服务端顺序取得Song metadata，不从可用/不可用两个数组拼接顺序。缺失metadata仍保留身份和取消入口；错误进唯一顶部。
+- Proof：server/tests/api/test_favorites_members.py及web/tests/invariants/favorites.test.ts，含不可用、完整顺序、读取无领域副作用、失败/unknown/204/跨页/epoch/revision关系。
 
 ## 6. Search（搜索）
 
@@ -276,13 +268,25 @@ Queue）。星形控件是独立操作区域，点击星形不得误触歌曲条
 
 搜索行为：
 
--   搜索结果中的具体歌曲条目显示收藏星形图标。
+-   搜索结果中的具体歌曲条目按§5.3仅显示已收藏收藏标志。
 -   点击歌曲条目弹出 Playback Action，不直接播放。
 -   搜索结果可以作为
     Collection，但必须明确其排序规则；默认采用相关性或稳定的匹配排序。
 -   搜索结果中同一 Song ID
     只出现一次，除非界面明确展示的是不同的匹配上下文。
 -   搜索为空、无匹配结果或索引尚未更新时，应显示明确状态，不应伪造结果。
+
+### 6.1 搜索归类与内容（LIB-SEARCH-VIEW-001，2026-10-11，FROZEN）
+
+用户在B06手机反馈中明确：归类本身置顶，归类内容在同一页下方一起展示，跟随归类已有排序；A03反馈进一步要求类型用矢量图标表示，下方不再分组且歌曲不重复；默认完整结果直接显示；A04反馈要求顶部归类可点击进入已有归类详情，只显示对应对象内容，默认结果保持。
+
+- 搜索歌曲标题、演唱者、专辑、专辑艺术家、风格、年代及现有标签。艺术家沿用Library已有演唱者和专辑艺术家共同分类，使用同一稳定ID，不制造独立的album-artist分类。
+- 顶部集中展示命中的归类，以Library对应SVG类型图标加归类名称表示，不显示“专辑”“艺术家”等类型文字前缀；无障碍名称仍保留类型。下方为一个连续可播放歌曲列表，不显示归类分段标题或“其它匹配歌曲”标题。分类类型顺序继承Library的专辑、艺术家、风格、年代、标签；同类型命中沿用分类列表原顺序，不另按歌曲标题排序归类。归类内歌曲沿用现有Collection默认顺序。顶部归类入口按稳定kind/source_id进入既有Library归类详情页，只读取该对象的成员，按其服务端顺序展示，点击入口不发播放请求。包括空归类，详情沿用空状态。携带原始搜索词作为返回上下文，详情提供“返回搜索”；浏览器返回或该入口恢复原q并权威重读，完整无分组去重列表保持。详情复用既有菜单与集合动作，不新增Search PlayAll。
+- Web按服务端归类顺序、组内歌曲顺序依次展开，以Song ID全局去重，只保留首次出现的位置，不另行排序；重复归类中的歌曲不再展示第二份。原搜索命中而未属于任何命中归类的歌曲，按原搜索排序追加为直接歌曲结果，并参与同一去重。后端groups仍保留完整成员和上下文，不改现有DTO或接口。
+- 后端拥有归类匹配、成员和排序；新增只读`GET /api/library/search/results?q=...`返回`{groups:[{kind,source_id,name,song_ids}],song_ids}`。kind为albums/artists/genres/years/tags；source_id来自现有summary，song_ids是已有Collection的可播放成员顺序。原`GET /api/library/search`的Collection合同保持。缺q沿用422，空白返回空groups/song_ids；规范化查询为trim/casefold，名称精确/前缀/子串可命中，结果按上述归类排序；读不改变Queue、Playback、History或revision。
+- Web通过同一Library cache读取该结果和Song资源，不建本地匹配索引、不猜造归类成员、不补不可用项；q保留于route，空白/快速改词/清空、返回重读及epoch/revision/generation迟到保护沿用Architecture §4.1。未知/失败只进唯一顶部通知；GET不能恢复写权限。
+- Song仍复用统一播放菜单，无Search PlayAll；Favorites/star依B08接入，Playlist名称不扩入B06。本合同仅扩大B06必要搜索表示，不改变B01–05已接受行为或推进未来Batch。
+- 证明：真实SQLite/Service/API的归类稳定身份、分类及成员顺序、专辑艺术家/标签/多归类命中、完整归类成员上下文/直接歌曲尾部、空白/无匹配及读取不改业务域；Web真实fixture→decoder/cache→顶部SVG图标和名称、单列表首次出现去重及尾部直接歌曲、点击归类只读对应成员及返回搜索、迟到拒绝、查询与菜单关系。手机仅复核新增归类表示，已接受其它操作不重复要求。
 
 ## 7. 扫描与数据更新
 
@@ -315,6 +319,22 @@ Queue）。星形控件是独立操作区域，点击星形不得误触歌曲条
 - **Observable Result**：snapshot 与领域失效通知携带相应 epoch/revisions；无内容变化扫描仍保留原有扫描完成事件及 MPD update error 可见性，不能用“revision 未增”吞掉扫描结果。原 Library 扫描 commit → optional MPD update → completion event 顺序不变。
 - **Executable Invariant Proof**：新增真实 Repository/Service/outer transaction 测试，比较提交前后资源、计数和事件，覆盖成功、no-op、改后恢复、双域事务、嵌套/批量、terminal failure、rollback、取消、retry/replay、发布失败及重启 epoch。用 barrier 验证新数据不可搭配旧 revision；availability 改变不丢 Playlist/Favorites/History 引用。测试由 Task 6 Batch Plan 分配，当前仅为待执行证明义务。
 
+### 7.2 自动MS/MPD曲库同步（LIB-MPD-SYNC-001，2026-10-11）
+
+用户确认：保留现有两种URI表示并做最小映射；手动扫描/被动发现后自动及时同步并自动更新页面。同步活动只进入WEB-UI-NOTIFY-001的AppBar中心，不在Song行/页面另加同步说明或图标。业务文件availability与同步状态独立，不修改现有AVAILABLE/MISSING/UNREADABLE含义。
+
+**权威与顺序**：文件系统拥有真实文件，Library Repository拥有MS索引，MPD拥有自身索引；统一同步Service拥有协调进度。发现→debounce/合并→扫描提交→登记SYNCING并通知→MPD update→等待更新结束→精确URI确认→SYNCED/FAILED。扫描数据的revision在提交时立即可见；沿用§7.1 commit→optional update→completion event，不延迟revision登记，不把新同步事件当原扫描完成事件。MPD失败不回滚MS已提交Song，不伪造History/Queue变化。
+
+**及时性与合并**：复用500ms debounce。单实例变化发现每2秒检查文件路径/size/mtime签名，仅变化进入增量扫描；不每2秒重新解析/哈希全库。此默认轮询方式减少NAS挂载监听依赖，真实文件树性能在部署Gate测量；若规模导致不能满足检查预算，再单独批准优化，不迁移URI。12小时完整校准兜底遗漏，手动扫描进入同一协调器。首次启动自动扫描/确认；无可读根时失败保留旧索引。文件尚在写入导致解析失败可重试，稳定后收录。变更正在处理时新到变更进入下一generation，不被旧轮完成清除。移动/删除继续既有身份/引用规则；确认更新后的精确新URI，删除确认旧URI不在MPD索引。
+
+**MPD确认**：Port新增只读has_library_uri(song_uri:str)->bool，Mock/真实/Verified实现同一合同；由独立同步Service消费，不通过Queue查找代替曲库查询。协议实现依据目标允许命令验证精确file字段，不整库拉取作为每曲确认。update返回不是成功证据；更新状态每1秒有界读取，只有update已接受、无正在更新且本generation目标URI符合存在/缺失预期，才SYNCED。更新非常快而未观察到busy也可由精确URI确认。每轮确认预算60秒；超时FAILED，自动按2/5/15/30秒封顶间隔重试，断线后恢复继续；不忙循环，不自动重做用户播放/收藏等mutation。MPD更新可能不改变曲目内容，不因此虚增Library revision。
+
+**状态**：IDLE/SYNCING/SYNCED/FAILED；服务启动时IDLE未证明已同步，首次确认后才SYNCED。每轮generation单调递增并带activity_id、trigger、pending_count、confirmed_count、failed_count、updated_at及安全错误码/短原因；确认只覆盖本轮捕获目标，迟到旧结果不覆盖新轮。同一generation重试更新同一活动，不制造无限活动列表。重启丢弃运行时成功证明，重新扫描/确认，不持久化旧snapshot为权威。
+
+**传播**：FullStateSnapshot增量字段library_sync承载当前完整同步状态；独立失效domain library_sync共用现有epoch/sequence/初始snapshot及bounded sender机制。同步状态改变只推进sequence，不推进Library/Playlist revision；Library索引变化仍由原library域刷新资源。一次提交登记扫描可见变化与SYNCING，不能展示新Song却仍宣称旧轮同步成功。snapshot读取无扫描/MPD控制。Web自动重读，不靠刷新页面；旧epoch/sequence/generation结果丢弃，断线最后状态明确过期，重连完整首帧恢复。
+
+**不变项与证明**：音乐文件只读；同步不播放/清空/重排Queue、不更改Playlist/Favorites/History；已有业务控制成功仍需原确认。真实SQLite＋Scanner＋状态协调器＋Fake/Mock Port测试覆盖提交/通知/更新/精确确认、update错误/超时、断线恢复、并发新文件、no-op、移动删除、取消和重启；真实NAS至少新增一份用户自有测试曲目并观察无需刷新完成同步。完整日志归MIN-LOG-001，短活动展示归Visual。
+
 ## 8. 与第一章播放模型的接口
 
 建议以统一的服务端接口概念连接浏览层与播放服务：
@@ -340,7 +360,7 @@ Queue）。星形控件是独立操作区域，点击星形不得误触歌曲条
 
 -   已删除或不可访问的歌曲不应被悄悄当作正常可播放文件；播放服务应按第一章规则处理失效条目。
 -   收藏状态更新失败时，客户端不得假装持久化成功；应提供失败反馈并重新同步服务端状态。
--   多页面的收藏星形状态必须来自同一收藏状态源，避免页面之间状态不一致。
+-   多页面的收藏爱心状态必须来自同一收藏状态源，避免页面之间状态不一致。
 -   歌曲元数据更新不得意外清除 Favorites 或用户 Playlist 的成员关系。
 -   同名歌曲、同名专辑和多艺术家歌曲应依赖实体关联与元数据规则处理，不能仅靠展示字符串判断身份。
 -   空集合应有明确的空状态，不应以随机歌曲悄悄替代用户明确选择的空集合。
@@ -353,9 +373,9 @@ Queue）。星形控件是独立操作区域，点击星形不得误触歌曲条
     可以保存歌词内容、歌词格式、位深、采样率等音频信息；未知值不会被猜测填充。
 3.  LRC 时间戳得到保留，能够供同步歌词功能使用。
 4.  分类集合可按来源规则生成稳定、去重的歌曲列表，并支持顺序或随机播放。
-5.  所有歌曲列表项均显示收藏星形；收藏与取消收藏后，各页面状态保持一致。
+5.  所有歌曲位置按§5.3显示已收藏爱心；收藏与取消收藏后，各页面状态保持一致。
 6.  收藏列表持久存在，且不随 Queue 或临时 Collection 变化而清空。
-7.  点击星形只切换收藏；点击歌曲条目则弹出第一章定义的 Playback Action。
+7.  Player爱心和单曲菜单收藏项只切换收藏；普通歌曲条目弹出Playback Action，Queue按既有occurrence合同播放。
 8.  Playlist 的增删改和排序不影响底层音乐文件。
 9.  扫描更新元数据、路径或分类后，尽可能保留 Song 身份、Favorites 和
     Playlist 关联。
@@ -370,3 +390,8 @@ Queue）。星形控件是独立操作区域，点击星形不得误触歌曲条
 -   收藏列表默认排序是否采用"最新收藏优先"。
 -   初版是否允许同一歌曲在同一自定义 Playlist 中重复出现。
 -   实际 API 路由、请求/响应结构、实时同步方式。
+
+
+### 2026-10-11 B08 A02展示修正（用户反馈优先）
+
+Player爱心保持艺术家同行，向左8px/向上3px微调，SVG从22px放大到26px；未收藏明确使用--text-primary描边，已收藏仍用--accent。所有单曲菜单收藏/取消收藏仅纯文字，不显示爱心、不使用蓝色，字体颜色/对齐沿用其它菜单项；按用户最新反馈，Queue单曲菜单与Library共用样式：无按钮边框、文字左对齐、相同尺寸/间距/歌曲信息排版；清空和保存弹窗保持原样。其它位置已收藏展示爱心及所有状态/写权限/请求/恢复功能不改。只复验这两类展示，不重开已认可功能；B08手机Gate仍待本轮反馈。

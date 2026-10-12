@@ -73,6 +73,18 @@ class ScanBatch(BaseModel):
     reconciled_root_uri_prefix: str | None = None
 
 
+class SearchGroup(BaseModel):
+    kind: Literal["albums", "artists", "genres", "years", "tags"]
+    source_id: str
+    name: str
+    song_ids: tuple[str, ...]
+
+
+class SearchResults(BaseModel):
+    groups: tuple[SearchGroup, ...] = ()
+    song_ids: tuple[str, ...] = ()
+
+
 class ScanResult(BaseModel):
     added_song_ids: tuple[str, ...] = ()
     updated_song_ids: tuple[str, ...] = ()

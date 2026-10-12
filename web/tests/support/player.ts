@@ -9,12 +9,15 @@ import PlayerView from '../../src/views/PlayerView.vue'
 import { transport } from './transport'
 export function playerState() {
   const value = parseSnapshot(structuredClone(fixture.snapshot))
+  // Product behavior tests start without unresolved server requests. Raw wire
+  // fixture retains SWITCH_FAILED for decoder tests; output tests inject it explicitly.
+  value.output.last_request = null
   value.playback_observation.duration_seconds = 180
   return value
 }
 export function playerPage(...responses: Parameters<typeof transport>) {
   const network = transport(...responses)
-  const api = createApiClient({ origin: 'http://localhost', fetch: network.fetch })
+  const api = createApiClient({ origin: 'http://localhost', fetch: (input, init) => new URL(String(input)).pathname === '/api/favorites/members' ? Promise.resolve(Response.json({ song_ids: [] })) : network.fetch(input, init) })
   const store = createPlayerStore()
   store.beginConnection(1); store.acceptInitial(parseSnapshot(playerState()), 1)
   const realtime = { start() {}, stop() {}, async refresh() { store.acceptRefresh(await api.get('/api/state', parseSnapshot), 1) } }

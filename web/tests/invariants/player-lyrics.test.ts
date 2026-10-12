@@ -43,7 +43,7 @@ it('read_error retains fallback text and source; plain, missing and malformed LR
   await wrapper.get('button[aria-label="显示歌词"]').trigger('click')
   const notice = () => wrapper!.get('.page-header [data-testid="operation-status"]').text()
   expect(notice()).toContain('歌词读取失败'); expect(wrapper.get('.lyrics-content').text()).toContain('<b>普通歌词</b>'); expect(wrapper.find('b').exists()).toBe(false)
-  expect(notice()).toContain('embedded'); expect(notice()).toContain('普通文本'); expect(wrapper.find('[aria-current]').exists()).toBe(false)
+  expect(notice()).toContain('embedded'); expect(notice()).toContain('普通文本'); expect(wrapper.find('.lyrics-stage [aria-current]').exists()).toBe(false)
   expect(wrapper.get('.lyrics-stage').text()).not.toContain('歌词读取失败')
   await update({ lyrics: '[坏标签]原文', lyrics_format: 'lrc', lyrics_status: 'available' })
   expect(notice()).toContain('无法同步'); expect(wrapper.get('.lyrics-content').text()).toContain('[坏标签]原文')
@@ -162,7 +162,8 @@ it('late HTTP lyrics from an old connection cannot replace the new song baseline
   const { createApiClient } = await import('../../src/services/api')
   const { createRealtimeClient } = await import('../../src/services/realtime')
   const { transport, deferred } = await import('../support/transport')
-  const { playerKey } = await import('../../src/components/player/playerFacts')
+  const { defineComponent, h } = await import('vue')
+  const { default: AppShell } = await import('../../src/components/layout/AppShell.vue')
   const { default: Player } = await import('../../src/views/PlayerView.vue')
   const response = deferred<Response>(), network = transport(response.promise), store = createPlayerStore()
   type Message = { data: string }
@@ -175,7 +176,7 @@ it('late HTTP lyrics from an old connection cannot replace the new song baseline
   const old = playerState(); old.current_song!.lyrics = '[00:37]旧连接歌词'; old.current_song!.lyrics_format = 'lrc'
   const frame = (s: typeof old) => ({ data: JSON.stringify({ type: 'snapshot', protocol_version: 1, epoch: s.epoch, sequence: s.sequence, state: s }) })
   realtime.start(); sockets[0]!.message!(frame(old))
-  wrapper = mount(Player, { global: { provide: { [playerKey as symbol]: store } } })
+  wrapper = mount(defineComponent({ render: () => h(AppShell, { store, realtime: { start() {}, stop() {} } }, { default: () => h(Player) }) }))
   await wrapper.get('button[aria-label="显示歌词"]').trigger('click')
   const pendingRead = realtime.refresh(); await Promise.resolve()
   realtime.stop(); realtime.start()

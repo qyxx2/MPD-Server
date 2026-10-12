@@ -260,7 +260,11 @@ def test_outer_transport_delta_noop_and_output_runner_isolation(real_client):
         await service.stop()
         await service.pause()
         await service.seek(3)
-        assert coordinator.marker().sequence == 1 and len(events) == 1
+        # A distinct explicit Stop now advances the lifecycle counter even
+        # when already stopped; pause/seek remain transport no-ops.
+        assert coordinator.marker().sequence == 2 and len(events) == 2
+        assert events[-1].domains == frozenset({"playback"})
+        assert service.explicit_stop_generation == 2
 
     run(scenario())
     assert run(service.queue_manager.queue_repository.get_snapshot()) == before[0]

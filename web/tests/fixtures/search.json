@@ -1,0 +1,271 @@
+{
+  "queries": {
+    "长标题": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [
+        "a",
+        "b"
+      ],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "长名": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [
+        "a",
+        "b"
+      ],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "长专辑": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [
+        "a",
+        "b"
+      ],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "专辑艺术家": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [
+        "a",
+        "b"
+      ],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "Rock": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [
+        "a",
+        "b"
+      ],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "2024": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [
+        "a",
+        "b"
+      ],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "Live": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [
+        "a",
+        "b"
+      ],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "不存在": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    },
+    "   ": {
+      "source_type": "SEARCH",
+      "source_id": null,
+      "song_ids": [],
+      "unavailable_song_ids": [],
+      "random_seed": null
+    }
+  },
+  "results": {
+    "长标题": {
+      "groups": [],
+      "song_ids": [
+        "a",
+        "b"
+      ]
+    },
+    "长名": {
+      "groups": [
+        {
+          "kind": "artists",
+          "source_id": "a8b09e17-dda4-5f77-b158-02d5bee0d3bf",
+          "name": "艺术家 / 长名",
+          "song_ids": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "song_ids": []
+    },
+    "长专辑": {
+      "groups": [
+        {
+          "kind": "albums",
+          "source_id": "album-wire",
+          "name": "长专辑",
+          "song_ids": [
+            "b",
+            "a"
+          ]
+        }
+      ],
+      "song_ids": []
+    },
+    "专辑艺术家": {
+      "groups": [
+        {
+          "kind": "artists",
+          "source_id": "38ba10db-73d1-547d-ae0c-9bfd09caa42b",
+          "name": "专辑艺术家",
+          "song_ids": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "song_ids": []
+    },
+    "Rock": {
+      "groups": [
+        {
+          "kind": "genres",
+          "source_id": "33fd4889-b81c-56d6-955e-b1d90c702c02",
+          "name": "Rock",
+          "song_ids": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "song_ids": []
+    },
+    "2024": {
+      "groups": [
+        {
+          "kind": "years",
+          "source_id": "2024",
+          "name": "2024",
+          "song_ids": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "song_ids": []
+    },
+    "Live": {
+      "groups": [
+        {
+          "kind": "tags",
+          "source_id": "01588663-26ac-5a01-b4e7-b3bdd697f2bd",
+          "name": "Live",
+          "song_ids": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "song_ids": []
+    },
+    "不存在": {
+      "groups": [],
+      "song_ids": []
+    },
+    "   ": {
+      "groups": [],
+      "song_ids": []
+    }
+  },
+  "songs": {
+    "a": {
+      "song_id": "a",
+      "title": "长标题 / a",
+      "file_uri": "a.flac",
+      "artists": [
+        "艺术家 / 长名"
+      ],
+      "album_id": "album-wire",
+      "album": "长专辑",
+      "album_artists": [
+        "专辑艺术家"
+      ],
+      "track_number": 2,
+      "disc_number": null,
+      "year": 2024,
+      "date": null,
+      "genres": [
+        "Rock"
+      ],
+      "tag_names": [
+        "Live"
+      ],
+      "duration": null,
+      "lyrics": null,
+      "lyrics_format": null,
+      "lyrics_source": null,
+      "lyrics_status": "missing",
+      "bit_depth": null,
+      "sample_rate_hz": null,
+      "channel_count": null,
+      "codec": null,
+      "metadata_status": null,
+      "last_scanned_at": "2026-10-11T00:00:00Z",
+      "file_size": null,
+      "file_mtime_ns": null,
+      "content_hash": null,
+      "availability_status": "AVAILABLE",
+      "last_seen_at": "2026-10-11T00:00:00Z",
+      "artwork": null
+    },
+    "b": {
+      "song_id": "b",
+      "title": "长标题 / b",
+      "file_uri": "b.flac",
+      "artists": [
+        "艺术家 / 长名"
+      ],
+      "album_id": "album-wire",
+      "album": "长专辑",
+      "album_artists": [
+        "专辑艺术家"
+      ],
+      "track_number": 1,
+      "disc_number": null,
+      "year": 2024,
+      "date": null,
+      "genres": [
+        "Rock"
+      ],
+      "tag_names": [
+        "Live"
+      ],
+      "duration": null,
+      "lyrics": null,
+      "lyrics_format": null,
+      "lyrics_source": null,
+      "lyrics_status": "missing",
+      "bit_depth": null,
+      "sample_rate_hz": null,
+      "channel_count": null,
+      "codec": null,
+      "metadata_status": null,
+      "last_scanned_at": "2026-10-11T00:00:00Z",
+      "file_size": null,
+      "file_mtime_ns": null,
+      "content_hash": null,
+      "availability_status": "AVAILABLE",
+      "last_seen_at": "2026-10-11T00:00:00Z",
+      "artwork": null
+    }
+  }
+}

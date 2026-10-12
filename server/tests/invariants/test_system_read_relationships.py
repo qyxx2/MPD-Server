@@ -163,7 +163,6 @@ def test_system_composition_uses_injected_capabilities_without_probe(tmp_path, m
 
     from fastapi.testclient import TestClient
 
-    from server.app import main
     from server.app.player.capabilities import MPDCapabilities
     from server.app.player.mock_mpd import MockMPD
     from server.app.player.models import MPDStats
@@ -191,7 +190,7 @@ def test_system_composition_uses_injected_capabilities_without_probe(tmp_path, m
     monkeypatch.setattr(app.state, "mpd_capabilities", caps, raising=False)
     monkeypatch.setattr(app.state, "output_selector", selector, raising=False)
     monkeypatch.setattr(app.state, "event_publisher", publisher, raising=False)
-    monkeypatch.setattr(main, "MPDAdapter", lambda *args, **kwargs: player)
+    monkeypatch.setattr(app.state, "player", player, raising=False)
     monkeypatch.setenv("DATABASE_PATH", path)
     calls = []
     original = player._check
@@ -229,4 +228,5 @@ def test_system_composition_uses_injected_capabilities_without_probe(tmp_path, m
         assert {path: set(operations) for path, operations in paths.items()
                 if path.startswith("/api/system/")} == {
             "/api/system/output": {"get", "put"}, "/api/system/mpd": {"get"},
+            "/api/system/mpd/connection": {"get", "put"},
         }

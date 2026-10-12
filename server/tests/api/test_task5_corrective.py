@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from server.app.main import app
 from server.app.models.library import Song
+from server.app.player.models import DatabaseUpdateStatus
 from server.app.repositories.library_repository import LibraryRepository
 
 
@@ -346,11 +347,15 @@ def test_unknown_all_unavailable_category_is_known(real_client, source_type):
 
 
 def test_unparseable_year_enters_unknown_after_real_scan(
-    real_client, media_fixture_dir
+    real_client, media_fixture_dir, monkeypatch
 ):
     from mutagen.flac import FLAC
 
-    client, _ = real_client
+    from server.app.player.mock_mpd import MockMPD
+    from server.app.services.library_scanner import LibraryScanner
+    from server.app.services.library_sync_service import LibrarySyncService
+
+    client, repository = real_client
     scan_root = media_fixture_dir / "year-only"
     scan_root.mkdir()
     path = scan_root / "metadata.flac"
@@ -360,12 +365,36 @@ def test_unparseable_year_enters_unknown_after_real_scan(
     audio["date"] = ["invalid-date"]
     audio.save()
     before = path.read_bytes()
-    scanned = client.post(
-        "/api/library/scan",
-        json={"root": str(scan_root)},
-        headers={"Idempotency-Key": "invalid-year-scan"},
+
+    class SyncPort(MockMPD):
+        async def database_update_status(self):
+            return DatabaseUpdateStatus(updating=False)
+
+    sync = LibrarySyncService(
+        LibraryScanner(repository), SyncPort(library_uris=(str(path.resolve()),)), scan_root,
     )
-    assert scanned.status_code == 200, scanned.text
+    monkeypatch.setattr(app.state, 'library_sync_service', sync)
+    future = client.portal.start_task_soon(sync.run)
+    try:
+        scanned = client.post(
+            "/api/library/scan",
+            json={"root": str(scan_root)},
+            headers={"Idempotency-Key": "invalid-year-scan"},
+        )
+        assert scanned.status_code == 202, scanned.text
+        assert scanned.json()['status'] == 'accepted'
+
+        async def wait_for_sync():
+            for _ in range(1000):
+                if sync.get_state().status == 'SYNCED':
+                    return
+                await asyncio.sleep(.001)
+            raise AssertionError(sync.get_state())
+
+        client.portal.call(wait_for_sync)
+    finally:
+        client.portal.call(sync.close)
+        future.result(timeout=1)
     songs = client.get("/api/library/songs").json()["items"]
     flac = next(item for item in songs if item["file_uri"] == str(path.resolve()))
     assert flac["year"] is None

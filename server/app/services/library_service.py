@@ -15,6 +15,8 @@ from server.app.models.library import (
     AlbumSummary,
     ArtistSummary,
     GenreSummary,
+    SearchGroup,
+    SearchResults,
     Song,
     TagSummary,
     YearSummary,
@@ -95,6 +97,39 @@ class LibraryService:
 
         ranked.sort(key=lambda item: _search_sort_key(item[0], item[1]))
         return _deduplicate_songs(song for _, song in ranked)
+
+    async def search_results(self, query: str) -> SearchResults:
+        """Catalog identities first, then their existing Collection member order."""
+        query = query.strip().casefold()
+        if not query:
+            return SearchResults()
+        groups: list[SearchGroup] = []
+        grouped_ids: set[str] = set()
+        catalogs = (
+            ("albums", "ALBUM", "album_id", await self.list_albums()),
+            ("artists", "ARTIST", "artist_id", await self.list_artists()),
+            ("genres", "GENRE", "genre_id", await self.list_genres()),
+            ("years", "YEAR", "source_id", await self.list_years()),
+            ("tags", "TAG", "tag_id", await self.list_tags()),
+        )
+        for kind, source_type, id_field, catalog in catalogs:
+            for item in catalog:
+                name = item.title if kind == "albums" else ("未知年代" if item.value is None else str(item.value)) if kind == "years" else item.name
+                if query not in name.casefold():
+                    continue
+                source_id = getattr(item, id_field)
+                members = _deduplicate_songs(
+                    song for song in await self.category_members(source_type, source_id)
+                    if song.availability_status == "AVAILABLE"
+                )
+                song_ids = tuple(song.song_id for song in members if song.song_id is not None)
+                groups.append(SearchGroup(kind=kind, source_id=source_id, name=name, song_ids=song_ids))
+                grouped_ids.update(song_ids)
+        direct_ids = tuple(
+            song.song_id for song in await self.search_library(query)
+            if song.song_id is not None and song.song_id not in grouped_ids
+        )
+        return SearchResults(groups=tuple(groups), song_ids=direct_ids)
 
     async def find_songs_by_album(self, album_id: str) -> list[Song]:
         songs = await self.list_available_songs()

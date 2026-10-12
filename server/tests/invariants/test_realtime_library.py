@@ -266,8 +266,11 @@ def test_post_commit_publisher_failure_and_cancel_keep_content_visible(
 def test_http_terminal_failure_retry_replay_preserve_other_domains(
     real_client, tmp_path, media_fixture_dir, monkeypatch,
 ):
-    """HTTP child-task scans must share the terminal transaction and never replay effects."""
+    """Job acceptance shares the terminal transaction; replay never repeats work."""
     from server.app.main import app
+    from server.app.player.mock_mpd import MockMPD
+    from server.app.player.models import DatabaseUpdateStatus
+    from server.app.services.library_sync_service import LibrarySyncService
 
     client, repository, player, playback = real_client
     _, root, target, _ = library_fixture(tmp_path, media_fixture_dir)
@@ -281,17 +284,21 @@ def test_http_terminal_failure_retry_replay_preserve_other_domains(
     subscription = coordinator.subscribe()
     events, updates = [], []
 
-    class Updater:
+    class SyncPort(MockMPD):
         async def update_database(self):
             updates.append("update")
+
+        async def database_update_status(self):
+            return DatabaseUpdateStatus(updating=False)
 
     class Publisher:
         async def publish(self, event):
             events.append(event)
             await coordinator.publish(event)
 
-    scanner = LibraryScanner(repository, Publisher(), Updater(), coordinator=coordinator)
-    monkeypatch.setattr(app.state, "library_scanner", scanner)
+    scanner = LibraryScanner(repository, Publisher(), coordinator=coordinator)
+    sync = LibrarySyncService(scanner, SyncPort(library_uris=(str(target),)), root)
+    monkeypatch.setattr(app.state, "library_sync_service", sync)
     records = app.state.idempotency_service._repository
     original_create = records.create
 
@@ -306,23 +313,39 @@ def test_http_terminal_failure_retry_replay_preserve_other_domains(
     assert (coordinator.marker().library_revision, coordinator.marker().sequence) == (0, 0)
     assert subscription.pending is None
     assert events == updates == []
+    assert sync.get_state().status == "IDLE"
 
-    monkeypatch.setattr(records, "create", original_create)
-    response = mutate(client, "POST", "/api/library/scan", {"root": str(root)}, key="scan")
-    assert response.status_code == 200, response.text
-    marker = coordinator.marker()
-    assert (marker.library_revision, marker.playlist_revision) == (1, 0)
-    assert len(events) == len(updates) == 1
-    replay = mutate(client, "POST", "/api/library/scan", {"root": str(root)}, key="scan")
-    assert replay.status_code == 200
-    assert replay.json() == response.json()
-    assert coordinator.marker() == marker
-    assert len(events) == len(updates) == 1
-    assert client.get("/api/playback/queue").json() == queue_before
-    assert client.get("/api/history").json() == history_before
-    assert playback.history_service.active_event == active_before
-    assert playback.history_service.session_id == session_before
-    assert run(player.status()) == player_before
+    future = client.portal.start_task_soon(sync.run)
+    try:
+        monkeypatch.setattr(records, "create", original_create)
+        response = mutate(client, "POST", "/api/library/scan", {"root": str(root)}, key="scan")
+        assert response.status_code == 202, response.text
+        assert response.json()['status'] == 'accepted'
+
+        async def wait_for_sync():
+            for _ in range(1000):
+                if sync.get_state().status == 'SYNCED':
+                    return
+                await asyncio.sleep(.001)
+            raise AssertionError(sync.get_state())
+
+        client.portal.call(wait_for_sync)
+        marker = coordinator.marker()
+        assert (marker.library_revision, marker.playlist_revision) == (1, 0)
+        assert len(events) == len(updates) == 1
+        replay = mutate(client, "POST", "/api/library/scan", {"root": str(root)}, key="scan")
+        assert replay.status_code == 202
+        assert replay.json() == response.json()
+        assert coordinator.marker() == marker
+        assert len(events) == len(updates) == 1
+        assert client.get("/api/playback/queue").json() == queue_before
+        assert client.get("/api/history").json() == history_before
+        assert playback.history_service.active_event == active_before
+        assert playback.history_service.session_id == session_before
+        assert run(player.status()) == player_before
+    finally:
+        client.portal.call(sync.close)
+        future.result(timeout=1)
 
 
 def test_late_scan_completion_reasserts_latest_content_version(

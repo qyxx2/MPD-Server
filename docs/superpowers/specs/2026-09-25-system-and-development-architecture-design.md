@@ -122,7 +122,7 @@ Web 状态分为三层：
 
 1. **Canonical realtime state**：只由当前连接代次接受的 `FullStateSnapshot` 提供，包括 Playback、current Song、Queue、History availability、Output、observation、`epoch`、`sequence` 与 revisions。WS `invalidate` 只是失效义务，不是领域状态副本，也不是 mutation 回执。
 2. **Resource cache**：Library、Album/Artist/Genre/Year/Tag、Search、Playlist/Favorites 等 REST 资源是服务端资源的客户端缓存。Library 资源受 `library_revision` 失效；Playlist/Favorites membership/name/order 受 `playlist_revision` 失效；任何需要 Song 元数据/availability 的 Playlist/Favorites 展示同时受 Library revision 失效。Search 结果属于 Library-dependent cache。
-3. **Local UI state**：route、打开的菜单/overlay、Artwork/Lyrics 选择、输入草稿、Played 展开状态、drag draft 等仅属于本地交互。它们不得反向改写 Canonical realtime state 或 Resource cache 的服务端事实。
+3. **Local UI state**：route、打开的菜单/overlay、Artwork/Lyrics 选择、输入草稿、Played 展开状态、drag draft 等仅属于本地交互。它们不得反向改写 Canonical realtime state 或 Resource cache 的服务端事实。Queue进入定位、下拉揭示Played及AutoPlay候选的可见投影按Playback §5.1，仅为本地UI；隐藏项不被删除，occurrence点击/待播drag仍继承§4.2。
 
 客户端应用状态时必须满足：
 
@@ -515,6 +515,8 @@ WebSocket 是实时状态同步通道。
 - **Executable Invariant Proof**：用真实事务/Service 与 barrier 在 register/capture/send、commit/迟到 callback、并发 GET 返回处插入最后一次 mutation，证明其被覆盖或通知且不倒退；双客户端阻塞发送/队满/取消测试证明提交与正常连接独立；断线期间跨域变化、重启 epoch、重连首帧与真实 Services 对照。使用可控队列/FakeClock，不用 sleep 猜测竞态。具体测试由 Task 6 Plan 分配，尚未实现。
 
 ### 12.3 观察生命周期与完整 DTO
+
+2026-10-10 additive传播补充：完整snapshot的`explicit_stop_generation: int | null`只表达PlaybackService在当前epoch已确认提交的明确Stop累计代次，领域合同以[PB-STOP-LIFECYCLE-001](2026-09-24-playback-model-queue-semantics-design.md#332-明确-stop-生命周期传播--pb-stop-lifecycle-0012026-10-10-已冻结)为唯一权威。该字段与Playback/History同一提交切面，计数变化产生playback失效义务，GET/WS只读；有owner返回非负整数，无owner/旧服务器缺字段为未知，不由STOPPED/session补造。客户端同epoch拒绝已知计数回退的snapshot，新epoch重新建立基线；不引入操作事件重放或持久schema。
 
 继承人工决策 G6-04/G6-05 / A；History 与播放观察的领域 authority 分别为第一章 §2.2.1/§8.8，不在 gateway 重定义。Task4 D6 的保守恢复及 STOPPED/AutoPlay/session 组合只由第一章 §7/§8.9 定义；本节观察循环仍不调用恢复，完整验收依赖第一章 §8.9 修订后的绑定/当前接纳/提前执行/未知历史与只读展示联合门禁；严格自然 SOURCE 已被替换，未被证明通过。
 
@@ -1021,3 +1023,44 @@ Android 目录首期只保留项目边界，不要求与 Web 同期开发。
 11. **稳定版本使用 Git Tag 标记。**
 12. **所有生产数据必须位于容器之外的持久化目录。**
 13. **首期优先保证接口稳定，再增加自动化基础设施。**
+
+## 2026-10-11 B09用户授权例外：SYS-MPD-CONNECTION-001（FROZEN）
+
+用户要求设置页随时修改MPD实际地址，并明确选择“保存配置，服务重启后生效”。此有限例外覆盖§11静态配置仅由部署管理及Task10首引入配置的旧限制；不授权通用配置模块、热切换、密码编辑、服务重启API或其它Task10功能。
+
+- 服务端唯一MPD接入设置owner持久化host/port，文件默认为SQLite文件同目录的`mpd-connection.json`（可用`MPD_CONNECTION_PATH`指定）。首次无保存文件时采用既有MPD_HOST/MPD_PORT；保存文件优先于环境变量。密码仍从MPD_PASSWORD读取，API及保存文件不暴露密码。
+- 启动时一次读取并验证配置，建立当前active地址；当前进程的PlayerPort、能力验证、观察runner和业务绑定均不热切换。文件损坏/不可读时启动失败，不静默连接另一地址；保存失败保留旧文件并返回typed error。
+- GET `/api/system/mpd/connection`返回`active:{host,port}`、`saved:{host,port}|null`、`restart_required:boolean`；saved缺失表示部署默认配置。active只表达本进程配置地址，不证明MPD可达。restart_required仅为saved与active不同。
+- PUT同路径仅接受`{host,port}`，host为非空主机名/IP（不含协议、路径、空白），port为严格整数1–65535。同目录临时文件、flush/fsync和atomic replace后确认保存，清理自身临时文件；不改SQLite schema。继承现行opaque key/terminal replay合同；同target重复保存幂等。落盘已成功但HTTP/terminal失败时不自动回滚文件，原key重试相同target安全；HTTP确认后GET重读，不从payload猜造active。
+- 写权限继承Web完整baseline/read-only门禁；草稿离页丢弃，已发intent由持久TaskActions恢复，unknown原key/payloadretry、确认后只读。配置GET不恢复可写权限；epoch/generation迟到拒绝。保存结果/失败/重启说明统一顶部通知；表单显示active/saved事实，不伪装新地址已连接。
+- Must remain unchanged：播放、Queue/Context/History、AutoPlay、Output、revision/连接epoch及当前能力；保存不联系旧/新MPD、不触发probe、不重启进程。重启后的既有初始化/新epoch规则继承§12，不自动迁移MPD执行Queue。
+- Proof：真实文件/启动读取/REST/幂等与失败关系测试，Web decoder→Settings→持久intent/顶部恢复及只读测试；手机M03/H09/H10。实际重启到真实MPD与物理DAC验收单独NOT RUN，不以Mock证明连接。
+
+
+## 22. 2026-10-11 v0.1 最小真实交付范围（MIN-DELIVERY-001）
+
+用户已确认优先级：正确构建、NAS Docker部署、连接真实MPD、现有模拟功能真实有效、及时自动曲库同步、基本状态与排障日志。本文本节覆盖本章§15完整备份恢复的v0.1交付义务及§17一键更新的前置义务；这些功能延期，不标为已完成。Task10–12执行分配归[最终Batch指导](../plans/2026-10-11-v0-1-nas-final-batch-plan.md)。用户本轮仅授权文档，产品实施及Git/远程操作另行授权。
+
+### 22.1 配置与容器生命周期（MIN-CONFIG-001）
+
+- 服务在NAS Docker容器运行，MPD保持NAS上已有独立进程。NAS同一音乐文件树只读挂载进MS容器；SQLite与配置独立持久化。已有备份挂载可保留，备份服务/API/恢复写门禁不属于本轮。
+- 最小配置：MPD地址/密码、后端音乐根、MPD相对URI前缀、数据库路径、模式、扫描参数和HTTP部署参数。一般项环境变量优先于JSON配置，再取默认；默认配置文件为CONFIG_DIR/config.json，未配置CONFIG_DIR时使用数据库父目录/config.json。缺少配置文件可采用默认，存在但损坏/未知字段/非法值明确启动失败。密码仅MPD_PASSWORD，不写配置/API/日志。
+- MPD地址继续遵守SYS-MPD-CONNECTION-001：saved文件优先于环境变量，其次通用配置及默认；saved损坏启动失败；当前PlayerPort不热切换。该合同的无saved默认源扩展为最终配置，保存操作其它语义不变。
+- 默认完整校准12小时、debounce500ms。单一后端音乐根＋单一MPD URI前缀；后端根必须是可读目录。缺失挂载不得扫描成全库MISSING；报告扫描错误并保留已有索引。
+- APP_ENV/MPD_MODE显式装配；development默认Mock，production默认真实Adapter，生产不可达不回退Mock。启动读取配置开始运行，修改后用户手动重启容器；本轮不提供restart API或设置页重启按钮，不要求复杂监管/恢复成功判定。
+- 一控制进程/一worker；观察、播放恢复、变化发现、扫描调度和同步任务各自单owner，shutdown取消并await。早期Service/Repository不import最终config；配置在composition root注入。
+- 能力装载与既有真实验证合同衔接；普通startup不执行会改播放/Queue/输出/曲库的验证探针。能力证明绑定endpoint/版本，旧地址证明不直接授予新地址操作。无证明时可启动并报告未验证；首次部署按最终Batch的显式验证步骤闭合实际控制能力，不能以空能力部署作为功能交付完成。
+
+### 22.2 路径表示与通信（MIN-URI-001）
+
+保留Song.file_uri的当前后端本地文件路径语义、SQLite结构及Song身份，不迁移统一URI。唯一可注入映射器以本地音乐根相对路径生成MPD URI，按相同映射反查文件；保留子目录、大小写及Unicode原文，不做标题/文件名模糊匹配，拒绝越界/路径穿越。例如/music/A/B.flac对应MPD音乐根下A/B.flac。
+
+映射用于所有发送、Queue entries、status/execution sample确认、当前Song反查与D6绑定比较；domain已有file_uri比较语义保持一致。推荐在Adapter可选注入映射器，将协议URI转换成既有Port所用本地URI，Mock默认identity mapping；原始协议URI仅用于映射确认及脱敏诊断。目标NAS确认同一相对路径对应同一文件；不把协议原始URI与本地URI直接比较，也不以Queue重排/清空掩盖映射失败。
+
+### 22.3 最小状态与日志（MIN-HEALTH-001 / MIN-LOG-001）
+
+GET /api/health保留正常status=ok；提供ms、mpd、library_sync三项。MS/SQLite正常时HTTP200，即使MPD unavailable；本地必需状态不可读HTTP503/status=error。MPD状态connected/unavailable/unknown，附observed_at；它表达有预算的连接读取事实，不以active地址或历史能力证明代替连接成功。library_sync消费LIB-MPD-SYNC-001状态。健康GET经Service读取，不控制MPD，不触发扫描/update。
+
+日志输出stdout/stderr并沿用生产json-file轮转10m×3；覆盖启动、API失败、MPD连接/控制、扫描、同步阶段及重试，保留已有播放/输出/实时/事务错误。使用operation_id或generation关联，不记录密码、配置全文、请求体、完整幂等key或逐秒轮询噪声。每次有意义的活动状态变化记录一次。
+
+完整后端记录从Docker日志查看；浏览器独有的请求未知/读取失败/本地展示异常由统一浏览器诊断logger记录到console，不能声称这些都已进入服务器日志。本轮不新增Web日志页面、远程日志上传/采集系统。AppBar只显示精简最近活动，展示合同归WEB-UI-NOTIFY-001。

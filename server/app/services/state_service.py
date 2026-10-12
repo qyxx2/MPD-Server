@@ -71,11 +71,14 @@ class StateService:
             marker = self._coordinator.marker()
             snapshot = FullStateSnapshot(
                 epoch=marker.epoch, sequence=marker.sequence,
+                explicit_stop_generation=(self._playback.explicit_stop_generation
+                                          if self._playback is not None else None),
                 captured_at=datetime.now(timezone.utc),
                 revisions={"library": marker.library_revision, "playlist": marker.playlist_revision},
                 playback=playback, current_song=song, queue=queue, history=history, output=output,
                 playback_observation=observation,
                 output_observation=output_observation,
+                library_sync=self._coordinator.get_library_sync(),
             ).model_copy(deep=True)
 
             def committed_marker():

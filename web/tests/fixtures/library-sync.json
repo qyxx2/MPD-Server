@@ -1,0 +1,476 @@
+{
+  "phases": [
+    {
+      "epoch": "epoch-0",
+      "explicit_stop_generation": 0,
+      "sequence": 2,
+      "captured_at": "2026-10-12T00:00:00Z",
+      "revisions": {
+        "library": 0,
+        "playlist": 0
+      },
+      "playback": null,
+      "current_song": null,
+      "queue": {
+        "revision": 0,
+        "items": []
+      },
+      "history": {
+        "has_entries": false,
+        "active_event": null,
+        "session_id": null
+      },
+      "output": {
+        "states": [
+          {
+            "mode": "NAS_DAC",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+            "error_message": "Output reading capability is unavailable",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": true
+          },
+          {
+            "mode": "CLIENT_STREAM",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_MODE_UNSUPPORTED",
+            "error_message": "Client streaming is not supported in v0.1",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": false
+          }
+        ],
+        "last_request": null
+      },
+      "playback_observation": {
+        "actual_state": "stopped",
+        "actual_current": null,
+        "actual_freshness": "fresh",
+        "bound_queue_item_id": null,
+        "control_target": null,
+        "sync_status": "UNBOUND",
+        "matches_current": null,
+        "position_seconds": null,
+        "duration_seconds": null,
+        "observed_at": "2026-10-12T00:00:00Z",
+        "freshness": "unknown",
+        "reconciliation_required": true,
+        "error_code": null,
+        "error_message": null
+      },
+      "output_observation": {
+        "observed_at": null,
+        "freshness": "unknown",
+        "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+        "error_message": "Output reading capability is unavailable"
+      },
+      "library_sync": {
+        "status": "IDLE",
+        "generation": 0,
+        "activity_id": null,
+        "trigger": null,
+        "pending_count": 0,
+        "confirmed_count": 0,
+        "failed_count": 0,
+        "updated_at": "2026-10-12T00:00:00Z",
+        "error_code": null,
+        "reason": null
+      }
+    },
+    {
+      "epoch": "epoch-0",
+      "explicit_stop_generation": 0,
+      "sequence": 3,
+      "captured_at": "2026-10-12T00:00:00Z",
+      "revisions": {
+        "library": 1,
+        "playlist": 0
+      },
+      "playback": null,
+      "current_song": null,
+      "queue": {
+        "revision": 0,
+        "items": []
+      },
+      "history": {
+        "has_entries": false,
+        "active_event": null,
+        "session_id": null
+      },
+      "output": {
+        "states": [
+          {
+            "mode": "NAS_DAC",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+            "error_message": "Output reading capability is unavailable",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": true
+          },
+          {
+            "mode": "CLIENT_STREAM",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_MODE_UNSUPPORTED",
+            "error_message": "Client streaming is not supported in v0.1",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": false
+          }
+        ],
+        "last_request": null
+      },
+      "playback_observation": {
+        "actual_state": "stopped",
+        "actual_current": null,
+        "actual_freshness": "fresh",
+        "bound_queue_item_id": null,
+        "control_target": null,
+        "sync_status": "UNBOUND",
+        "matches_current": null,
+        "position_seconds": null,
+        "duration_seconds": null,
+        "observed_at": "2026-10-12T00:00:00Z",
+        "freshness": "unknown",
+        "reconciliation_required": true,
+        "error_code": null,
+        "error_message": null
+      },
+      "output_observation": {
+        "observed_at": null,
+        "freshness": "unknown",
+        "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+        "error_message": "Output reading capability is unavailable"
+      },
+      "library_sync": {
+        "status": "SYNCING",
+        "generation": 1,
+        "activity_id": "activity_id-1",
+        "trigger": "automatic",
+        "pending_count": 1,
+        "confirmed_count": 0,
+        "failed_count": 0,
+        "updated_at": "2026-10-12T00:00:00Z",
+        "error_code": null,
+        "reason": null
+      }
+    },
+    {
+      "epoch": "epoch-0",
+      "explicit_stop_generation": 0,
+      "sequence": 5,
+      "captured_at": "2026-10-12T00:00:00Z",
+      "revisions": {
+        "library": 1,
+        "playlist": 0
+      },
+      "playback": null,
+      "current_song": null,
+      "queue": {
+        "revision": 0,
+        "items": []
+      },
+      "history": {
+        "has_entries": false,
+        "active_event": null,
+        "session_id": null
+      },
+      "output": {
+        "states": [
+          {
+            "mode": "NAS_DAC",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+            "error_message": "Output reading capability is unavailable",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": true
+          },
+          {
+            "mode": "CLIENT_STREAM",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_MODE_UNSUPPORTED",
+            "error_message": "Client streaming is not supported in v0.1",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": false
+          }
+        ],
+        "last_request": null
+      },
+      "playback_observation": {
+        "actual_state": "stopped",
+        "actual_current": null,
+        "actual_freshness": "fresh",
+        "bound_queue_item_id": null,
+        "control_target": null,
+        "sync_status": "UNBOUND",
+        "matches_current": null,
+        "position_seconds": null,
+        "duration_seconds": null,
+        "observed_at": "2026-10-12T00:00:00Z",
+        "freshness": "unknown",
+        "reconciliation_required": true,
+        "error_code": null,
+        "error_message": null
+      },
+      "output_observation": {
+        "observed_at": null,
+        "freshness": "unknown",
+        "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+        "error_message": "Output reading capability is unavailable"
+      },
+      "library_sync": {
+        "status": "SYNCED",
+        "generation": 1,
+        "activity_id": "activity_id-1",
+        "trigger": "automatic",
+        "pending_count": 0,
+        "confirmed_count": 1,
+        "failed_count": 0,
+        "updated_at": "2026-10-12T00:00:00Z",
+        "error_code": null,
+        "reason": null
+      }
+    },
+    {
+      "epoch": "epoch-0",
+      "explicit_stop_generation": 0,
+      "sequence": 8,
+      "captured_at": "2026-10-12T00:00:00Z",
+      "revisions": {
+        "library": 1,
+        "playlist": 0
+      },
+      "playback": null,
+      "current_song": null,
+      "queue": {
+        "revision": 0,
+        "items": []
+      },
+      "history": {
+        "has_entries": false,
+        "active_event": null,
+        "session_id": null
+      },
+      "output": {
+        "states": [
+          {
+            "mode": "NAS_DAC",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+            "error_message": "Output reading capability is unavailable",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": true
+          },
+          {
+            "mode": "CLIENT_STREAM",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_MODE_UNSUPPORTED",
+            "error_message": "Client streaming is not supported in v0.1",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": false
+          }
+        ],
+        "last_request": null
+      },
+      "playback_observation": {
+        "actual_state": "stopped",
+        "actual_current": null,
+        "actual_freshness": "fresh",
+        "bound_queue_item_id": null,
+        "control_target": null,
+        "sync_status": "UNBOUND",
+        "matches_current": null,
+        "position_seconds": null,
+        "duration_seconds": null,
+        "observed_at": "2026-10-12T00:00:00Z",
+        "freshness": "unknown",
+        "reconciliation_required": true,
+        "error_code": null,
+        "error_message": null
+      },
+      "output_observation": {
+        "observed_at": null,
+        "freshness": "unknown",
+        "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+        "error_message": "Output reading capability is unavailable"
+      },
+      "library_sync": {
+        "status": "FAILED",
+        "generation": 2,
+        "activity_id": "activity_id-2",
+        "trigger": "manual",
+        "pending_count": 1,
+        "confirmed_count": 0,
+        "failed_count": 1,
+        "updated_at": "2026-10-12T00:00:00Z",
+        "error_code": "LIBRARY_SYNC_FAILED",
+        "reason": "Library synchronization could not be confirmed"
+      }
+    }
+  ],
+  "initial": {
+    "type": "snapshot",
+    "protocol_version": 1,
+    "epoch": "epoch-0",
+    "sequence": 3,
+    "state": {
+      "epoch": "epoch-0",
+      "explicit_stop_generation": 0,
+      "sequence": 3,
+      "captured_at": "2026-10-12T00:00:00Z",
+      "revisions": {
+        "library": 1,
+        "playlist": 0
+      },
+      "playback": null,
+      "current_song": null,
+      "queue": {
+        "revision": 0,
+        "items": []
+      },
+      "history": {
+        "has_entries": false,
+        "active_event": null,
+        "session_id": null
+      },
+      "output": {
+        "states": [
+          {
+            "mode": "NAS_DAC",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+            "error_message": "Output reading capability is unavailable",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": true
+          },
+          {
+            "mode": "CLIENT_STREAM",
+            "status": "UNAVAILABLE",
+            "target_client_id": null,
+            "stream_url": null,
+            "format": null,
+            "sample_rate": null,
+            "bit_depth": null,
+            "channels": null,
+            "error_code": "OUTPUT_MODE_UNSUPPORTED",
+            "error_message": "Client streaming is not supported in v0.1",
+            "updated_at": "2026-10-12T00:00:00Z",
+            "stale": false
+          }
+        ],
+        "last_request": null
+      },
+      "playback_observation": {
+        "actual_state": "stopped",
+        "actual_current": null,
+        "actual_freshness": "fresh",
+        "bound_queue_item_id": null,
+        "control_target": null,
+        "sync_status": "UNBOUND",
+        "matches_current": null,
+        "position_seconds": null,
+        "duration_seconds": null,
+        "observed_at": "2026-10-12T00:00:00Z",
+        "freshness": "unknown",
+        "reconciliation_required": true,
+        "error_code": null,
+        "error_message": null
+      },
+      "output_observation": {
+        "observed_at": null,
+        "freshness": "unknown",
+        "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
+        "error_message": "Output reading capability is unavailable"
+      },
+      "library_sync": {
+        "status": "SYNCING",
+        "generation": 1,
+        "activity_id": "activity_id-1",
+        "trigger": "automatic",
+        "pending_count": 1,
+        "confirmed_count": 0,
+        "failed_count": 0,
+        "updated_at": "2026-10-12T00:00:00Z",
+        "error_code": null,
+        "reason": null
+      }
+    }
+  },
+  "synced_invalidation": {
+    "type": "invalidate",
+    "protocol_version": 1,
+    "epoch": "epoch-0",
+    "sequence": 5,
+    "domains": [
+      "library_sync"
+    ],
+    "revisions": {
+      "library": 1,
+      "playlist": 0
+    }
+  },
+  "failure_invalidation": {
+    "type": "invalidate",
+    "protocol_version": 1,
+    "epoch": "epoch-0",
+    "sequence": 8,
+    "domains": [
+      "library_sync"
+    ],
+    "revisions": {
+      "library": 1,
+      "playlist": 0
+    }
+  }
+}

@@ -28,11 +28,13 @@ class MockMPD(PlayerPort):
         songs: Sequence[str] = (),
         *,
         durations: dict[str, float] | None = None,
+        library_uris: Sequence[str] | None = None,
         outputs: Sequence[OutputInfo] | None = None,
         random_seed: int = 0,
         stats: MPDStats | None = None,
     ) -> None:
         self._songs = list(songs)
+        self.library_uris = set(songs if library_uris is None else library_uris)
         self._durations = {song: 300.0 for song in self._songs}
         if durations:
             self._durations.update(durations)
@@ -193,6 +195,10 @@ class MockMPD(PlayerPort):
             raise PlayerCommandError("set_volume", "volume must be between 0 and 100")
         self._volume = volume
         await self._emit("set_volume")
+
+    async def has_library_uri(self, song_uri: str) -> bool:
+        self._check("has_library_uri")
+        return song_uri in self.library_uris
 
     async def update_database(self) -> None:
         self._check("update_database")

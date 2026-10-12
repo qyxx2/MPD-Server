@@ -7,11 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from server.app.models.queue import PlaybackState, QueueItem
 from server.app.player.ports import PlayerCommandError, PlayerUnavailable
 from server.app.services.collection_service import CollectionService
+from server.app.services.idempotency_service import IdempotencyService
 from server.app.services.library_service import CollectionSourceNotFoundError
 from server.app.services.playback_control import PlaybackTargetConflictError
 from server.app.services.playback_service import (
     PlaybackReconciliationError,
     PlaybackService,
+    PlaybackSongIntentConflictError,
     PlaybackSongNotFoundError,
     PlaybackSongUnavailableError,
 )
@@ -86,6 +88,11 @@ def _raise_playback_http_error(exc: Exception) -> None:
                 "message": f"playlist not found: {exc.args[0]}",
                 "details": None,
             },
+        ) from exc
+    if isinstance(exc, PlaybackSongIntentConflictError):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "IDEMPOTENCY_KEY_CONFLICT", "message": str(exc), "details": None},
         ) from exc
     if isinstance(exc, PlaybackTargetConflictError):
         raise HTTPException(
@@ -217,6 +224,25 @@ async def play_queue_item(
 ) -> QueueItemResponse:
     try:
         return _queue_item_response(await service.play_now(queue_item_id))
+    except Exception as exc:
+        _raise_playback_http_error(exc)
+        raise
+
+
+@router.post("/songs/{song_id}/play", response_model=QueueItemResponse)
+async def play_song_now(
+    song_id: str,
+    request: Request,
+    service: Annotated[PlaybackService, Depends(get_playback_service)],
+) -> QueueItemResponse:
+    try:
+        return _queue_item_response(await service.play_song_now(
+            song_id, request_id=request.headers.get("Idempotency-Key"),
+            request_payload=IdempotencyService._payload_hash(await request.body()),
+        ))
+    except TimeoutError as exc:
+        _raise_playback_http_error(PlayerUnavailable(str(exc)))
+        raise
     except Exception as exc:
         _raise_playback_http_error(exc)
         raise

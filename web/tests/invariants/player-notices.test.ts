@@ -49,6 +49,7 @@ it.each([
   ['[坏标签]正文', 'lrc', 'available', '无法同步 · 普通文本'],
 ] as const)('lyric explanation stays in the app bar for %s', async (lyrics, lyrics_format, lyrics_status, message) => {
   const h = playerPage(), s = playerState(); s.sequence++
+  await flushPromises() // Independent Favorites baseline read is unrelated to lyric notices.
   Object.assign(s.current_song!, { lyrics, lyrics_format, lyrics_status })
   h.store.acceptRefresh(s, 1)
   await h.wrapper.get('button[aria-label="显示歌词"]').trigger('click')
@@ -105,4 +106,24 @@ it('late image error and load events cannot replace or clear the current artwork
   await current.trigger('error'); await old.trigger('load')
   expect(h.wrapper.get('.page-header [data-testid="operation-status"]').text()).toContain('封面读取失败')
   h.wrapper.unmount(); vi.unstubAllGlobals()
+})
+
+it('player_media_connection_and_operation_sources_use_one_bounded_projection', async () => {
+  const h = playerPage(Promise.reject(new Error('timeout')))
+  await h.wrapper.get('button[aria-label="继续播放"]').trigger('click'); await flushPromises()
+  const s = playerState(); s.sequence++
+  Object.assign(s.current_song!, { availability_status: 'MISSING', lyrics: 'fallback正文', lyrics_format: 'text', lyrics_status: 'read_error' })
+  Object.assign(s.playback_observation, { sync_status: 'NO_CANDIDATES' })
+  h.store.acceptRefresh(s, 1); h.store.markReadError(new Error('read failed'))
+  await h.wrapper.get('button[aria-label="显示歌词"]').trigger('click')
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.findAll('[aria-live="polite"]')).toHaveLength(1)
+  expect(h.wrapper.findAll('.notice-entry').length).toBeLessThanOrEqual(5)
+  // Six sources: the older unknown is hidden, but its aggregate warning and read owner survive.
+  expect(h.wrapper.findAll('.notice-entry').filter(n => n.text().includes('结果未知'))).toHaveLength(0)
+  expect(h.wrapper.find('button[aria-label="重新读取未完成状态"]').exists()).toBe(true)
+  expect(h.wrapper.get('.status-toggle').classes()).toContain('warning')
+  expect(h.wrapper.findAll('.status-details > p')).toHaveLength(0)
+  expect(h.wrapper.get('.lyrics-content').text()).toContain('fallback正文')
+  h.wrapper.unmount()
 })

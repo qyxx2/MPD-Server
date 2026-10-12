@@ -144,11 +144,12 @@ it.each(['occurrence', 'epoch', 'generation', 'song', 'context', 'library', 'sta
 it('transport and seek indicate pending via stable disabled controls and accessibility without inserting text', async () => {
   for (const action of ['resume', 'seek'] as const) {
     const receipt = deferred<Response>(); const h = playerPage(receipt.promise, Response.json(playerState()))
+    await flushPromises() // Complete independent initial Favorites read before the playback-only pending assertion.
     const area = h.wrapper.get('[data-testid="operation-status"]').element
     if (action === 'resume') await h.wrapper.get('button[aria-label="继续播放"]').trigger('click')
     else { const slider = h.wrapper.get('input'); await slider.trigger('pointerdown'); await slider.setValue('80'); await slider.trigger('pointerup') }
     expect(h.wrapper.get('[data-testid="operation-status"]').element).toBe(area)
-    expect(h.wrapper.get('[data-testid="operation-status"]').text()).toBe('')
+    expect(h.wrapper.get('[data-testid="operation-status"]').text()).toContain('正在同步')
     expect(h.wrapper.get('.playback-controls').attributes('aria-busy')).toBe('true')
     expect(h.wrapper.get('[data-testid="primary-playback"]').attributes('disabled')).toBeDefined()
     expect(h.wrapper.get('[data-testid="progress"]').text()).not.toContain('正在提交')
@@ -207,14 +208,21 @@ it('same-song snapshot handoff keeps identity, source, readout labels and playin
   const receipt = deferred<Response>(); const h = playerPage(receipt.promise)
   const playing = playerState(); playing.sequence++; playing.playback_observation.actual_state = 'playing'
   h.store.acceptRefresh(parseSnapshot(playing), 1); await flushPromises()
-  const identity = h.wrapper.get('[data-testid="actual-identity"]').html()
+  // B08 adds a favorite control whose disabled state deliberately follows confirmed identity.
+  const identityHtml = () => {
+    const clone = h.wrapper.get('[data-testid="actual-identity"]').element.cloneNode(true) as HTMLElement
+    clone.querySelector('[data-favorite-toggle]')?.removeAttribute('disabled')
+    return clone.outerHTML
+  }
+  const identity = identityHtml()
   const metadata = h.wrapper.get('[data-testid="source-metadata"]').html()
   const progress = h.wrapper.get('.progress-readout').text()
   expect(h.wrapper.get('[data-testid="primary-playback"]').text()).toBe('Ⅱ')
   await h.wrapper.get('button[aria-label="暂停播放"]').trigger('click')
   const unknown = unknownHandoff(); unknown.sequence++
   h.store.acceptRefresh(parseSnapshot(unknown), 1); await flushPromises()
-  expect(h.wrapper.get('[data-testid="actual-identity"]').html()).toBe(identity)
+  expect(identityHtml()).toBe(identity)
+  expect(h.wrapper.get('[data-favorite-toggle]').attributes('disabled')).toBeDefined()
   expect(h.wrapper.get('[data-testid="source-metadata"]').html()).toBe(metadata)
   expect(h.wrapper.get('.progress-readout').text()).toBe(progress)
   expect(h.wrapper.get('[data-testid="primary-playback"]').text()).toBe('Ⅱ')
@@ -258,7 +266,7 @@ it('playback feedback stays in the app bar and opens recovery details without ad
   expect(header.get('[data-testid="operation-status"]').element).toBe(status)
   receipt.reject(new Error('timeout')); await flushPromises()
   expect(header.find('.status-spinner').exists()).toBe(false)
-  await header.get('button[aria-label="查看播放操作异常"]').trigger('click')
+  await header.get('button[aria-label="查看活动异常"]').trigger('click')
   expect(header.get('.status-details').isVisible()).toBe(true)
   expect(header.get('.status-details').text()).toContain('结果未知')
   expect(header.find('button[aria-label="重试原操作"]').exists()).toBe(true)

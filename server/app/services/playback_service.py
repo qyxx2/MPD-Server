@@ -93,6 +93,15 @@ def _atomic_history_transition(
                 key = (self._recovery.business_generation, snapshot.revision,
                        operation.__name__, repr(args), repr(sorted(kwargs.items())))
                 operation_id = self._recovery.operation_id(key)
+                if operation.__name__ == "play_song_now" and kwargs.get("request_id") is not None:
+                    request = self._song_requests.get(kwargs["request_id"])
+                    if request is not None:
+                        song_id = args[0] if args else kwargs.get("song_id")
+                        if request[:2] != (song_id, kwargs.get("request_payload")):
+                            raise PlaybackSongIntentConflictError("Idempotency-Key was already used for a different request")
+                        if request[2:4] != (self._recovery.business_generation, snapshot.revision):
+                            raise PlaybackReconciliationError("Song Play Now retry has a stale execution baseline")
+                        operation_id = request[4]
                 self._execution_owner = (owner, operation_id)
             else:
                 operation_id = prior[1]
@@ -125,7 +134,7 @@ def _recovery_change(operation):
     @wraps(operation)
     async def wrapped(self, *args, **kwargs):
         identity = await self._recovery_current_identity()
-        explicit = operation.__name__ in {"start_track", "play_context", "play_now", "next", "previous", "delete"}
+        explicit = operation.__name__ in {"start_track", "play_context", "play_now", "play_song_now", "next", "previous", "delete"}
         old_owner = getattr(self, "_binding_control_owner", None)
         old_origin = getattr(self, "_binding_origin_id", None)
         if explicit:
@@ -189,6 +198,10 @@ class PlaybackSongUnavailableError(ValueError):
     """A known requested Song currently cannot be played."""
 
 
+class PlaybackSongIntentConflictError(ValueError):
+    """An unfinished song intent key cannot be reused for different input."""
+
+
 class PlaybackReconciliationError(RuntimeError):
     """Raised when MPD reports a different state than the requested action."""
 
@@ -224,6 +237,9 @@ class PlaybackService:
         )
         self._completion_validator = completion_validator
         self._transport_changes: dict[object, list[dict[str, object]]] = {}
+        self._explicit_stop = False
+        self._explicit_stop_generation = 0
+        self._song_requests: dict[str, tuple[str, str | None, int, int, str]] = {}
 
     async def _recovery_current_identity(self):
         state = await self.queue_manager.get_playback_state()
@@ -374,6 +390,7 @@ class PlaybackService:
             "playback": (
                 state.model_dump(exclude={"updated_at"}) if state else None,
                 self._observations.cache.model_dump(exclude={"observed_at"}),
+                self._explicit_stop_generation,
             ),
             "history": (
                 await self.history_service.list_history(),
@@ -528,6 +545,74 @@ class PlaybackService:
         await self._sync_player_queue()
         await self._confirm_preserved_state()
         return selected
+
+    def _set_explicit_stop(self, stopped: bool) -> None:
+        prior = self._explicit_stop
+        on_transaction_rollback(self.queue_manager.queue_repository.path,
+                                lambda: setattr(self, "_explicit_stop", prior))
+        self._explicit_stop = stopped
+
+    @property
+    def explicit_stop_generation(self) -> int:
+        """Read under the shared snapshot transaction; never infer from state."""
+        return self._explicit_stop_generation
+
+    def _advance_stop_generation(self) -> None:
+        prior = self._explicit_stop_generation
+        on_transaction_rollback(self.queue_manager.queue_repository.path,
+                                lambda: setattr(self, "_explicit_stop_generation", prior))
+        self._explicit_stop_generation += 1
+
+    @_atomic_history_transition
+    @_current_change
+    async def play_song_now(
+        self, song_id: str, *, request_id: str | None = None,
+        request_payload: str | None = None,
+    ) -> QueueItem:
+        await self._require_available_song(song_id)
+        snapshot = await self.queue_manager.get_snapshot()
+        for pending in snapshot.items:
+            if pending.position > 0:
+                await self._require_available_song(pending.song_id)
+        if request_id is not None:
+            self._song_requests.setdefault(request_id, (
+                song_id, request_payload, self._recovery.business_generation,
+                snapshot.revision, self._execution_owner[1],
+            ))
+        state = await self.queue_manager.get_playback_state()
+        new_context = (state is None or not state.playback_context_id
+                       or (self._explicit_stop and state.state == "STOPPED"))
+        if new_context:
+            context = PlaybackContext(
+                context_id=str(uuid5(UUID(self._execution_owner[1]), "context")),
+                source_type="TRACK", source_id=song_id, ordered_song_ids=(song_id,),
+            )
+        else:
+            context = await self._queue_playback_context(state)
+        enabled = new_context or self.history_service.session_id is None or state.autoplay_enabled
+        await self._discard_unconfirmed_history_active()
+        self._control_targets.invalidate()
+        item = await self.queue_manager.play_song_now(
+            song_id, context.context_id, reset_played=new_context,
+        )
+        # This local state is staged under the outer transaction, never an ACK.
+        await self.queue_manager.set_playback_state(PlaybackState(
+            song_id=song_id, state="PLAYING", playback_context_id=context.context_id,
+            autoplay_enabled=enabled, position_seconds=0, updated_at=datetime.now(timezone.utc),
+        ))
+        # Avoid an empty refill mutation; allocation remains the existing fixed
+        # operation owner so an outer rollback/retry reproduces all occurrence IDs.
+        if await self.autoplay.plan_refill(context, await self.queue_manager.get_snapshot()):
+            await self.autoplay.refill(context)
+        await self._sync_player_queue()
+        await self._save_confirmed_playing(
+            song_id, context_id=context.context_id, status=await self.player.status(),
+            autoplay_enabled=enabled,
+        )
+        await self._confirm_history_active()
+        await self.history_service.start_track(song_id)
+        await self._confirm_preserved_state()
+        return item
 
     @_atomic_history_transition
     @_queue_change
@@ -934,6 +1019,8 @@ class PlaybackService:
         )
         await self._confirm_history_active()
         await self.history_service.stop()
+        self._set_explicit_stop(True)
+        self._advance_stop_generation()
         return confirmed
 
     @_atomic_history_transition
@@ -1646,6 +1733,9 @@ class PlaybackService:
         )
         if state == "STOPPED":
             autoplay_enabled = False
+        else:
+            # Any confirmed start consumes the prior explicit Stop lifecycle.
+            self._set_explicit_stop(False)
 
         saved = PlaybackState(
             song_id=resolved_song_id,

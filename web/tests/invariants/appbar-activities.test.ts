@@ -1,0 +1,175 @@
+import { expect, it, vi } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { defineComponent, h, inject } from 'vue'
+import { createMemoryHistory, RouterView } from 'vue-router'
+import AppShell from '../../src/components/layout/AppShell.vue'
+import { createPlayerRouter } from '../../src/router'
+import { createPlayerStore } from '../../src/stores/player'
+import { createApiClient } from '../../src/services/api'
+import { parseSnapshot } from '../../src/services/wire'
+import { noticeKey, type NoticeStore } from '../../src/stores/notices'
+import { taskActionsKey, type TaskActions } from '../../src/runtime/taskActions'
+import { playerSessionKey, type PlayerSession } from '../../src/runtime/playerSession'
+import { fixture, playerState } from '../support/player'
+import { transport, deferred } from '../support/transport'
+
+async function page(...responses: Parameters<typeof transport>) {
+  const router = createPlayerRouter(createMemoryHistory()); await router.push('/'); await router.isReady()
+  const store = createPlayerStore(); store.beginConnection(1); store.acceptInitial(playerState(), 1)
+  const network = transport(...responses)
+  const api = createApiClient({ origin: 'http://localhost', fetch: (input, init) => new URL(String(input)).pathname === '/api/favorites/members' ? Promise.resolve(Response.json({ song_ids: [] })) : init?.method === 'GET' && new URL(String(input)).pathname.startsWith('/api/library/songs/') ? Promise.resolve(Response.json(playerState().current_song)) : network.fetch(input, init) })
+  const realtime = { start() {}, stop() {}, async refresh() { store.acceptRefresh(await api.get('/api/state', parseSnapshot), store.marker.generation) } }
+  let notices!: NoticeStore, tasks!: TaskActions, session!: PlayerSession
+  const Probe = defineComponent({ setup() { notices = inject(noticeKey)!; tasks = inject(taskActionsKey)!; session = inject(playerSessionKey)!; return () => null } })
+  const wrapper = mount(defineComponent({ render: () => h(AppShell, { store, realtime, api }, { default: () => [h(Probe), h(RouterView)] }) }), { attachTo: document.body, global: { plugins: [router] } })
+  await flushPromises()
+  return { wrapper, store, api, network, router, notices, tasks, session }
+}
+
+it('all_sources_share_one_center_and_five_recent_entries', async () => {
+  const request = deferred<Response>()
+  const p = await page(request.promise, Response.json(playerState().playback), Response.json(playerState()))
+  await p.wrapper.get('button[aria-label="继续播放"]').trigger('click')
+  request.reject(new Error('lost')); await flushPromises()
+  for (let i = 1; i <= 6; i++) p.notices.set({ id: `resource-${i}`, scope: 'library', message: `读取资源 ${i}`, busy: true })
+  await flushPromises(); await p.wrapper.get('.status-toggle').trigger('click')
+  expect(p.wrapper.findAll('.status-toggle')).toHaveLength(1)
+  expect(p.wrapper.findAll('.notice-entry')).toHaveLength(5)
+  expect(p.wrapper.findAll('.notice-entry').map(n => n.attributes('data-notice'))).toEqual(['resource-6', 'resource-5', 'resource-4', 'resource-3', 'resource-2'])
+  expect(p.wrapper.get('.status-toggle').classes()).toContain('warning')
+  p.notices.set({ id: 'resource-1', scope: 'library', message: '已同步', status: 'success', description: '读取资源', resource: '一' })
+  await flushPromises()
+  expect(p.wrapper.findAll('.notice-entry')[0]!.attributes('data-notice')).toBe('resource-1')
+  p.notices.set({ id: 'resource-6', scope: 'library', message: '读取资源 6', busy: true })
+  await flushPromises()
+  expect(p.wrapper.findAll('.notice-entry')[0]!.attributes('data-notice')).toBe('resource-1')
+  // The dedicated playback source updates the same item; it has no extra paragraph.
+  for (let i = 2; i <= 6; i++) p.notices.remove(`resource-${i}`)
+  await flushPromises()
+  await p.wrapper.get('button[aria-label="重试原操作"]').trigger('click'); await flushPromises()
+  expect(p.wrapper.findAll('.notice-entry').filter(n => n.text().includes('继续播放'))).toHaveLength(1)
+  expect(p.wrapper.get('.status-details').text()).toContain('已同步')
+  for (let i = 7; i <= 13; i++) p.notices.set({ id: `success-${i}`, scope: 'library', message: '已同步', status: 'success' })
+  await flushPromises()
+  expect(p.notices.entries.value.filter(n => n.status === 'success')).toHaveLength(5)
+  expect(p.wrapper.findAll('.notice-entry')).toHaveLength(5)
+  p.wrapper.unmount()
+})
+
+it('hidden_unknown_keeps_original_intent_and_aggregate_warning', async () => {
+  const lost = deferred<Response>()
+  const p = await page(lost.promise, Response.json(playerState()), new Response(null, { status: 204 }), Response.json(playerState()), Response.json(playerState()))
+  const intent = p.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  let failRead = true
+  const done = p.tasks.run(intent, () => undefined, async () => { if (failRead) throw new Error('read failed') }, '删除队列条目 · 夜航')
+  lost.reject(new Error('lost')); await done; await flushPromises()
+  const original = p.network.requests[0]!
+  for (let i = 1; i <= 6; i++) p.notices.set({ id: `recent-${i}`, scope: 'library', message: '已同步', status: 'success' })
+  await p.router.push('/queue'); await flushPromises()
+  await p.wrapper.get('.status-toggle').trigger('click')
+  expect(p.wrapper.find(`[data-notice="${intent.key}"]`).exists()).toBe(false)
+  expect(p.wrapper.get('.status-toggle').classes()).toContain('warning')
+  await p.wrapper.get('button[aria-label="重新读取未完成状态"]').trigger('click'); await flushPromises()
+  expect(p.network.requests.filter(r => r.init?.method === 'DELETE')).toHaveLength(1)
+  expect(p.wrapper.findAll('.notice-entry')).toHaveLength(5)
+  expect(p.wrapper.find(`[data-notice="${intent.key}"]`).exists()).toBe(true)
+  await p.wrapper.get(`[aria-label="重试操作 ${intent.key}"]`).trigger('click'); await flushPromises()
+  const retry = p.network.requests.find((r, i) => i > 0 && r.init?.method === 'DELETE')!
+  expect(retry.init?.headers).toEqual(original.init?.headers); expect(retry.init?.body).toBe(original.init?.body)
+  expect(p.wrapper.find(`[aria-label="重试操作 ${intent.key}"]`).exists()).toBe(false)
+  failRead = false
+  await p.wrapper.get(`[aria-label="重新读取 ${intent.key}"]`).trigger('click'); await flushPromises()
+  expect(p.network.requests.filter(r => r.init?.method === 'DELETE')).toHaveLength(2)
+  expect(p.wrapper.get(`[data-notice="${intent.key}"]`).text()).toContain('已同步')
+  p.wrapper.unmount()
+})
+
+it('epoch_motion_focus_and_long_copy_preserve_shell', async () => {
+  const p = await page(new Response(null, { status: 204 }), Response.json(playerState()))
+  const shell = p.wrapper.get('.transport-row').html()
+  const intent = p.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  await p.tasks.run(intent, () => undefined, async () => {}, '删除队列条目'); await flushPromises()
+  p.notices.set({ id: 'long', scope: 'library', status: 'pending', busy: true, message: '中文😀'.repeat(100) + '/verylonguri'.repeat(100) })
+  await flushPromises(); await p.wrapper.get('.status-toggle').trigger('click')
+  expect(p.wrapper.findAll('[aria-live="polite"]')).toHaveLength(1)
+  expect(p.wrapper.get('[data-notice="long"]').text().length).toBeLessThan(200)
+  await p.wrapper.get('.status-details').trigger('keydown', { key: 'Escape' })
+  expect(p.wrapper.get('.status-toggle').attributes('aria-expanded')).toBe('false')
+  expect(document.activeElement).toBe(p.wrapper.get('.status-toggle').element)
+  expect(p.wrapper.get('.transport-row').html()).toBe(shell)
+  const next = playerState(); next.epoch = 'new-epoch'; p.store.beginConnection(2); p.store.acceptInitial(next, 2); await flushPromises()
+  expect(p.notices.entries.value.some(n => n.id === intent.key)).toBe(false)
+  p.wrapper.unmount()
+})
+
+it('diagnostics_record_changes_once_without_secrets_paths_bodies_or_keys', async () => {
+  const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+  const p = await page()
+  log.mockClear()
+  const notice = { id: 'secret-full-idempotency-key', scope: 'library', message: 'password=abc /music/private/file.flac body={token:secret}', status: 'unknown' as const }
+  p.notices.set(notice); p.notices.set(notice); await flushPromises()
+  expect(log).toHaveBeenCalledTimes(1)
+  const output = JSON.stringify(log.mock.calls)
+  expect(output).not.toContain('secret'); expect(output).not.toContain('/music'); expect(output).not.toContain('password'); expect(output).toContain('unknown')
+  p.notices.set({ ...notice, status: 'success', message: '已同步' }); await flushPromises()
+  expect(log).toHaveBeenCalledTimes(2)
+  p.wrapper.unmount()
+})
+
+it('acknowledged_task_is_not_success_until_its_authoritative_read_finishes', async () => {
+  const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+  const p = await page(new Response(null, { status: 204 }), Response.json(playerState()))
+  const read = deferred<void>(), intent = p.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  log.mockClear()
+  const done = p.tasks.run(intent, () => undefined, () => read.promise, '删除条目')
+  await flushPromises()
+  expect(p.notices.entries.value.find(n => n.id === intent.key)?.status).toBe('syncing')
+  expect(JSON.stringify(log.mock.calls)).not.toContain('success')
+  read.resolve(); await done; await flushPromises()
+  expect(p.notices.entries.value.find(n => n.id === intent.key)?.status).toBe('success')
+  p.wrapper.unmount()
+})
+
+it('diagnostics_failure_does_not_change_business_or_hide_activity', async () => {
+  const p = await page(new Response(null, { status: 204 }), Response.json(playerState()))
+  vi.spyOn(console, 'info').mockImplementation(() => { throw new Error('console unavailable') })
+  expect(() => p.notices.set({ id: 'read-failure', scope: 'library', status: 'failed', message: '读取失败' })).not.toThrow()
+  const intent = p.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  await p.tasks.run(intent, () => undefined, async () => {}, '删除条目'); await flushPromises()
+  expect(p.tasks.entries.value.find(n => n.intent.key === intent.key)?.state).toBe('confirmed')
+  expect(p.notices.entries.value.find(n => n.id === intent.key)?.status).toBe('success')
+  expect(p.network.requests.filter(r => r.init?.method === 'DELETE')).toHaveLength(1)
+  p.wrapper.unmount()
+})
+
+it('player_unknown_diagnostics_do_not_report_transient_failure_or_poll_noise', async () => {
+  const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+  const lost = deferred<Response>(), p = await page(lost.promise)
+  await p.wrapper.get('button[aria-label="继续播放"]').trigger('click'); await flushPromises()
+  log.mockClear(); lost.reject(new Error('lost')); await flushPromises()
+  expect(log.mock.calls.map(call => call[1].status)).toEqual(['unknown'])
+  const snapshot = playerState(); snapshot.sequence++
+  p.store.acceptRefresh(snapshot, 1); await flushPromises()
+  expect(log.mock.calls.map(call => call[1].status)).toEqual(['unknown'])
+  p.wrapper.unmount()
+})
+
+it('handoff_expiry_cannot_confirm_unknown_playback_after_ack', async () => {
+  const receipt = deferred<Response>(), unknown = playerState(); unknown.sequence++
+  Object.assign(unknown.playback_observation, fixture.empty_snapshot.playback_observation)
+  const p = await page(receipt.promise, Response.json(unknown))
+  vi.useFakeTimers()
+  await p.wrapper.get('button[aria-label="继续播放"]').trigger('click')
+  p.store.acceptRefresh(unknown, 1); await flushPromises()
+  receipt.resolve(Response.json(fixture.playback_receipt)); await flushPromises()
+  expect(p.notices.entries.value.find(n => n.id.startsWith('player-operation:'))?.status).toBe('syncing')
+  await vi.advanceTimersByTimeAsync(6001)
+  expect(p.store.snapshot?.playback_observation.actual_state).toBeNull()
+  expect(p.store.snapshot?.playback_observation.sync_status).toBe('UNBOUND')
+  expect(p.notices.entries.value.find(n => n.id.startsWith('player-operation:'))?.status).toBe('failed')
+  expect(p.wrapper.get('[data-testid="operation-status"]').text()).not.toContain('已同步')
+  await p.wrapper.get('.status-toggle').trigger('click')
+  expect(p.wrapper.find('button[aria-label="重试原操作"]').exists()).toBe(false)
+  expect(p.wrapper.find('button[aria-label="重新读取状态"]').exists()).toBe(true)
+  p.wrapper.unmount()
+})

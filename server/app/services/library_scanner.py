@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from server.app.models.library import ScanBatch, ScanResult, Song
@@ -116,11 +116,13 @@ class LibraryScanner:
         mpd_updater: MPDDatabaseUpdater | None = None,
         *,
         coordinator: RealtimeCoordinator | None = None,
+        batch_observer: Callable[[ScanBatch, ScanResult], None] | None = None,
     ) -> None:
         self.repository = repository
         self.event_publisher = event_publisher
         self.mpd_updater = mpd_updater
         self.coordinator = coordinator
+        self.batch_observer = batch_observer
         self._library_service = LibraryService(repository)
 
     async def _match_song_id(
@@ -265,6 +267,8 @@ class LibraryScanner:
                 if self.coordinator is not None else None
             )
             result = await self.repository.apply_scan_batch(batch)
+            if self.batch_observer is not None:
+                self.batch_observer(batch, result)
             if self.coordinator is not None:
                 self.coordinator.stage_change(
                     frozenset({"library"}), before,

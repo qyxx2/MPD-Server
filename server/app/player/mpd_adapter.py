@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import uuid4
 
+from server.app.logging_config import log_event
 from server.app.player.models import (
     DatabaseUpdateStatus,
     ExecutionSample,
@@ -21,7 +23,15 @@ from server.app.player.mpd_protocol import (
     parse_response,
     quote_argument,
 )
+from server.app.player.music_uri import MusicUriMapper
 from server.app.player.ports import PlayerCommandError, PlayerPort, PlayerUnavailable
+
+logger = logging.getLogger(__name__)
+_CONTROL_COMMANDS = frozenset({
+    'play', 'playid', 'pause', 'stop', 'next', 'previous', 'seekcur', 'repeat',
+    'random', 'setvol', 'update', 'clear', 'addid', 'deleteid', 'moveid',
+    'enableoutput', 'disableoutput',
+})
 
 ConnectionFactory = Callable[
     [str, int], Awaitable[tuple[asyncio.StreamReader, asyncio.StreamWriter]]
@@ -40,7 +50,9 @@ class MPDAdapter(PlayerPort):
         connection_timeout: float = 3.0,
         command_timeout: float = 5.0,
         connection_factory: ConnectionFactory | None = None,
+        uri_mapper: MusicUriMapper | None = None,
     ) -> None:
+        self.uri_mapper = uri_mapper
         self.host = host
         self.port = port
         self.password = password
@@ -71,7 +83,9 @@ class MPDAdapter(PlayerPort):
             song_position = _parse_int(_scalar(response.as_dict().get("song")))
             if song_position is not None and song_position >= 0:
                 current = await self._command_unlocked("currentsong")
-            return _status_from_response(response, current)
+            return _status_from_response(
+                response, self._local_response(current, "status") if current else None,
+            )
 
     async def read_execution_sample(self) -> ExecutionSample:
         async with self._lock:
@@ -85,7 +99,7 @@ class MPDAdapter(PlayerPort):
                 sample = _execution_sample_from_responses(
                     connection_epoch,
                     before,
-                    playlist,
+                    self._local_response(playlist, "read_execution_sample"),
                     after,
                 )
                 if sample is not None:
@@ -99,9 +113,11 @@ class MPDAdapter(PlayerPort):
         if song_uri is None:
             await self._command("play")
             return
+        raw_uri = self._mpd_uri(song_uri, "play")
         async with self._lock:
             playlist = await self._command_unlocked("playlistinfo")
-            song_id = _find_song_id(playlist, song_uri)
+            self._local_response(playlist, "play")
+            song_id = _find_song_id(playlist, raw_uri)
             if song_id is None:
                 raise PlayerCommandError("play", f"song URI not in MPD queue: {song_uri}")
             await self._command_unlocked("playid", str(song_id))
@@ -134,6 +150,11 @@ class MPDAdapter(PlayerPort):
             raise PlayerCommandError("set_volume", "volume must be between 0 and 100")
         await self._command("setvol", str(volume))
 
+    async def has_library_uri(self, song_uri: str) -> bool:
+        raw = self._mpd_uri(song_uri, "has_library_uri")
+        response = await self._command("find", "file", raw)
+        return any(key == "file" and value == raw for key, value in response.pairs)
+
     async def update_database(self) -> None:
         await self._command("update")
 
@@ -143,13 +164,13 @@ class MPDAdapter(PlayerPort):
 
     async def queue_entries(self) -> list[PlayerQueueEntry]:
         response = await self._command("playlistinfo")
-        return _queue_entries_from_response(response)
+        return _queue_entries_from_response(self._local_response(response, "queue_entries"))
 
     async def queue_clear(self) -> None:
         await self._command("clear")
 
     async def queue_add(self, song_uri: str) -> int:
-        response = await self._command("addid", song_uri)
+        response = await self._command("addid", self._mpd_uri(song_uri, "queue_add"))
         song_id = _parse_int(_scalar(response.as_dict().get("Id")))
         if song_id is None or song_id < 0:
             raise PlayerCommandError("addid", "MPD did not return a valid song id")
@@ -161,7 +182,7 @@ class MPDAdapter(PlayerPort):
     async def queue_move(self, mpd_song_id: int, before_mpd_song_id: int | None) -> None:
         async with self._lock:
             response = await self._command_unlocked("playlistinfo")
-            queue = _queue_entries_from_response(response)
+            queue = _queue_entries_from_response(self._local_response(response, "queue_move"))
             source_index = _queue_index(queue, mpd_song_id)
             if before_mpd_song_id is None:
                 destination = len(queue) - 1
@@ -196,25 +217,62 @@ class MPDAdapter(PlayerPort):
         job_id = _nonnegative_int(_scalar(response.as_dict().get("updating_db")))
         return DatabaseUpdateStatus(updating=job_id is not None, job_id=job_id)
 
+    def _mpd_uri(self, local_uri: str, command: str) -> str:
+        if self.uri_mapper is None:
+            return local_uri
+        try:
+            return self.uri_mapper.to_mpd(local_uri)
+        except ValueError as exc:
+            logger.warning("MPD URI mapping rejected direction=local_to_mpd command=%s", command)
+            raise PlayerCommandError(command, "invalid local music URI mapping") from exc
+
+    def _local_response(self, response: MPDResponse, command: str) -> MPDResponse:
+        if self.uri_mapper is None:
+            return response
+        try:
+            return MPDResponse(tuple(
+                (key, self.uri_mapper.to_local(value) if key == "file" else value)
+                for key, value in response.pairs
+            ))
+        except ValueError as exc:
+            logger.warning("MPD URI mapping rejected direction=mpd_to_local command=%s", command)
+            raise PlayerCommandError(command, "invalid raw MPD URI mapping") from exc
+
     async def _command(self, command: str, *args: str) -> MPDResponse:
         async with self._lock:
             return await self._command_unlocked(command, *args)
 
+    def _log_failure(self, command: str, code: str) -> None:
+        signature = (command, code)
+        # Only repetitive read observations are noise; each control attempt matters.
+        if command in _CONTROL_COMMANDS or signature != getattr(self, '_last_log_failure', None):
+            log_event('mpd_command_failed', level=30, command=command, error_code=code)
+            self._last_log_failure = signature
+
     async def _command_unlocked(self, command: str, *args: str) -> MPDResponse:
         try:
             await self._ensure_connected()
-            return await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 self._execute(command, *args),
                 timeout=self.command_timeout,
             )
+            self._last_log_failure = None
+            if command in _CONTROL_COMMANDS:
+                log_event('mpd_control_accepted', command=command)
+            return result
         except MPDAckError as exc:
+            self._log_failure(command, 'PLAYER_COMMAND_ERROR')
             raise PlayerCommandError(
                 command,
                 exc.message,
                 error_code=exc.error_code,
                 command_list_index=exc.command_list_index,
             ) from exc
+        except PlayerUnavailable:
+            self._log_failure(command, 'PLAYER_UNAVAILABLE')
+            raise
         except PlayerCommandError:
+            self._log_failure(command, 'PLAYER_COMMAND_ERROR')
             raise
         except asyncio.CancelledError:
             # An interrupted response cannot be used by the next command.
@@ -222,9 +280,11 @@ class MPDAdapter(PlayerPort):
             await self.close()
             raise
         except (asyncio.TimeoutError, TimeoutError) as exc:
+            self._log_failure(command, 'PLAYER_TIMEOUT')
             await self.close()
             raise PlayerUnavailable(f"MPD command timed out: {command}") from exc
         except (ConnectionError, OSError, EOFError, UnicodeError, MPDProtocolError) as exc:
+            self._log_failure(command, 'PLAYER_UNAVAILABLE')
             await self.close()
             raise PlayerUnavailable(f"MPD communication failed: {exc}") from exc
 
@@ -256,6 +316,7 @@ class MPDAdapter(PlayerPort):
                         command_list_index=exc.command_list_index,
                     ) from exc
             self._connection_epoch = uuid4().hex
+            log_event('mpd_connected')
         except PlayerCommandError:
             await self.close()
             raise

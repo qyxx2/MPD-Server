@@ -26,8 +26,11 @@ export function createResourceCache<T>(options: { load: (key: string) => Promise
       }
     }
   }
-  function read(key: string): Promise<T> {
+  function read(key: string, refresh: { force?: boolean } = {}): Promise<T> {
     const value = row(key)
+    if (refresh.force) {
+      value.generation++; value.flight = null; value.state.fresh = false; value.state.loading = false
+    }
     if (value.state.fresh) return Promise.resolve(value.state.data as T)
     if (value.flight) return value.flight
     if (!known?.epoch) return Promise.reject(new Error('Resource epoch baseline unavailable'))

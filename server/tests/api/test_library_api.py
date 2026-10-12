@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.app.main import app
-from server.app.models.library import ArtworkRef, ScanResult, Song
+from server.app.models.library import ArtworkRef, Song
 from server.app.models.playlist import Playlist
 from server.app.services.collection_service import Collection
 from server.app.services.library_service import LibraryService, library_entity_id
@@ -162,12 +162,9 @@ class FakeScanner:
     def __init__(self) -> None:
         self.calls: list[Path] = []
 
-    async def scan_full(self, root: Path) -> ScanResult:
-        self.calls.append(root)
-        return ScanResult(
-            added_song_ids=("song-1",),
-            updated_song_ids=("song-2",),
-        )
+    async def request_scan(self, paths, trigger) -> str:
+        self.calls.append((paths, trigger))
+        return "scan-activity"
 
 
 @pytest.fixture
@@ -184,7 +181,7 @@ def services(tmp_path, monkeypatch):
             "library_service": library,
             "collection_service": collections,
             "playlist_service": playlists,
-            "library_scanner": scanner,
+            "library_sync_service": scanner,
         }.items():
             previous[name] = getattr(app.state, name, None)
             setattr(app.state, name, value)
@@ -381,7 +378,7 @@ def test_album_artwork_is_raw_read_only_bytes_with_mime_type(services):
     assert response.content == b"artwork-bytes"
 
 
-def test_manual_scan_delegates_to_existing_scanner_service(services):
+def test_manual_scan_accepts_job_and_replay_does_not_enqueue_again(services):
     client, _, _, _, scanner = services
 
     response = client.post(
@@ -390,15 +387,13 @@ def test_manual_scan_delegates_to_existing_scanner_service(services):
         headers={"Idempotency-Key": "manual-scan"},
     )
 
-    assert response.status_code == 200
-    assert response.json() == {
-        "added_song_ids": ["song-1"],
-        "updated_song_ids": ["song-2"],
-        "moved_song_ids": [],
-        "missing_song_ids": [],
-        "unreadable_song_ids": [],
-    }
-    assert scanner.calls == [Path("/music")]
+    assert response.status_code == 202
+    assert response.json() == {"activity_id": "scan-activity", "status": "accepted"}
+    replay = client.post("/api/library/scan", json={"root": "/music"},
+                         headers={"Idempotency-Key": "manual-scan"})
+    assert replay.status_code == 202
+    assert replay.json() == response.json()
+    assert scanner.calls == [((Path("/music"),), "manual")]
 
 
 def test_service_boundary_is_explicit(services):

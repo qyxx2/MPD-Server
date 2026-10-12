@@ -117,6 +117,18 @@ class CollectionResponse(BaseModel):
     random_seed: int | None = None
 
 
+class SearchGroupResponse(BaseModel):
+    kind: Literal["albums", "artists", "genres", "years", "tags"]
+    source_id: str
+    name: str
+    song_ids: list[str]
+
+
+class SearchResultsResponse(BaseModel):
+    groups: list[SearchGroupResponse]
+    song_ids: list[str]
+
+
 class AlbumSummaryResponse(BaseModel):
     album_id: str
     title: str
@@ -196,6 +208,11 @@ class ScanResultResponse(BaseModel):
     moved_song_ids: list[str] = Field(default_factory=list)
     missing_song_ids: list[str] = Field(default_factory=list)
     unreadable_song_ids: list[str] = Field(default_factory=list)
+
+
+class ScanJobResponse(BaseModel):
+    activity_id: str
+    status: Literal['accepted'] = 'accepted'
 
 
 class ScanRequest(BaseModel):
@@ -300,3 +317,7 @@ class SaveQueueAsPlaylistRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
+
+
+class FavoriteMembersResponse(BaseModel):
+    song_ids: list[str]

@@ -23,6 +23,7 @@ from .dependencies import (
 )
 from .schemas import (
     CollectionResponse,
+    FavoriteMembersResponse,
     PlaylistCreateRequest,
     PlaylistListResponse,
     PlaylistOrderRequest,
@@ -124,6 +125,13 @@ async def list_playlist_songs(
             raise RuntimeError("persisted Playlist member has no Song resource")
         items.append(_song_response(song))
     return SongListResponse(items=items, count=len(items))
+
+
+@router.get("/api/favorites/members", response_model=FavoriteMembersResponse)
+async def get_favorite_members(
+    service: Annotated[PlaylistService, Depends(get_playlist_service)],
+) -> FavoriteMembersResponse:
+    return FavoriteMembersResponse(song_ids=await service.list_favorite_song_ids())
 
 
 @router.get("/api/favorites", response_model=CollectionResponse)

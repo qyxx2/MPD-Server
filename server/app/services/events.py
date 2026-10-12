@@ -5,6 +5,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from server.app.models.library import ScanResult
+from server.app.models.library_sync import LibrarySyncState
 from server.app.models.output import OutputSnapshot
 
 
@@ -16,6 +17,12 @@ class LibraryChangedEvent(DomainEvent):
     event_type: str = "library.changed"
     result: ScanResult
     mpd_update_error: str | None = None
+
+
+class LibrarySyncChangedEvent(DomainEvent):
+    model_config = ConfigDict(frozen=True)
+    event_type: Literal['library_sync.changed'] = 'library_sync.changed'
+    state: LibrarySyncState
 
 
 class PlaylistChangedEvent(DomainEvent):

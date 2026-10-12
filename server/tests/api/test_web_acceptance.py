@@ -5,6 +5,38 @@ from server.app.main import app
 from server.tools.web_acceptance import configure_acceptance
 
 
+def test_spa_deep_link_and_unknown_api_are_distinct(tmp_path):
+    from server.app.main import mount_web
+
+    (tmp_path / 'index.html').write_text('<html>production fixture</html>')
+    (tmp_path / 'assets').mkdir()
+    (tmp_path / 'assets/app.js').write_text('console.log("fixture")')
+    before = list(app.router.routes)
+    # Exercise the real application routes without lifespan or background work.
+    app.router.routes[:] = [route for route in before if getattr(route, 'name', None) != 'web']
+    try:
+        mount_web(app, tmp_path)
+        client = TestClient(app)
+        for path in ('/', '/library', '/playlists/example', '/search?q=中文'):
+            response = client.get(path)
+            assert response.status_code == 200
+            assert response.headers['content-type'].startswith('text/html')
+            assert 'production fixture' in response.text
+        assert client.get('/assets/app.js').text == 'console.log("fixture")'
+        for path in ('/api/not-a-route', '/api', '/assets/missing.js', '/missing.ico'):
+            response = client.get(path)
+            assert response.status_code == 404
+            assert response.headers['content-type'].startswith('application/json')
+        assert client.post('/library').status_code == 405
+        import pytest
+        from starlette.websockets import WebSocketDisconnect
+
+        with pytest.raises(WebSocketDisconnect), client.websocket_connect('/api/not-a-route') as socket:
+            socket.receive_json()
+    finally:
+        app.router.routes[:] = before
+
+
 def test_phone_fixture_switches_real_service_facts_without_a_public_control_api(tmp_path, monkeypatch):
     monkeypatch.setenv('DATABASE_PATH', str(tmp_path / 'phone.db'))
     original = app.router.lifespan_context
