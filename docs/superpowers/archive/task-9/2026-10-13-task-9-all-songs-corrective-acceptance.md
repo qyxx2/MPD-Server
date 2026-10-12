@@ -22,3 +22,9 @@
 ## 交付边界
 
 实现及上述自动测试完成；镜像以本次提交实际CI结果交付。容器首次启动/重部署后的顺序与随机播放耗时、consume配置调整后的自然换曲恢复尚未完成实机验收。无数据库删除，无本地Docker或虚拟环境修改，不把代码修复当作全部运行问题已关闭。
+
+## 同轮实机恢复补充
+
+用户随后明确允许改consume=0并验证。原生MPD TCP consume 0返回OK，status核对为0；通过新key调用SONGS单曲集合明确选曲，HTTP200（旧容器清理400余项耗时27.76秒），GET state观察CONFIRMED/matches_current=true，曲库SYNCED。seekcur定位歌曲结束前2秒后等待实际自然换曲，业务song_id变化，实际下一首位置已由Service归并至0，观察仍CONFIRMED/matches_current=true、fresh、无error、reconciliation_required=false。没有删DB或重启容器；设置MPD模式后无需删DB即可恢复。MPD重启后模式是否持久取决于该MPD自己的state_file配置，未读取NAS配置。
+
+最终本地针对性后端包含406首参数化共134通过（13.65秒）；完整suite数字仍属于前述轮次。修复Web使用实机API在背景快照更新后保持scrollTop=1440、无歌曲行焦点，向上滚动可到720。容器中的新版代码尚未部署，因此新版容器首次启动及大库实际耗时仍待重部署验证；未冒称已在NAS验证代码性能。
