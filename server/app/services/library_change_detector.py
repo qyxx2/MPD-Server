@@ -6,6 +6,8 @@ import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from server.app.models.library_scan import LibraryInventory
+
 RequestScan = Callable[[tuple[Path, ...] | None, str], Awaitable[str]]
 
 
@@ -50,25 +52,37 @@ class LibraryChangeDetector:
     ) -> None:
         if interval_seconds <= 0 or debounce_seconds < 0:
             raise ValueError("invalid detector timing")
-        self.root = root.resolve()
-        stat = self.root.stat()
-        self.identity = (stat.st_dev, stat.st_ino)
+        self.root = root.absolute()
+        self.identity: tuple[int, int] | None = None
         self.request_scan = request_scan
         self.interval_seconds = interval_seconds
         self.debounce_seconds = debounce_seconds
         self._clock, self._sleep = clock, sleep
-        try:
-            self._observed = read_signatures(self.root, self.identity)
-        except OSError:
-            self._observed = {}
-        # Startup reconciliation owns files already present at composition.
-        self._accepted = dict(self._observed)
+        self._observed: dict[Path, tuple[int, int]] = {}
+        self._accepted: dict[Path, tuple[int, int]] = {}
         self._changed_at: dict[Path, float] = {}
         self._closed = False
 
+    def seed(self, inventory: LibraryInventory) -> None:
+        if not inventory.complete:
+            raise ValueError("detector requires a complete inventory")
+        self.root, self.identity = inventory.root, inventory.identity
+        self._observed = {
+            Path(entry.file_uri): (entry.file_size, entry.file_mtime_ns)
+            for entry in inventory.entries
+        }
+        self._accepted = dict(self._observed)
+        self._changed_at.clear()
+
+    def _read(self):
+        if self.identity is None:
+            stat = self.root.stat()
+            self.identity = (stat.st_dev, stat.st_ino)
+        return read_signatures(self.root, self.identity)
+
     async def check_once(self) -> None:
         try:
-            current = await asyncio.to_thread(read_signatures, self.root, self.identity)
+            current = await asyncio.to_thread(self._read)
         except OSError:
             return
         now = self._clock()
@@ -103,8 +117,9 @@ class LibraryChangeDetector:
 
     async def run(self) -> None:
         while not self._closed:
-            await self.check_once()
             await self._sleep(self.interval_seconds)
+            if not self._closed:
+                await self.check_once()
 
     async def close(self) -> None:
         self._closed = True

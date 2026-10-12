@@ -10,15 +10,14 @@ from uuid import uuid4
 
 from server.app.logging_config import log_context, log_event
 from server.app.models.library_sync import LibrarySyncState
-from server.app.player.ports import PlayerPort
+from server.app.player.ports import PlayerCommandError, PlayerPort
 from server.app.repositories.database import (
     on_transaction_commit,
     on_transaction_visible,
     run_transaction,
 )
 from server.app.services.events import EventPublisher, LibrarySyncChangedEvent
-from server.app.services.library_change_detector import read_signatures
-from server.app.services.library_scanner import LibraryScanError, LibraryScanner
+from server.app.services.library_scanner import LibraryScanConflict, LibraryScanner
 
 
 @dataclass(frozen=True)
@@ -52,9 +51,8 @@ class LibrarySyncService:
         ):
             raise ValueError("invalid sync timing")
         self.scanner, self.player = scanner, player
-        self.root = root.resolve()
-        stat = self.root.stat()
-        self._root_identity = (stat.st_dev, stat.st_ino)
+        self.root = root.absolute()
+        self._root_identity: tuple[int, int] | None = None
         self.confirmation_seconds, self.poll_seconds = (
             confirmation_seconds,
             poll_seconds,
@@ -70,15 +68,23 @@ class LibrarySyncService:
         self._closed = False
         self._deadline = 0.0
         self._update_accepted = False
-        self._update_error: Exception | None = None
+        self._update_unknown = False
+        self._audio_update_required = False
+        self._failed_paths: tuple[Path, ...] = ()
+        self._conflicted = None
+        self._pending_results = []
+        self.startup_inventory = None
+        self.startup_ready = asyncio.Event()
         self._targets: dict[str, bool] = {}
         self._unconfirmed_targets: dict[str, bool] = {}
         self._scan_incomplete = False
+        self._observed_batch = None
+        self._deep_prepared_activity: str | None = None
         scanner.mpd_updater = self
         scanner.batch_observer = self._observe_batch
 
     def _observe_batch(self, batch, result) -> None:
-        self._scan_incomplete = bool(batch.unreadable_file_uris)
+        self._observed_batch = batch
 
     def get_state(self) -> LibrarySyncState:
         return self._state.model_copy(deep=True)
@@ -110,7 +116,7 @@ class LibrarySyncService:
         if self._closed:
             raise RuntimeError("library sync is closed")
         if paths is not None:
-            paths = tuple(path.resolve() for path in paths)
+            paths = await asyncio.to_thread(lambda: tuple(path.resolve() for path in paths))
             if any(not path.is_relative_to(self.root) for path in paths):
                 raise ValueError("scan path is outside the configured music root")
         job = _ScanJob(uuid4().hex, paths, trigger)
@@ -126,131 +132,171 @@ class LibrarySyncService:
         return job.activity_id
 
     async def _bounded(self, callback):
+        if self._closed:
+            raise asyncio.CancelledError()
         remaining = self._deadline - self._clock()
         if remaining <= 0:
             raise TimeoutError()
         return await asyncio.wait_for(callback(), timeout=remaining)
 
     async def update_database(self) -> None:
-        self._deadline = self._clock() + self.confirmation_seconds
-        self._update_accepted = False
-        self._update_error = None
+        # Compatibility for scanner wrappers; the owner confirms after its
+        # short commit and suppresses the wrapper's automatic finalization.
+        if self._closed:
+            raise RuntimeError("library sync is closed")
+        await self._confirm()
+
+    async def _issue_update(self) -> None:
         try:
-            await self._notify()
             await self._bounded(self.player.update_database)
-            self._update_accepted = True
-        except Exception as exc:
-            self._update_error = exc
+        except PlayerCommandError:
+            # An explicit rejection is the only failure allowing a blind
+            # command retry, still preceded by fresh status/URI reads.
+            self._update_unknown = False
             raise
+        except Exception:
+            self._update_unknown = True
+            raise
+        self._update_accepted = True
+        self._update_unknown = False
+        self._audio_update_required = False
+        await self._complete_scans()
+
+    async def _complete_scans(self, error: str | None = None) -> None:
+        while self._pending_results and not self._closed:
+            result = self._pending_results.pop(0)
+            await self.scanner._finalize(result, update=False, mpd_update_error=error)
 
     async def _scan(self, job: _ScanJob) -> None:
         self._scan_incomplete = False
         log_event('library_scan_started', generation=self._state.generation)
-        # Do not reconcile an incomplete/replaced mount as an empty library.
-        await asyncio.to_thread(read_signatures, self.root, self._root_identity)
-
-        # A vanished media path needs reconciliation; an unavailable requested
-        # root is a scan failure, never an empty successful incremental batch.
-        missing_media = False
-        for path in job.paths or ():
-            if not path.is_dir() and path.suffix.casefold() not in {
-                ".flac",
-                ".mp3",
-                ".lrc",
-            }:
-                raise LibraryScanError("requested scan root is unavailable")
-            missing_media |= not path.exists()
-
-        async def operation(_):
-            before = await self.scanner.repository.list_songs()
-            if job.paths is None or missing_media:
-                result = await self.scanner.scan_full(self.root)
-            elif len(job.paths) == 1 and job.paths[0].is_dir():
-                result = await self.scanner.scan_full(
-                    self.root if job.paths is None else job.paths[0]
-                )
-            else:
-                result = await self.scanner.scan_paths(list(job.paths))
-            # Recheck mount completeness before allowing the outer commit.
-            read_signatures(self.root, self._root_identity)
-            after = await self.scanner.repository.list_songs()
-            changed_ids = set(
-                result.added_song_ids
-                + result.updated_song_ids
-                + result.moved_song_ids
-                + result.missing_song_ids
+        deep = job.trigger in {"deep", "scheduled", "manual"} and self._deep_prepared_activity != job.activity_id
+        if self._conflicted is None:
+            prepared = await self.scanner.prepare(
+                self.root, job.paths, identity=self._root_identity, deep=deep,
             )
+        else:
+            prepared = await self.scanner.rebase(self._conflicted, self.root, deep=deep, paths=job.paths)
+        if self._root_identity is None:
+            self._root_identity = prepared.inventory.identity
+            self.root = prepared.inventory.root
+        before = prepared.baseline.songs
+
+        def stage_sync(result):
+            after = {song.song_id: song for song in before}
+            accepted_ids = set(result.added_song_ids + result.updated_song_ids)
+            after.update({song.song_id: song for song in prepared.batch.songs
+                          if song.song_id in accepted_ids})
+            for song_id in result.missing_song_ids:
+                after[song_id] = after[song_id].model_copy(update={"availability_status": "MISSING"})
+            for song_id in result.unreadable_song_ids:
+                if song_id in after:
+                    after[song_id] = after[song_id].model_copy(update={"availability_status": "UNREADABLE"})
+            changed_ids = set(result.added_song_ids + result.updated_song_ids + result.moved_song_ids)
+            prior = {song.song_id: song for song in before}
+
+            def audio_facts(song):
+                return (song.file_uri, song.file_size, song.file_mtime_ns,
+                        song.content_hash, song.availability_status) if song else None
+
+            audio_changed = any(audio_facts(prior.get(song_id)) != audio_facts(song)
+                                for song_id, song in after.items())
+            changed_ids.update(song_id for song_id in result.missing_song_ids + result.unreadable_song_ids
+                               if audio_facts(prior.get(song_id)) != audio_facts(after.get(song_id)))
             requested = set(map(str, job.paths or ()))
-            available_uris = {
-                song.file_uri
-                for song in after
-                if song.availability_status == "AVAILABLE"
-            }
-            # Keep old deletion/move expectations until they are proven. New
-            # committed facts below supersede expectations for the same URI.
-            self._targets = {
+            available_uris = {song.file_uri for song in after.values()
+                              if song.availability_status == "AVAILABLE"}
+            targets = {
                 **self._unconfirmed_targets,
-                **{
-                    song.file_uri: False
-                    for song in before
-                    if song.song_id in changed_ids
-                    and song.file_uri not in available_uris
-                },
+                **{song.file_uri: False for song in before
+                   if song.song_id in changed_ids and song.file_uri not in available_uris},
             }
-            for song in after:
-                relevant = (
-                    job.paths is None
-                    or song.song_id in changed_ids
-                    or song.file_uri in requested
-                    or any(
-                        Path(song.file_uri).is_relative_to(p)
-                        for p in job.paths or ()
-                        if p.is_dir()
-                    )
-                    or str(Path(song.file_uri).with_suffix(".lrc")) in requested
-                )
+            for song in after.values():
+                relevant = (job.paths is None or song.song_id in changed_ids
+                            or song.file_uri in requested
+                            or any(Path(song.file_uri).is_relative_to(p) for p in job.paths or ())
+                            or str(Path(song.file_uri).with_suffix(".lrc")) in requested)
                 if relevant and Path(song.file_uri).is_relative_to(self.root):
                     if song.availability_status == "AVAILABLE":
-                        self._targets[song.file_uri] = True
+                        targets[song.file_uri] = True
                     elif song.availability_status == "MISSING":
-                        self._targets[song.file_uri] = False
-
+                        targets[song.file_uri] = False
             state = self._state.model_copy(update={
-                "status": "SYNCING", "pending_count": len(self._targets),
-                "confirmed_count": 0, "failed_count": 0,
-                "error_code": None, "reason": None,
-                "updated_at": datetime.now(timezone.utc),
+                "status": "SYNCING", "pending_count": len(targets),
+                "confirmed_count": 0, "failed_count": 0, "error_code": None,
+                "reason": None, "updated_at": datetime.now(timezone.utc),
             })
             if self.scanner.coordinator is not None:
                 self.scanner.coordinator.stage_library_sync(state)
-            on_transaction_visible(
-                self.scanner.repository.path, lambda: setattr(self, "_state", state),
-            )
 
-        await run_transaction(self.scanner.repository.path, operation)
+            def visible():
+                self._failed_paths = tuple(Path(uri) for uri in self._observed_batch.unreadable_file_uris)
+                self._scan_incomplete = bool(self._failed_paths)
+                self._targets = targets
+                self._unconfirmed_targets = dict(targets)
+                self._state = state
+                if audio_changed:
+                    self._audio_update_required = True
+                    self._update_accepted = False
+                    self._update_unknown = False
+
+            on_transaction_visible(self.scanner.repository.path, visible)
+
+        prepared = await self.scanner.precheck(prepared)
+        if self._closed:
+            raise asyncio.CancelledError()
+        try:
+            result = await self.scanner.commit(prepared, stage_sync=stage_sync, finalize=False)
+        except LibraryScanConflict:
+            self._conflicted = prepared
+            raise
+        self._conflicted = None
+        self._pending_results.append(result)
+        if self.startup_inventory is None:
+            # Path retries don't process every newly inventoried file. Keep
+            # the initial safe snapshot so detection still discovers those
+            # files after startup, instead of accepting uncommitted additions.
+            self.startup_inventory = prepared.inventory
+        # A deep pass is once per job, including a partially successful commit.
+        # Persisted signatures keep successful paths out of subsequent retries.
+        self._deep_prepared_activity = job.activity_id
         if self._scan_incomplete:
             raise OSError("scan contains unreadable media")
 
     async def _confirm(self) -> None:
-        if not self._update_accepted:
-            raise self._update_error or RuntimeError("update not accepted")
+        self._deadline = self._clock() + self.confirmation_seconds
         while True:
             updating = await self._bounded(self.player.database_update_status)
+            if type(updating.updating) is not bool:
+                raise RuntimeError("unknown MPD update status")
             confirmed = 0
+            for uri, expected in self._targets.items():
+                found = await self._bounded(lambda uri=uri: self.player.has_library_uri(uri))
+                if type(found) is not bool:
+                    raise RuntimeError("unknown MPD URI confirmation")
+                confirmed += found == expected
+            consistent = confirmed == len(self._targets)
             if not updating.updating:
-                for uri, expected in self._targets.items():
-                    found = await self._bounded(
-                        lambda uri=uri: self.player.has_library_uri(uri)
-                    )
-                    confirmed += found == expected
-            self._set(
-                confirmed_count=confirmed, pending_count=len(self._targets) - confirmed
-            )
-            if not updating.updating and confirmed == len(self._targets):
-                self._unconfirmed_targets.clear()
-                self._set(status="SYNCED", failed_count=0, error_code=None, reason=None)
-                await self._notify()
-                return
+                if consistent and (not self._audio_update_required or self._update_accepted or self._update_unknown):
+                    await self._complete_scans()
+                    self._unconfirmed_targets.clear()
+                    self._audio_update_required = False
+                    self._update_unknown = False
+                    self._update_accepted = False
+                    self._set(status="SYNCED", confirmed_count=confirmed, pending_count=0,
+                              failed_count=0, error_code=None, reason=None)
+                    await self._notify()
+                    if not self.startup_ready.is_set() and self.startup_inventory is not None:
+                        self.startup_ready.set()
+                    return
+                if not self._update_accepted and (not self._update_unknown or not consistent):
+                    # Complete precheck evidence, then one update, then a fresh
+                    # status and exact URI postcheck. Reads failing above never
+                    # reach this command.
+                    await self._issue_update()
+                    continue
+            self._set(confirmed_count=confirmed if not updating.updating else 0,
+                      pending_count=len(self._targets) - (confirmed if not updating.updating else 0))
             await self._notify()
             remaining = self._deadline - self._clock()
             if remaining <= 0:
@@ -281,8 +327,8 @@ class LibrarySyncService:
                 if carry is not None:
                     paths = (
                         None
-                        if carry.paths is None or job.paths is None
-                        else tuple(sorted(set(carry.paths) | set(job.paths)))
+                        if job.paths is None or (carry.paths is None and not self._failed_paths and self._conflicted is None)
+                        else tuple(sorted(set(self._failed_paths or carry.paths or ()) | set(job.paths)))
                     )
                     job = replace(job, paths=paths)
                     carry = None
@@ -298,6 +344,7 @@ class LibrarySyncService:
                     reason=None,
                 )
                 with log_context(generation=self._state.generation):
+                    self._log_phase()
                     scanned = False
                     attempt = 0
                     while not self._closed:
@@ -307,10 +354,11 @@ class LibrarySyncService:
                                 scanned = True
                             else:
                                 self._set(status="SYNCING", error_code=None, reason=None)
-                                await self.update_database()
+                                self._log_phase()
                             await self._confirm()
                             break
                         except Exception as exc:  # noqa: BLE001 - background failures remain retryable
+                            await self._complete_scans(str(exc))
                             self._set(
                                 status="FAILED",
                                 failed_count=max(
@@ -330,6 +378,8 @@ class LibrarySyncService:
                                 ]
                             )
                             attempt += 1
+                            if self._failed_paths and self._conflicted is None:
+                                job = replace(job, paths=self._failed_paths)
                             if not self._jobs.empty():
                                 carry = job
                                 self._unconfirmed_targets = dict(self._targets)

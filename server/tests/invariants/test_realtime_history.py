@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from shutil import copy2
 
 from server.app.main import app
 from server.app.player.mock_mpd import MockMPD
-from server.app.services import library_scanner as scanner_module
+from server.app.services import library_scan_prepare as scanner_module
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.realtime_coordinator import RealtimeCoordinator
 from server.tests.invariants.test_realtime_snapshot import cached_output, make_state
@@ -73,6 +74,8 @@ def test_history_unavailability_preserves_events_and_has_entries(
         def unreadable(_):
             raise PermissionError('unreadable fixture')
 
+        source_stat = target.stat()
+        os.utime(target, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns + 1))
         patch.setattr(scanner_module, 'parse_media_file', unreadable)
         run(scanner.scan_paths([target]))
     unreadable = preserved('UNREADABLE')

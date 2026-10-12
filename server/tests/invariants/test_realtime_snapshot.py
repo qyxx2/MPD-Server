@@ -62,6 +62,7 @@ def test_snapshot_is_one_committed_cut(real_client, tmp_path, monkeypatch):
     before = server_snapshot(playback)
 
     async def scenario():
+        prepared = await scanner.prepare(root)
         reading, release, attempted = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
         async def held_read():
@@ -82,7 +83,7 @@ def test_snapshot_is_one_committed_cut(real_client, tmp_path, monkeypatch):
             async def joint(_):
                 await playback.next()
                 await playlists.create_playlist('joint')
-                await scanner.scan_full(root)
+                await scanner.commit(prepared)
 
             await run_transaction(repository.path, joint)
 

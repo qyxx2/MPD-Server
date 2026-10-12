@@ -2,7 +2,7 @@ name: Validate and publish container
 
 on:
   push:
-    branches: [main, 'feature/**', 'codex/**']
+    branches: [main, 'feature/**', 'codex/**', 'fix/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:

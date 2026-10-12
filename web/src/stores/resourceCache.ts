@@ -1,6 +1,7 @@
 import { readonly, shallowReactive } from 'vue'
 import type { ResourceMarker } from './player'
 import type { Revisions } from '../types/api'
+import { ApiError } from '../types/api'
 
 export function createResourceCache<T>(options: { load: (key: string) => Promise<T>; dependencies: readonly (keyof Revisions)[] }) {
   type Entry = { data: T | null; fresh: boolean; loading: boolean; error: unknown }
@@ -51,6 +52,9 @@ export function createResourceCache<T>(options: { load: (key: string) => Promise
         value.state.error = null
         return value.state.data
       } catch (error) {
+        // A deadline ends this caller's read, even if its generation changed.
+        // Do not restart its budget or project an obsolete error into current data.
+        if (generation !== value.generation && error instanceof ApiError && error.code === 'READ_TIMEOUT') throw error
         if (generation !== value.generation) return await read(key)
         value.state.error = error; value.state.fresh = false
         throw error

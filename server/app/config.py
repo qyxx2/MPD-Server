@@ -1,6 +1,5 @@
 """Immutable startup configuration; only the composition root consumes it."""
 import json
-import os
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -31,11 +30,13 @@ class AppConfig(BaseModel):
     output_name: str | None = None
     output_plugin: Literal['alsa'] = 'alsa'
 
-    @field_validator('music_root')
+    @field_validator('music_root', mode='before')
     @classmethod
-    def readable_root(cls, value: Path) -> Path:
-        if not value.is_dir() or not os.access(value, os.R_OK | os.X_OK):
-            raise ValueError('Music root must be a readable directory')
+    def valid_root_path(cls, value):
+        if isinstance(value, (str, Path)) and (
+            not str(value).strip() or any(char in str(value) for char in ('\0', '\n', '\r'))
+        ):
+            raise ValueError('Invalid music root path')
         return value
 
     @field_validator('mpd_uri_prefix')

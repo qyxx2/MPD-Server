@@ -319,21 +319,29 @@ Favorites 是系统提供的持久收藏列表，由现有独立Favorites表保�
 - **Observable Result**：snapshot 与领域失效通知携带相应 epoch/revisions；无内容变化扫描仍保留原有扫描完成事件及 MPD update error 可见性，不能用“revision 未增”吞掉扫描结果。原 Library 扫描 commit → optional MPD update → completion event 顺序不变。
 - **Executable Invariant Proof**：新增真实 Repository/Service/outer transaction 测试，比较提交前后资源、计数和事件，覆盖成功、no-op、改后恢复、双域事务、嵌套/批量、terminal failure、rollback、取消、retry/replay、发布失败及重启 epoch。用 barrier 验证新数据不可搭配旧 revision；availability 改变不丢 Playlist/Favorites/History 引用。测试由 Task 6 Batch Plan 分配，当前仅为待执行证明义务。
 
-### 7.2 自动MS/MPD曲库同步（LIB-MPD-SYNC-001，2026-10-11）
+### 7.2 自动MS/MPD曲库同步（LIB-MPD-SYNC-001，2026-10-12 corrective修订待用户确认）
 
-用户确认：保留现有两种URI表示并做最小映射；手动扫描/被动发现后自动及时同步并自动更新页面。同步活动只进入WEB-UI-NOTIFY-001的AppBar中心，不在Song行/页面另加同步说明或图标。业务文件availability与同步状态独立，不修改现有AVAILABLE/MISSING/UNREADABLE含义。
+本次修订用于Task 9 Startup Library Reconciliation / Web Readiness；设计与实施计划待确认，不表示生产实现已完成。保留两种URI及最小映射；同步活动只进入WEB-UI-NOTIFY-001 AppBar中心。业务availability与同步状态独立。
 
-**权威与顺序**：文件系统拥有真实文件，Library Repository拥有MS索引，MPD拥有自身索引；统一同步Service拥有协调进度。发现→debounce/合并→扫描提交→登记SYNCING并通知→MPD update→等待更新结束→精确URI确认→SYNCED/FAILED。扫描数据的revision在提交时立即可见；沿用§7.1 commit→optional update→completion event，不延迟revision登记，不把新同步事件当原扫描完成事件。MPD失败不回滚MS已提交Song，不伪造History/Queue变化。
+**权威与顺序**：文件系统拥有真实文件，Repository拥有MS索引，MPD拥有自身索引，单同步Service拥有协调进度。后台发现→prepare→短commit（Library、持久签名、revision与SYNCING共同可见）→必要的MPD update→精确确认→SYNCED/FAILED。无本地变化时commit之后先精确确认；已一致可跳过update。沿用§7.1 commit→optional update→completion event；不延迟revision，不把同步事件当扫描完成事件。MPD失败不回滚已提交Song。
 
-**及时性与合并**：复用500ms debounce。单实例变化发现每2秒检查文件路径/size/mtime签名，仅变化进入增量扫描；不每2秒重新解析/哈希全库。此默认轮询方式减少NAS挂载监听依赖，真实文件树性能在部署Gate测量；若规模导致不能满足检查预算，再单独批准优化，不迁移URI。12小时完整校准兜底遗漏，手动扫描进入同一协调器。首次启动自动扫描/确认；无可读根时失败保留旧索引。文件尚在写入导致解析失败可重试，稳定后收录。变更正在处理时新到变更进入下一generation，不被旧轮完成清除。移动/删除继续既有身份/引用规则；确认更新后的精确新URI，删除确认旧URI不在MPD索引。
+**启动校准（LIB-STARTUP-RECONCILE-001）**：每次启动自动重新确认仍保留；“扫描”明确为持久签名差异校准，不等于重新解析/哈希整个曲库。HTTP在本地必要DB/Service/协调器初始化后就绪，不等待目录inventory、媒体解析、哈希或MPD确认；Library相关constructor不得resolve/stat/walk或读取媒体。启动状态IDLE不证明同步，后台活动开始后SYNCING；失败报告FAILED并保留已提交Library供读。
 
-**MPD确认**：Port新增只读has_library_uri(song_uri:str)->bool，Mock/真实/Verified实现同一合同；由独立同步Service消费，不通过Queue查找代替曲库查询。协议实现依据目标允许命令验证精确file字段，不整库拉取作为每曲确认。update返回不是成功证据；更新状态每1秒有界读取，只有update已接受、无正在更新且本generation目标URI符合存在/缺失预期，才SYNCED。更新非常快而未观察到busy也可由精确URI确认。每轮确认预算60秒；超时FAILED，自动按2/5/15/30秒封顶间隔重试，断线后恢复继续；不忙循环，不自动重做用户播放/收藏等mutation。MPD更新可能不改变曲目内容，不因此虚增Library revision。
+音频复用songs的file_size/file_mtime_ns/content_hash；URI、size、mtime及关联LRC签名均未变化且已有成功签名的AVAILABLE文件，parse_media_file与_hash_file调用必须为0。新增/变化/移动才处理相关媒体；删除只校准availability。旧记录缺音频签名只补扫一次，提交成功后重启不再次补扫。LRC存在性、size/mtime持久化到内部辅助索引，检测停机期间增删改；不改Song公开DTO/URI/身份。旧库首次建立sidecar基线时，仅补读当前存在LRC或旧lyrics_source=sidecar的关联音频；完整音频签名不缺时复用content_hash。LRC-only变化允许重解析关联音频以恢复embedded fallback，但不得重哈希未变音频。签名不能发现伪装成相同size/mtime的内容改写，scheduled/manual deep reconciliation用于兜底。
 
-**状态**：IDLE/SYNCING/SYNCED/FAILED；服务启动时IDLE未证明已同步，首次确认后才SYNCED。每轮generation单调递增并带activity_id、trigger、pending_count、confirmed_count、failed_count、updated_at及安全错误码/短原因；确认只覆盖本轮捕获目标，迟到旧结果不覆盖新轮。同一generation重试更新同一活动，不制造无限活动列表。重启丢弃运行时成功证明，重新扫描/确认，不持久化旧snapshot为权威。
+**prepare/commit（LIB-SCAN-TXN-001）**：短事务读取immutable DB baseline后退出；inventory、关联解析、hash、移动匹配所需文件存在性检查及mount安全检查在线程中prepare，完全不持有run_transaction/SQLite transaction，不访问事务连接。生成已准备batch和目标信息，再用短事务提交；commit只消费内存batch/baseline并做SQL与同步内存可见性登记，禁止文件树/媒体/MPD/socket I/O。baseline冲突拒绝陈旧覆盖，正常已准备文件可复用，仅重新校准冲突路径。扫描期间state/WS首帧/资源读旧已提交事实；新事实和revision按Architecture §12一起可见。已有commit后取消/发布失败合同保留。
 
-**传播**：FullStateSnapshot增量字段library_sync承载当前完整同步状态；独立失效domain library_sync共用现有epoch/sequence/初始snapshot及bounded sender机制。同步状态改变只推进sequence，不推进Library/Playlist revision；Library索引变化仍由原library域刷新资源。一次提交登记扫描可见变化与SYNCING，不能展示新Song却仍宣称旧轮同步成功。snapshot读取无扫描/MPD控制。Web自动重读，不靠刷新页面；旧epoch/sequence/generation结果丢弃，断线最后状态明确过期，重连完整首帧恢复。
+**已观察与删除证据（LIB-SCAN-OBSERVED-001）**：ScanBatch显式携带observed_file_uris，包含未重新解析的正常音频；Repository不把它们视作未见文件或MISSING。只有完整inventory且root identity在prepare开始/结束及commit前线程校验一致，才允许该root的absence校准。root不可读、mount replacement、子目录inventory不完整时不提交mass missing；prepare的root identity初始化不得在lifespan构造执行。媒体读前/读后签名变化时丢弃该路径结果并retry，不提交半写入签名。显式删除与移动保留原Song/Playlist/Favorites/History引用合同；不从相同标题猜跨URI一致性。
 
-**不变项与证明**：音乐文件只读；同步不播放/清空/重排Queue、不更改Playlist/Favorites/History；已有业务控制成功仍需原确认。真实SQLite＋Scanner＋状态协调器＋Fake/Mock Port测试覆盖提交/通知/更新/精确确认、update错误/超时、断线恢复、并发新文件、no-op、移动删除、取消和重启；真实NAS至少新增一份用户自有测试曲目并观察无需刷新完成同步。完整日志归MIN-LOG-001，短活动展示归Visual。
+**发现与调度（LIB-DETECTOR-INVENTORY-001）**：保留500ms debounce及2秒签名轮询默认值，不靠调大间隔修复。启动由一次安全prepare inventory建立基线并交给detector；detector无constructor I/O，不在接收基线后立即再遍历，先等待一个间隔。启动prepare尚未完成时不并发重复全树检查；失败由startup owner有界重试。startup交接只设观察基线，未成功解析路径仍由retry集合拥有，不能误当已成功收录。调度保留12小时deep校准和手动入口，同一owner串行执行；deep prepare仍在线程且锁外。校准中出现新变化进入下一轮，不能被旧seed/旧generation清掉。
+
+**单文件失败（LIB-SCAN-PATH-RETRY-001）**：MediaMetadataError/OSError按路径收集，不终止所有正常路径prepare。已知坏路径标UNREADABLE但保留原有效元数据/身份/引用；新坏路径不造空Song。正常路径可提交，整体同步活动在失败路径未解决前不能SYNCED。只重试失败/后来变化路径，保留其它已准备或已提交结果；使用既有2/5/15/30秒退避，不重读全库、不busy loop。同generation重试保持activity_id；新请求合并时保留旧未确认URI和失败路径。root级失败不能降格成单文件错误或空库。
+
+**MPD确认（LIB-MPD-SYNC-001）**：使用既有has_library_uri(song_uri:str)->bool和database_update_status，不用Queue查找、标题匹配或整库枚举代替精确确认。启动本地无变化时对当前目标（包括应缺失旧URI）先确认；无正在更新且所有目标存在/缺失符合预期可SYNCED且update_database=0。确认明确不一致，或发生本地音频新增/变化/删除/移动时，才update并再精确确认；LRC-only不要求MPD音频索引更新，仍确认本地URI。成功接受的同次update在等待完成/确认重试期间不重复调用；只有update调用明确失败可退避重试，外部结果未知先读状态/目标再决定，不无限重复update。断线/timeout不是“不一致”证据，不盲目update。每次确认阶段预算60秒，更新状态每1秒有界读取；预算不包括prepare。正常不一致场景恰好一次update，返回本身不是SYNCED证据。
+
+**状态与传播**：IDLE/SYNCING/SYNCED/FAILED及generation/activity_id/trigger/counts/updated_at/安全错误码保持既有DTO。重启废弃旧运行时成功证明，用新epoch、签名差异校准与新URI确认；持久签名只优化扫描，不是MPD成功缓存。单路径失败保持FAILED、成功目标计数可见；旧epoch/sequence/generation不覆盖新轮。Library变化推进Library revision，只有同步进度改变只推进sequence；新Library和SYNCING同一提交可见。snapshot/GET不扫描、update或控制播放。
+
+**不变项与证明**：媒体只读，不播放/清空/重排Queue，不改Playlist/Favorites/History/Output。十项corrective RED及线程/事务/真实REST与WS/前端fake timer证明分配到本次active plan；每Batch精确、关系及完整回归fresh记录。真实NAS/MPD/DAC与手机Gate单列，不能以Mock通过替代，本次不运行真实设施。
 
 ## 8. 与第一章播放模型的接口
 

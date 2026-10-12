@@ -4,10 +4,17 @@ from pathlib import Path, PurePosixPath
 
 class MusicUriMapper:
     def __init__(self, local_root: Path, mpd_prefix: str = '') -> None:
-        self.local_root = local_root.resolve()
+        self._configured_root = local_root
+        self._canonical_root: Path | None = None
         self.mpd_prefix = mpd_prefix
         if mpd_prefix:
             self._relative_parts(mpd_prefix)
+
+    @property
+    def local_root(self) -> Path:
+        if self._canonical_root is None:
+            self._canonical_root = self._configured_root.resolve()
+        return self._canonical_root
 
     @staticmethod
     def _relative_parts(uri: str) -> tuple[str, ...]:

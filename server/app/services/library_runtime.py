@@ -43,6 +43,11 @@ class LibraryRuntime:
         await asyncio.sleep(self.scheduler.interval_seconds)
         await self.scheduler.run_forever()
 
+    async def _detect(self):
+        await self.sync.startup_ready.wait()
+        self.detector.seed(self.sync.startup_inventory)
+        await self.detector.run()
+
     async def run(self) -> None:
         if self._owner is not None:
             raise RuntimeError("library runtime owner already running")
@@ -53,7 +58,7 @@ class LibraryRuntime:
             await self.sync.request_scan(None, "startup")
             self._tasks = [
                 asyncio.create_task(self.sync.run(), name="library-sync"),
-                asyncio.create_task(self.detector.run(), name="library-detector"),
+                asyncio.create_task(self._detect(), name="library-detector"),
                 asyncio.create_task(self._periodic(), name="library-scheduler"),
             ]
             await asyncio.gather(*self._tasks)

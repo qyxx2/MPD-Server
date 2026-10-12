@@ -41,7 +41,7 @@ def test_commit_update_confirmation_and_next_generation_are_ordered(
                         >= 1
                     )
                 order.append(("update", service.get_state().generation))
-                if len(order) == 1:
+                if len([item for item in order if item[0] == "update"]) == 1:
                     entered.set()
                     await release.wait()
                 await super().update_database()
@@ -176,6 +176,7 @@ def test_runtime_startup_scheduler_and_shutdown_share_one_owner(
         root = tmp_path / "music"
         root.mkdir()
         player = MockMPD()
+        player._updating_db = True  # external indexing is already in progress
         scanner = LibraryScanner(LibraryRepository(db))
         service = LibrarySyncService(scanner, player, root)
         runtime = LibraryRuntime(
@@ -192,7 +193,7 @@ def test_runtime_startup_scheduler_and_shutdown_share_one_owner(
             await runtime.run()
         await runtime.close()
         await asyncio.wait_for(task, 1)
-        assert service.get_state().status != "SYNCED"  # Mock update is still busy
+        assert service.get_state().status != "SYNCED"  # existing external update remains busy
 
     asyncio.run(run())
 
@@ -213,8 +214,8 @@ def test_mount_replaced_during_scan_never_commits_mass_missing(
         )
 
         class RacingScanner(LibraryScanner):
-            async def _scan_files(self, paths):
-                batch = await super()._scan_files(paths)
+            async def prepare(self, *args, **kwargs):
+                batch = await super().prepare(*args, **kwargs)
                 root.rename(tmp_path / "unmounted")
                 root.mkdir()
                 return batch
@@ -261,9 +262,11 @@ def test_runtime_does_not_duplicate_startup_before_scheduled_interval(tmp_path):
         task = asyncio.create_task(runtime.run())
         try:
             await asyncio.sleep(0.05)
-            assert updates == ["update"]
+            assert updates == []
+            assert service.get_state().generation == 1
             await asyncio.sleep(0.2)
-            assert len(updates) == 2
+            assert updates == []
+            assert service.get_state().generation == 2
         finally:
             await runtime.close()
             await asyncio.wait_for(task, 1)

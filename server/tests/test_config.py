@@ -53,9 +53,11 @@ def test_invalid_config_fails_without_exposing_input(tmp_path, data):
     assert 'secret' not in str(error.value)
 
 
-def test_missing_music_root_and_invalid_environment_fail(tmp_path):
+def test_missing_music_root_is_deferred_and_invalid_environment_fails(tmp_path):
     load = importlib.import_module('server.app.config').load_config
-    for extra in ({'MUSIC_ROOT': str(tmp_path / 'missing')}, {'MPD_PORT': 'invalid'},
+    env = {'DATABASE_PATH': str(tmp_path / 'music.db'), 'MUSIC_ROOT': str(tmp_path / 'missing')}
+    assert load(env).music_root == tmp_path / 'missing'
+    for extra in ({'MPD_PORT': 'invalid'},
                   {'SCAN_INTERVAL_SECONDS': 'NaN'}, {'HTTP_PORT': 'invalid'}):
         with pytest.raises(ValueError):
             load({'DATABASE_PATH': str(tmp_path / 'music.db'), 'MUSIC_ROOT': str(tmp_path), **extra})

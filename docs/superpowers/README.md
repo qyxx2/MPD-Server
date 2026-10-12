@@ -49,6 +49,10 @@ Task8最新关闭记录只证明修订手机Web前置及保护基线；不抵扣
 
 当前B10证据与未关闭Gate：[Task9 final acceptance](archive/task-9/2026-10-11-task-9-final-acceptance.md)。真实地址请填写本轮LIVE Adapter页面（5188），旧Mock页面保存地址不会连接实机。
 
+## Task 9 Startup corrective 当前入口（2026-10-12）
+
+本次仅 Startup Library Reconciliation / Web Readiness；当前分支 `fix/task-9-startup-library-reconciliation`，HEAD `098d6eaea81495d1686a09f9e0ee68768610ed7e`，修复仍在未提交的 dirty 内容中。先读[Startup corrective 本地 acceptance](archive/task-9/2026-10-12-task-9-startup-reconciliation-acceptance.md)，再按需核对[root-cause / C0–C4 原始证据](plans/2026-10-12-task-9-startup-root-cause-evidence.md)、[corrective spec](specs/2026-10-12-task-9-startup-library-reconciliation-design.md)及[Batch plan](plans/2026-10-12-task-9-startup-library-reconciliation-batch-plan.md)。实际 C1–C4 实现、C0 十项证明及 C4 前置门已核对，C5 本地 acceptance PASSED；workflow push 过滤已加入 `fix/**`。历史草案页头的 NOT STARTED 不代表当前源码状态。作者自审与 fresh 自动验证完成，独立 review NOT RUN。远程容器交付未完成：未 commit/push/触发 CI，新修复 SHA、远端 HEAD、CI validate/image、镜像标签/digest/双平台证明均 NOT RUN；真实 MPD/NAS/DAC、手机与真实设备人工验收 NOT RUN，Task 9 历史人工 Gate 保持。不得用旧 CI 或旧镜像抵扣当前 dirty 修复。
+
 ## Relationship / Invariant Test Gate
 
 主 Implementation Plan 的 `Cross-Module Relationship / Invariant Test Gate` 是所有当前和未来 Task/Batch 的强制验收规则。

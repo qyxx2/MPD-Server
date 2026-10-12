@@ -143,6 +143,12 @@ Web 状态分为三层：
 
 Task 8 的 Web relationship/invariant tests 至少必须机械证明：旧 epoch/旧 sequence/旧 resource request 不倒灌；invalidate 与并发 GET 最终覆盖最高已知水位；断线进入 read-only 且重连完整 snapshot 替换 stale baseline。Task 9 在涉及 Library/Playlist/Favorites/Search 缓存时继承并扩展这些 proof，而不是重新定义它们。
 
+#### 2026-10-12 Web读取预算修订（WEB-INITIAL-READ-001，待用户确认）
+
+WS从创建连接起到成功接受完整initial snapshot默认预算10,000ms，GET从fetch开始到JSON body读取/decoder完成默认预算10,000ms；均可注入短预算和可控时钟用于测试。它们是错误边界，不是后端扫描时限；后端就绪与无锁prepare独立证明，不以延长等待掩盖阻塞。
+
+initial超时产生明确INITIAL_SNAPSHOT_TIMEOUT，关闭旧socket、清理监听/timer并按既有重连退避重试；当前最后快照只能stale只读，GET成功不能恢复写权限。GET超时产生READ_TIMEOUT，abort底层请求且Promise在预算内reject（包括永不settle的测试transport和迟到body）；loading结束，错误进入既有唯一AppBar活动，提供既有重读/恢复路径。超时后迟到响应不得覆盖当前epoch/generation/revision。成功、失败、stop及连接替换均清理timer。只增加只读GET预算，不改变mutation unknown/key/retry合同或自动重放mutation。
+
 ### 4.2 Web mutation、幂等与确认合同（Task 8/9 共用，2026-10-09）
 
 所有 Web mutation 服从既有 Task 5 / API idempotency 合同，客户端不得另造较弱语义。
@@ -316,8 +322,8 @@ Music Server 对音乐目录采用只读挂载。
 
 使用两层机制：
 
-1. 文件系统事件监测
-2. 定时完整校准扫描
+1. 后台签名变化发现（可接文件系统事件，默认轮询）
+2. 定时deep校准扫描（prepare在线程且数据库锁外）
 
 文件系统事件需要 debounce / batch，避免大量文件连续变化导致重复扫描。
 
@@ -365,6 +371,16 @@ Music Server 对音乐目录采用只读挂载。
 - 对数据库启动进行结构检查
 
 SQLite 文件必须位于持久化目录，而不是容器临时层。
+
+### 8.2 启动就绪与Library事务预算（LIB-SCAN-TXN-001 / LIB-WEB-READY-001，2026-10-12修订待用户确认）
+
+必要DB结构检查、持久状态及本地Services/协调器初始化后FastAPI lifespan放行HTTP。LibraryRuntime/Sync/Detector构造不得做音乐根resolve/stat/inventory或媒体I/O；这些检查属于后台prepare。AppConfig不对音乐根做is_dir/os.access可读性验证；路径语法/其它配置非法仍启动失败，音乐根不可读属于后台同步错误。MusicUriMapper构造延迟canonical resolve到实际映射使用，原symlink/越界检查仍必须执行。HTTP就绪不表示曲库已同步，MPD不可达/扫描失败通过既有状态明确表示。
+
+扫描短事务读baseline→线程prepare→commit前线程验证→短事务commit。prepare不继承active transaction context、不持有应用DB串行锁；只使用immutable输入，不在线程中共享SQLite连接。commit仅SQL、准备好的batch和同步内存登记；inventory、parse/hash、文件存在性、MPD update/confirmation及实际WS发送均在锁外。保持单扫描写owner及既有最外层提交/revision/sequence/失败登记合同，不把数据库整个串行化机制取消或另建无版本读取路径。
+
+在prepare barrier未释放时，GET /api/state、WS initial snapshot、Library REST读取和独立run_transaction必须在测试预算1秒内完成，返回旧已提交事实；release后新数据/revision/library_sync原子可见。本预算是确定性fixture下的回归门槛，不是对任意NAS规模的绝对吞吐承诺。constructor I/O另以禁止Path文件系统访问的测试机械证明。线程取消要协作停止/丢弃结果，不能在shutdown后继续提交或启动MPD调用。
+
+音频持久签名沿用songs，LRC新增内部辅助签名表和兼容迁移，不修改公开DTO或Song URI。MISSING只依赖安全完整inventory且observed未变URI必须保留。启动、定时deep和手动扫描共用prepare/commit，不允许旧scan_full包装器把prepare放回外层事务。详细业务与错误策略唯一归Library §7.2，本节拥有就绪/锁/一致性边界。
 
 ## 9. 开发环境
 
@@ -1046,7 +1062,7 @@ Android 目录首期只保留项目边界，不要求与 Web 同期开发。
 - 服务在NAS Docker容器运行，MPD保持NAS上已有独立进程。NAS同一音乐文件树只读挂载进MS容器；SQLite与配置独立持久化。已有备份挂载可保留，备份服务/API/恢复写门禁不属于本轮。
 - 最小配置：MPD地址/密码、后端音乐根、MPD相对URI前缀、数据库路径、模式、扫描参数和HTTP部署参数。一般项环境变量优先于JSON配置，再取默认；默认配置文件为CONFIG_DIR/config.json，未配置CONFIG_DIR时使用数据库父目录/config.json。缺少配置文件可采用默认，存在但损坏/未知字段/非法值明确启动失败。密码仅MPD_PASSWORD，不写配置/API/日志。
 - MPD地址继续遵守SYS-MPD-CONNECTION-001：saved文件优先于环境变量，其次通用配置及默认；saved损坏启动失败；当前PlayerPort不热切换。该合同的无saved默认源扩展为最终配置，保存操作其它语义不变。
-- 默认完整校准12小时、debounce500ms。单一后端音乐根＋单一MPD URI前缀；后端根必须是可读目录。缺失挂载不得扫描成全库MISSING；报告扫描错误并保留已有索引。
+- 默认deep校准12小时、debounce500ms。单一后端音乐根＋单一MPD URI前缀；后端根由后台prepare验证为可读目录，Library constructor不读取音乐树且HTTP不等待校准。缺失/替换挂载不得扫描成全库MISSING；报告扫描错误并保留已有索引。启动重新确认依Library §7.2，以持久签名差异校准代替每次全量解析/哈希。
 - APP_ENV/MPD_MODE显式装配；development默认Mock，production默认真实Adapter，生产不可达不回退Mock。启动读取配置开始运行，修改后用户手动重启容器；本轮不提供restart API或设置页重启按钮，不要求复杂监管/恢复成功判定。
 - 一控制进程/一worker；观察、播放恢复、变化发现、扫描调度和同步任务各自单owner，shutdown取消并await。早期Service/Repository不import最终config；配置在composition root注入。
 - 能力装载与既有真实验证合同衔接；普通startup不执行会改播放/Queue/输出/曲库的验证探针。能力证明绑定endpoint/版本，旧地址证明不直接授予新地址操作。无证明时可启动并报告未验证；首次部署按最终Batch的显式验证步骤闭合实际控制能力，不能以空能力部署作为功能交付完成。

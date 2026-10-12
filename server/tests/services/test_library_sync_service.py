@@ -84,7 +84,7 @@ def test_disconnect_timeout_retry_and_shutdown_preserve_business_state(
 def test_temporarily_unreadable_new_file_is_retried_after_becoming_stable(
     tmp_path, media_fixture_dir, monkeypatch
 ):
-    from server.app.services import library_scanner
+    from server.app.services import library_scan_prepare as library_scanner
 
     async def run():
         db = str(tmp_path / "retry.db")
@@ -215,8 +215,8 @@ def test_confirmation_budget_starts_after_scanner_commit(tmp_path, media_fixture
         file = media_fixture_dir / "metadata.flac"
 
         class SlowScanner(LibraryScanner):
-            async def _scan_files(self, paths):
-                batch = await super()._scan_files(paths)
+            async def prepare(self, *args, **kwargs):
+                batch = await super().prepare(*args, **kwargs)
                 now[0] += 120  # parsing time is not the MPD confirmation budget
                 return batch
 

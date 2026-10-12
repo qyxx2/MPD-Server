@@ -25,6 +25,8 @@ def install_sync(client, repository, root, target):
                 raise OSError('test disconnected')
 
         async def database_update_status(self):
+            if self.disconnected:
+                raise OSError('test disconnected')
             return DatabaseUpdateStatus(updating=False)
 
     class Publisher:

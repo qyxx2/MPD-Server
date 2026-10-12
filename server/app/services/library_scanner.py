@@ -1,111 +1,39 @@
 from __future__ import annotations
 
-import hashlib
-import json
-import uuid
-from collections.abc import Callable, Iterable
+import asyncio
+import inspect
+import threading
+from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
-from server.app.models.library import ScanBatch, ScanResult, Song
-from server.app.repositories.database import on_transaction_commit, run_transaction
+from server.app.models.library import ScanBatch, ScanResult
+from server.app.models.library_scan import PreparedScan, ScanBaseline
+from server.app.repositories.database import (
+    on_transaction_commit,
+    on_transaction_rollback,
+    run_transaction,
+    transaction_identity,
+)
 from server.app.repositories.library_repository import LibraryRepository
 
+from . import library_scan_prepare as media
 from .events import EventPublisher, LibraryChangedEvent, MPDDatabaseUpdater
+from .library_scan_prepare import LibraryScanError
 from .library_service import LibraryService
-from .media_metadata import MediaMetadataError, ParsedSongMetadata, parse_media_file
+from .media_metadata import MediaMetadataError
 from .realtime_coordinator import RealtimeCoordinator
 
-_SUPPORTED_SUFFIXES = {".flac", ".mp3"}
-_HASH_CHUNK_SIZE = 1024 * 1024
+
+class LibraryScanConflict(LibraryScanError):
+    """Prepared facts refer to an obsolete committed Library baseline."""
 
 
-class LibraryScanError(Exception):
-    """Raised when a library root cannot be scanned safely."""
-
-
-def _root_prefix(root: Path) -> str:
-    return str(root.resolve()).rstrip("/") + "/"
-
-
-def _hash_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(_HASH_CHUNK_SIZE):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _associated_audio_paths(path: Path) -> tuple[Path, ...]:
+def _outer(path: str):
     try:
-        entries = path.parent.iterdir()
-    except OSError:
-        return ()
-
-    matches: list[Path] = []
-    for entry in entries:
-        try:
-            if (
-                entry.is_file(follow_symlinks=False)
-                and entry.suffix.casefold() in _SUPPORTED_SUFFIXES
-                and entry.stem == path.stem
-            ):
-                matches.append(entry)
-        except OSError:
-            continue
-
-    return tuple(sorted(matches, key=str))
-
-
-def _identity_key(metadata: ParsedSongMetadata) -> str:
-    if metadata.title is None or not metadata.title.strip():
-        raise MediaMetadataError("required song title is missing")
-    value = {
-        "title": metadata.title.strip().casefold(),
-        "artists": sorted(value.casefold() for value in metadata.artists),
-        "album": metadata.album.strip().casefold() if metadata.album else None,
-        "album_artists": sorted(
-            value.casefold() for value in metadata.album_artists
-        ),
-        "track_number": metadata.track_number,
-        "disc_number": metadata.disc_number,
-        "year": metadata.year,
-        "date": metadata.date,
-    }
-    payload = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return hashlib.sha256(
-        f"identity-v1:{payload}".encode()
-    ).hexdigest()
-
-
-def _walk(root: Path) -> tuple[list[Path], bool]:
-    files: list[Path] = []
-    complete = True
-    stack = [root]
-    while stack:
-        directory = stack.pop()
-        try:
-            entries = list(directory.iterdir())
-        except OSError:
-            complete = False
-            continue
-        for entry in entries:
-            try:
-                if entry.is_dir(follow_symlinks=False):
-                    stack.append(entry)
-                elif (
-                    entry.is_file(follow_symlinks=False)
-                    and entry.suffix.casefold() in _SUPPORTED_SUFFIXES
-                ):
-                    files.append(entry)
-            except OSError:
-                complete = False
-    files.sort(key=lambda value: str(value.resolve()))
-    return files, complete
+        return transaction_identity(path)
+    except RuntimeError:
+        return None
 
 
 class LibraryScanner:
@@ -125,128 +53,85 @@ class LibraryScanner:
         self.batch_observer = batch_observer
         self._library_service = LibraryService(repository)
 
-    async def _match_song_id(
+        self._validated_outers: dict[object, str] = {}
+
+    async def _worker(self, callback, *args, **kwargs):
+        cancelled = threading.Event()
+        task = asyncio.create_task(
+            asyncio.to_thread(callback, *args, cancelled=cancelled, **kwargs)
+        )
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled.set()
+            await asyncio.gather(task, return_exceptions=True)
+            raise
+
+    async def prepare(
         self,
-        path: Path,
-        identity_key: str,
-        content_hash: str,
-    ) -> str | None:
-        exact = await self.repository.find_song_by_file_uri(str(path))
-        if exact is not None:
-            return exact.song_id
-
-        identity_candidates = [
-            candidate
-            for candidate in await self.repository.find_song_candidates_by_identity(
-                identity_key
-            )
-            if candidate.song_id is not None
-        ]
-        if len(identity_candidates) == 1:
-            candidate = identity_candidates[0]
-            if candidate.file_uri != str(path):
-                try:
-                    Path(candidate.file_uri).stat()
-                    old_exists = True
-                except FileNotFoundError:
-                    old_exists = False
-                except OSError:
-                    old_exists = True
-                if not old_exists:
-                    return candidate.song_id
-
-        content_candidates = [
-            candidate
-            for candidate in await self.repository.find_song_candidates_by_content_hash(
-                content_hash
-            )
-            if (
-                candidate.song_id is not None
-                and candidate.availability_status == "MISSING"
-            )
-        ]
-        if len(content_candidates) == 1:
-            return content_candidates[0].song_id
-        return None
-
-    async def _scan_files(self, paths: Iterable[Path]) -> ScanBatch:
-        songs: list[Song] = []
-        unreadable: list[str] = []
-        reserved_ids: set[str] = set()
-        for raw_path in paths:
-            path = raw_path.resolve()
-            if path.suffix.casefold() not in _SUPPORTED_SUFFIXES:
-                continue
-            try:
-                metadata = parse_media_file(path)
-                stat = path.stat()
-                content_hash = _hash_file(path)
-                existing = await self.repository.find_song_by_file_uri(
-                    str(path)
-                )
-                if metadata.title is None or not metadata.title.strip():
-                    if existing is None or not existing.title.strip():
-                        raise MediaMetadataError(
-                            "required song title is missing"
-                        )
-                    identity_key = existing.identity_key
-                    song_title = existing.title
-                    matched_song_id = existing.song_id
-                else:
-                    identity_key = _identity_key(metadata)
-                    song_title = metadata.title
-                    matched_song_id = (
-                        existing.song_id
-                        if existing is not None
-                        else await self._match_song_id(
-                            path, identity_key, content_hash
-                        )
-                    )
-                song_id = matched_song_id or str(uuid.uuid4())
-                if song_id in reserved_ids:
-                    song_id = str(uuid.uuid4())
-                reserved_ids.add(song_id)
-                songs.append(
-                    Song(
-                        song_id=song_id,
-                        title=song_title,
-                        file_uri=str(path),
-                        identity_key=identity_key,
-                        artists=metadata.artists,
-                        album=metadata.album,
-                        album_artists=metadata.album_artists,
-                        track_number=metadata.track_number,
-                        disc_number=metadata.disc_number,
-                        year=metadata.year,
-                        date=metadata.date,
-                        genres=metadata.genres,
-                        duration=metadata.duration,
-                        lyrics=metadata.lyrics,
-                        lyrics_format=metadata.lyrics_format,
-                        lyrics_source=metadata.lyrics_source,
-                        lyrics_status=metadata.lyrics_status,
-                        bit_depth=metadata.bit_depth,
-                        sample_rate_hz=metadata.sample_rate_hz,
-                        channel_count=metadata.channel_count,
-                        codec=metadata.codec,
-                        metadata_status=metadata.metadata_status,
-                        artwork=metadata.artwork,
-                        file_size=stat.st_size,
-                        file_mtime_ns=stat.st_mtime_ns,
-                        content_hash=content_hash,
-                        availability_status="AVAILABLE",
-                    )
-                )
-            except (PermissionError, OSError):
-                unreadable.append(str(path))
-        return ScanBatch(
-            songs=tuple(songs),
-            unreadable_file_uris=tuple(unreadable),
+        root: Path,
+        paths: tuple[Path, ...] | None = None,
+        *,
+        deep: bool = False,
+        identity: tuple[int, int] | None = None,
+    ) -> PreparedScan:
+        if _outer(self.repository.path) is not None:
+            raise LibraryScanError("prepare must run outside an outer transaction")
+        baseline = await self.repository.read_scan_baseline()
+        return await self._worker(
+            media.prepare_scan, root, baseline, paths, deep=deep, identity=identity
         )
 
-    async def _finalize(self, result: ScanResult) -> ScanResult:
-        mpd_update_error: str | None = None
-        if self.mpd_updater is not None:
+    async def precheck(self, prepared: PreparedScan) -> PreparedScan:
+        if _outer(self.repository.path) is not None:
+            raise LibraryScanError("precheck must run outside an outer transaction")
+        return await self._worker(media.validate_prepared, prepared)
+
+    async def commit(
+        self,
+        prepared: PreparedScan,
+        *,
+        stage_sync: Callable[[ScanResult], None] | None = None,
+        finalize: bool = True,
+    ) -> ScanResult:
+        if stage_sync is not None and inspect.iscoroutinefunction(stage_sync):
+            raise TypeError("stage_sync must be synchronous")
+        outer = _outer(self.repository.path)
+        if outer is None:
+            prepared = await self.precheck(prepared)
+        elif not prepared.checked:
+            raise LibraryScanError("outer commit requires a prechecked prepared scan")
+
+        async def operation(_):
+            owner = transaction_identity(self.repository.path)
+            original = self._validated_outers.get(owner)
+            if original is None:
+                baseline = await self.repository.read_scan_baseline()
+                if baseline.fingerprint != prepared.baseline.fingerprint:
+                    raise LibraryScanConflict("Library baseline changed before commit")
+                self._validated_outers[owner] = baseline.fingerprint
+                cleanup = lambda: self._validated_outers.pop(owner, None)
+                on_transaction_commit(self.repository.path, cleanup)
+                on_transaction_rollback(self.repository.path, cleanup)
+            elif original != prepared.baseline.fingerprint:
+                raise LibraryScanConflict(
+                    "prepared scan does not share outer original baseline"
+                )
+            result = await self._apply_batch(prepared.batch, finalize=finalize)
+            if stage_sync is not None:
+                staged = stage_sync(result)
+                if inspect.isawaitable(staged):
+                    if inspect.iscoroutine(staged):
+                        staged.close()
+                    raise TypeError("stage_sync must be synchronous")
+            return result
+
+        return await run_transaction(self.repository.path, operation)
+
+    async def _finalize(
+        self, result: ScanResult, *, update: bool = True, mpd_update_error: str | None = None,
+    ) -> ScanResult:
+        if update and self.mpd_updater is not None:
             try:
                 await self.mpd_updater.update_database()
             except Exception as exc:  # noqa: BLE001
@@ -260,96 +145,169 @@ class LibraryScanner:
             )
         return result
 
-    async def _apply_batch(self, batch: ScanBatch) -> ScanResult:
+    async def _apply_batch(self, batch: ScanBatch, *, finalize: bool = True) -> ScanResult:
         async def operation(_):
             before = (
                 await self._library_service.revision_content()
-                if self.coordinator is not None else None
+                if self.coordinator is not None
+                else None
             )
             result = await self.repository.apply_scan_batch(batch)
             if self.batch_observer is not None:
                 self.batch_observer(batch, result)
             if self.coordinator is not None:
                 self.coordinator.stage_change(
-                    frozenset({"library"}), before,
+                    frozenset({"library"}),
+                    before,
                     await self._library_service.revision_content(),
                 )
-            on_transaction_commit(
-                self.repository.path, lambda: self._finalize(result),
-            )
+            if finalize:
+                on_transaction_commit(
+                    self.repository.path,
+                    lambda: self._finalize(result),
+                )
             return result
 
         return await run_transaction(self.repository.path, operation)
 
+    async def _scan(
+        self, root: Path, paths: tuple[Path, ...] | None, *, deep=False
+    ) -> ScanResult:
+        prepared = await self.prepare(root, paths, deep=deep)
+        for attempt in range(3):
+            try:
+                if (
+                    prepared.metadata_failed
+                    and not prepared.batch.songs
+                    and not prepared.batch.observed_file_uris
+                    and not any(
+                        s.file_uri in prepared.batch.unreadable_file_uris
+                        for s in prepared.baseline.songs
+                    )
+                ):
+                    raise MediaMetadataError(
+                        "required song title is missing or unreadable media"
+                    )
+                result = await self.commit(prepared)
+                if prepared.metadata_failed and not prepared.batch.songs:
+                    raise MediaMetadataError("scan contains unreadable media")
+                return result
+            except LibraryScanConflict:
+                if attempt == 2:
+                    raise
+                prepared = await self.rebase(prepared, root, deep=deep)
+        raise AssertionError("unreachable")
+
+    async def rebase(
+        self, prepared: PreparedScan, root: Path, *, deep=False, paths: tuple[Path, ...] | None = None,
+    ) -> PreparedScan:
+        # Reuse successful media whose DB facts are still the same;
+        # only conflict paths are reparsed under a fresh baseline.
+        baseline = await self.repository.read_scan_baseline()
+        old = {s.file_uri: s for s in prepared.baseline.songs}
+        new = {s.file_uri: s for s in baseline.songs}
+        old_sidecars = dict(prepared.baseline.sidecars)
+        new_sidecars = dict(baseline.sidecars)
+
+        def facts(song):
+            return (
+                song.model_dump(exclude={"last_seen_at", "last_scanned_at"})
+                if song
+                else None
+            )
+
+        old_sources = dict(prepared.baseline.artwork_sources)
+        new_sources = dict(baseline.artwork_sources)
+        changed_albums = {
+            album_id
+            for album_id in old_sources.keys() | new_sources.keys()
+            if old_sources.get(album_id) != new_sources.get(album_id)
+        }
+        conflicts = tuple(
+            Path(uri)
+            for uri in old.keys() | new.keys()
+            if facts(old.get(uri)) != facts(new.get(uri))
+            or (old.get(uri) and old[uri].album_id in changed_albums)
+            or (new.get(uri) and new[uri].album_id in changed_albums)
+            or old_sidecars.get(old[uri].song_id if uri in old else None)
+            != new_sidecars.get(new[uri].song_id if uri in new else None)
+        )
+        # Use successful detached facts as a comparison cache, never as the
+        # database commit baseline. A fresh inventory must compare against the
+        # signatures that produced those cached facts, not silently bless old
+        # metadata with newer filesystem signatures.
+        changed = set(map(str, conflicts))
+        cached = {song.file_uri: song for song in prepared.batch.songs
+                  if song.file_uri not in changed}
+        projected_songs = {song.song_id: song for song in baseline.songs}
+        projected_songs.update({song.song_id: song for song in cached.values()})
+        projected_sidecars = dict(baseline.sidecars)
+        ids = {song.file_uri: song.song_id for song in projected_songs.values()}
+        for uri, signature in prepared.batch.sidecar_signatures.items():
+            if uri not in changed and uri in ids:
+                projected_sidecars[ids[uri]] = signature
+        projected = ScanBaseline(tuple(projected_songs.values()), tuple(projected_sidecars.items()),
+                                 baseline.fingerprint, baseline.artwork_sources)
+        fresh = await self._worker(
+            media.prepare_scan, root, projected, None, deep=False,
+            identity=prepared.inventory.identity,
+        )
+        # Manual/deep work still forces conflict or newly requested paths whose
+        # stat did not change. Already parsed facts and stable cached successes
+        # must not be hashed twice.
+        requested = set()
+        for entry in fresh.inventory.entries:
+            path = Path(entry.file_uri)
+            if path.suffix.casefold() not in {".flac", ".mp3"}:
+                continue
+            if paths is None or any(path == target or path.is_relative_to(target)
+                                    or path.with_suffix(".lrc") == target for target in paths):
+                requested.add(path)
+        forced = set(conflicts) | requested
+        parsed = {song.file_uri for song in fresh.batch.songs}
+        present = {entry.file_uri for entry in fresh.inventory.entries}
+        forced = tuple(path for path in forced if str(path) in present
+                       and str(path) not in parsed and str(path) not in cached)
+        if deep and forced:
+            extra = await self._worker(media.prepare_scan, root, projected, forced,
+                                       deep=True, identity=prepared.inventory.identity)
+            fresh = replace(fresh, batch=fresh.batch.model_copy(update={
+                "songs": fresh.batch.songs + extra.batch.songs,
+                "sidecar_signatures": {**fresh.batch.sidecar_signatures, **extra.batch.sidecar_signatures},
+                "unreadable_file_uris": tuple(set(fresh.batch.unreadable_file_uris) | set(extra.batch.unreadable_file_uris)),
+            }))
+        failed = set(fresh.batch.unreadable_file_uris)
+        present = {entry.file_uri for entry in fresh.inventory.entries}
+        songs = {uri: song for uri, song in cached.items() if uri in present and uri not in failed}
+        songs.update({song.file_uri: song for song in fresh.batch.songs})
+        deltas = {uri: value for uri, value in prepared.batch.sidecar_signatures.items()
+                  if uri not in changed and uri in present and uri not in failed}
+        deltas.update(fresh.batch.sidecar_signatures)
+        batch = fresh.batch.model_copy(update={
+            "songs": tuple(songs.values()),
+            "observed_file_uris": tuple(uri for uri in fresh.batch.observed_file_uris if uri not in songs),
+            "sidecar_signatures": deltas,
+        })
+        return replace(fresh, baseline=baseline, batch=batch,
+                       audio_index_changed=media._audio_changed(batch, baseline),
+                       failed_paths=tuple(Path(uri) for uri in batch.unreadable_file_uris),
+                       metadata_failed=prepared.metadata_failed or fresh.metadata_failed)
+
     async def scan_full(self, root: Path) -> ScanResult:
-        root = root.resolve()
-        if not root.is_dir():
-            raise LibraryScanError(
-                f"library root is not a directory: {root}"
-            )
-        files, complete = _walk(root)
-        batch = await self._scan_files(files)
-        if complete:
-            batch = batch.model_copy(
-                update={"reconciled_root_uri_prefix": _root_prefix(root)}
-            )
-        return await self._apply_batch(batch)
+        return await self._scan(root, None)
 
     async def scan_paths(self, paths: list[Path]) -> ScanResult:
-        expanded: list[Path] = []
-        for raw_path in paths:
-            path = raw_path.resolve()
-            if path.suffix.casefold() == ".lrc":
-                expanded.extend(_associated_audio_paths(path))
-            elif path.is_dir() and not path.is_symlink():
-                files, _ = _walk(path)
-                expanded.extend(files)
-            elif path.is_file() and not path.is_symlink():
-                expanded.append(path)
-        deduped = {path for path in expanded}
-        batch = await self._scan_files(sorted(deduped, key=str))
-        extra_paths: set[Path] = set()
-        for song in batch.songs:
-            if song.song_id is None or song.artwork is not None:
-                continue
-            source_song_id = (
-                await self.repository.get_album_artwork_source_song_id(
-                    song.song_id
-                )
-            )
-            if source_song_id != song.song_id:
-                continue
-            for candidate_song_id, file_uri in (
-                await self.repository.list_song_file_uris_in_album(
-                    song.song_id
-                )
-            ):
-                if candidate_song_id == song.song_id:
-                    continue
-                candidate = Path(file_uri)
-                if candidate in deduped:
-                    continue
-                try:
-                    if candidate.is_file() and not candidate.is_symlink():
-                        extra_paths.add(candidate)
-                except OSError:
-                    continue
+        if _outer(self.repository.path) is not None:
+            raise LibraryScanError("prepare must run outside an outer transaction")
+        if not paths:
+            return await self._apply_batch(ScanBatch())
 
-        if extra_paths:
-            extra_batch = await self._scan_files(
-                sorted(extra_paths, key=str)
-            )
-            songs_by_uri = {song.file_uri: song for song in batch.songs}
-            songs_by_uri.update(
-                {song.file_uri: song for song in extra_batch.songs}
-            )
-            batch = ScanBatch(
-                songs=tuple(songs_by_uri.values()),
-                unreadable_file_uris=tuple(
-                    sorted(
-                        set(batch.unreadable_file_uris)
-                        | set(extra_batch.unreadable_file_uris)
-                    )
-                ),
-            )
-        return await self._apply_batch(batch)
+        # Root inference is filesystem work too: do it in a worker.
+        def common_root():
+            import os
+
+            roots = [p if p.is_dir() else p.parent for p in paths]
+            return Path(os.path.commonpath(roots))
+
+        root = await asyncio.to_thread(common_root)
+        return await self._scan(root, tuple(paths))

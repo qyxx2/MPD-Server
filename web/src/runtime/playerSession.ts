@@ -1,5 +1,6 @@
 import type { Notice } from '../stores/notices'
 import type { PlayerStore } from '../stores/player'
+import { ApiError } from '../types/api'
 import { computed, onMounted, ref, watch, type InjectionKey } from 'vue'
 import { derivePlayerFacts } from '../components/player/playerFacts'
 import { createPlayerActions, type PlayerRuntime } from '../components/player/playerActions'
@@ -78,9 +79,10 @@ export function createPlayerSession(store: PlayerStore, runtime: PlayerRuntime |
     // operation already explains the same transition.
     if (handoff.value && !result.length) add('playback-status', '正在同步 · 展示上次确认数据', true)
     else if (statusFeedback.value) add('playback-status', statusFeedback.value, false, statusFeedback.value === facts.value.stateLabel && store.snapshot?.playback_observation.sync_status === 'CONFIRMED' ? 'info' : undefined)
-    if (!store.writable) add('connection', '连接中断 · 只读；等待完整状态恢复')
+    const timeout = store.error instanceof ApiError && ['INITIAL_SNAPSHOT_TIMEOUT', 'READ_TIMEOUT'].includes(store.error.code) ? store.error : null
+    if (!store.writable) add('connection', timeout?.code === 'INITIAL_SNAPSHOT_TIMEOUT' ? timeout.message : '连接中断 · 只读；等待完整状态恢复')
     if (!handoff.value && store.writable && !facts.value.capabilities.pause && !facts.value.capabilities.resume) add('selection', '需明确选曲后播放')
-    if (store.error) add('read', '状态读取异常，保留最后事实')
+    if (store.error && timeout?.code !== 'INITIAL_SNAPSHOT_TIMEOUT') add('read', timeout?.message ?? '状态读取异常，保留最后事实')
     const song = media.value.song
     if (song && song.availability_status !== 'AVAILABLE') add('file', song.availability_status === 'MISSING' ? '文件缺失' : '文件不可读')
     if (artworkNotice.value) add('artwork', artworkNotice.value, artworkNotice.value === '封面加载中')

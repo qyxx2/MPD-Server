@@ -54,8 +54,10 @@ def test_outer_scan_waits_for_commit_and_keeps_completion_order(
 
         scanner = LibraryScanner(repository, Publisher(), Updater())
 
+        prepared = await scanner.prepare(root)
+
         async def failing_outer(_):
-            await scanner.scan_full(root)
+            await scanner.commit(prepared)
             assert order == []
             raise RuntimeError("terminal failed")
 
@@ -68,7 +70,7 @@ def test_outer_scan_waits_for_commit_and_keeps_completion_order(
             from server.app.repositories.database import on_transaction_visible
 
             on_transaction_visible(path, lambda: order.append("commit"))
-            result = await scanner.scan_full(root)
+            result = await scanner.commit(prepared)
             assert order == []
             return result
 
@@ -128,12 +130,14 @@ def test_real_metadata_move_and_availability_preserve_references(
         assert (await repository.get_song(song_id)).file_uri == str(moved)
         await preserved(3, "AVAILABLE")
 
-        from server.app.services import library_scanner as scanner_module
+        from server.app.services import library_scan_prepare as scanner_module
 
         with monkeypatch.context() as patch:
             def unreadable(_):
                 raise PermissionError("source unavailable")
 
+            source_stat = moved.stat()
+            os.utime(moved, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns + 1))
             patch.setattr(scanner_module, "parse_media_file", unreadable)
             await scanner.scan_paths([moved])
         await preserved(4, "UNREADABLE")
@@ -175,24 +179,27 @@ def test_outer_scan_delta_rollback_cancel_restore_and_batch(
             target.write_bytes(original_bytes)
             os.utime(target, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
 
-        async def outer(_):
-            tags = FLAC(target)
-            tags["title"] = ["Temporary"]
+        tags = FLAC(target)
+        tags["title"] = ["Temporary"]
+        tags.save()
+        first = await scanner.prepare(root, (target,), deep=True)
+        if mode == "restore":
+            restore_source()
+        elif mode == "batch":
+            tags["title"] = ["Final"]
             tags.save()
-            await scanner.scan_paths([target])
+        second = await scanner.prepare(root, (target,), deep=True)
+        assert first.baseline.fingerprint == second.baseline.fingerprint
+
+        async def outer(_):
+            await scanner.commit(first)
             assert coordinator.marker() == marker
             assert events == []
             if mode == "rollback":
                 raise RuntimeError("outer failure")
             if mode == "cancel":
                 raise asyncio.CancelledError()
-            if mode == "restore":
-                restore_source()
-                await scanner.scan_paths([target])
-            else:
-                tags["title"] = ["Final"]
-                tags.save()
-                await scanner.scan_paths([target])
+            await scanner.commit(second)
 
         if mode in {"rollback", "cancel"}:
             exception = RuntimeError if mode == "rollback" else asyncio.CancelledError
@@ -454,7 +461,8 @@ def test_content_revision_is_visible_before_optional_update_and_completion(
         assert await LibraryService(repository).revision_content() == before
         assert coordinator.marker().library_revision == 1
         assert len(events) == 2
-        assert events[1].result.updated_song_ids == result.added_song_ids
+        assert events[1].result.updated_song_ids == ()
+        assert events[1].result.missing_song_ids == ()
         assert events[1].mpd_update_error == "MPD unavailable"
 
     asyncio.run(scenario())

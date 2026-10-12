@@ -49,7 +49,7 @@ def test_step4_failed_parse_does_not_overwrite_known_good_metadata(
         raise media_metadata.MediaMetadataError("broken media")
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         fail,
     )
 
@@ -170,7 +170,7 @@ def test_step5_unreadable_file_is_marked_unreadable(
     first = _run(scanner.scan_full(root))
     song_id = first.added_song_ids[0]
 
-    import server.app.services.library_scanner as scanner_module
+    import server.app.services.library_scan_prepare as scanner_module
 
     real_parser = scanner_module.parse_media_file
 
@@ -179,6 +179,9 @@ def test_step5_unreadable_file_is_marked_unreadable(
             raise PermissionError("test unreadable")
         return real_parser(path)
 
+    import os
+    stat = target.stat()
+    os.utime(target, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
     monkeypatch.setattr(scanner_module, "parse_media_file", fail_only_target)
     result = _run(scanner.scan_full(root))
     song = _run(LibraryRepository(str(db_path)).get_song(song_id))
@@ -192,7 +195,8 @@ def test_step7_scanner_hashes_content_and_uses_unique_identity_for_move(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    from server.app.services.library_scanner import LibraryScanner, _identity_key
+    from server.app.services.library_scan_prepare import _identity_key
+    from server.app.services.library_scanner import LibraryScanner
     from server.app.services.media_metadata import ParsedSongMetadata
 
     target = tmp_path / "new.mp3"
@@ -215,7 +219,7 @@ def test_step7_scanner_hashes_content_and_uses_unique_identity_for_move(
         )
     ])
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: metadata,
     )
 
@@ -234,7 +238,8 @@ def test_step7_live_copy_and_ambiguous_identity_do_not_match_existing_song(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    from server.app.services.library_scanner import LibraryScanner, _identity_key
+    from server.app.services.library_scan_prepare import _identity_key
+    from server.app.services.library_scanner import LibraryScanner
     from server.app.services.media_metadata import ParsedSongMetadata
 
     existing_file = tmp_path / "existing.mp3"
@@ -252,7 +257,7 @@ def test_step7_live_copy_and_ambiguous_identity_do_not_match_existing_song(
         ),
     ])
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: metadata,
     )
 
@@ -302,7 +307,7 @@ def test_step7_unique_missing_content_hash_is_reused(
         )
     ])
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: ParsedSongMetadata(title="New"),
     )
 
@@ -332,13 +337,14 @@ def test_step7_parse_failure_never_applies_partial_batch(
         return ParsedSongMetadata(title="A")
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         parser,
     )
 
-    with pytest.raises(MediaMetadataError):
-        _run(LibraryScanner(repository).scan_full(tmp_path))
-    assert repository.applied == []
+    _run(LibraryScanner(repository).scan_full(tmp_path))
+    assert len(repository.applied) == 1
+    assert [song.title for song in repository.applied[0].songs] == ['A']
+    assert repository.applied[0].unreadable_file_uris == (str(second),)
 
 
 def test_step7_unknown_title_is_not_fabricated(
@@ -355,7 +361,7 @@ def test_step7_unknown_title_is_not_fabricated(
     target.write_bytes(b"data")
     repository = _ScannerFakeRepository()
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: ParsedSongMetadata(title=None),
     )
 
@@ -383,7 +389,7 @@ def test_step7_full_scan_does_not_follow_symlinked_directories(
 
     repository = _ScannerFakeRepository()
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: (_ for _ in ()).throw(
             AssertionError("symlinked file was scanned")
         ),
@@ -405,19 +411,21 @@ def test_step7_traversal_error_disables_missing_reconciliation(
     target.write_bytes(b"data")
     repository = _ScannerFakeRepository()
     monkeypatch.setattr(
-        "server.app.services.library_scanner._walk",
+        "server.app.services.library_scan_prepare._walk",
         lambda _root: ([target], False),
     )
 
     from server.app.services.media_metadata import ParsedSongMetadata
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: ParsedSongMetadata(title="Track"),
     )
 
-    _run(LibraryScanner(repository).scan_full(root))
-    assert repository.applied[0].reconciled_root_uri_prefix is None
+    from server.app.services.library_scanner import LibraryScanError
+    with pytest.raises(LibraryScanError, match='incomplete'):
+        _run(LibraryScanner(repository).scan_full(root))
+    assert repository.applied == []
 
 
 class _ScannerFakeRepository:
@@ -428,6 +436,10 @@ class _ScannerFakeRepository:
             if song.song_id is not None
         }
         self.applied = []
+
+    async def read_scan_baseline(self):
+        from server.app.models.library_scan import ScanBaseline
+        return ScanBaseline(tuple(self.songs.values()), (), repr(self.songs))
 
     async def find_song_by_file_uri(self, file_uri: str):
         return next(
@@ -525,7 +537,7 @@ def test_step10_event_contract_and_post_commit_order(
             order.append("update")
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: ParsedSongMetadata(title="Track"),
     )
 
@@ -561,7 +573,7 @@ def test_step10_mpd_update_failure_is_reported_without_rollback(
             raise RuntimeError("MPD unavailable")
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: ParsedSongMetadata(title="Track"),
     )
 
@@ -605,7 +617,7 @@ def test_step10_repository_failure_never_publishes_or_updates_mpd(
             updated.append(True)
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         lambda _path: ParsedSongMetadata(title="Track"),
     )
 
@@ -673,7 +685,7 @@ def test_batch1_scanner_preserves_lyrics_observability_to_song_and_repository(
         target.write_bytes(b"scanner test media")
 
         monkeypatch.setattr(
-            "server.app.services.library_scanner.parse_media_file",
+            "server.app.services.library_scan_prepare.parse_media_file",
             lambda _path, parsed=parsed: parsed,
         )
 
@@ -718,7 +730,7 @@ def test_batch1_known_good_lyrics_status_survives_parse_failure(
         raise media_metadata.MediaMetadataError("broken media")
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         fail,
     )
 
@@ -818,7 +830,7 @@ def test_batch2_lrc_events_are_deduplicated_with_audio_targets(
         )
 
     monkeypatch.setattr(
-        "server.app.services.library_scanner.parse_media_file",
+        "server.app.services.library_scan_prepare.parse_media_file",
         parse,
     )
 

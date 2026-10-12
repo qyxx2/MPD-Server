@@ -304,7 +304,7 @@ def test_batch4_scanner_reuses_unique_missing_identity_candidate(
         )
     )
 
-    from server.app.services import library_scanner as scanner_module
+    from server.app.services import library_scan_prepare as scanner_module
 
     identity_key = scanner_module._identity_key(identity_metadata)
     run(
@@ -361,7 +361,7 @@ def test_batch4_scanner_reuses_unique_missing_content_hash_candidate(
         )
     )
 
-    from server.app.services import library_scanner as scanner_module
+    from server.app.services import library_scan_prepare as scanner_module
 
     metadata = ParsedSongMetadata(title="New", artists=("Artist",))
     monkeypatch.setattr(
@@ -395,7 +395,7 @@ def test_batch4_scanner_live_copy_stays_a_new_song_through_repository(
     copy_path.write_bytes(payload)
 
     metadata = ParsedSongMetadata(title="Same", artists=("Artist",))
-    import server.app.services.library_scanner as scanner_module
+    import server.app.services.library_scan_prepare as scanner_module
 
     monkeypatch.setattr(
         scanner_module, "parse_media_file", lambda _path: metadata

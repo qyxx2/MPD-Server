@@ -175,3 +175,19 @@ it('confirmed_but_unsynced_result_keeps_read_recovery_then_retains_confirmed_suc
   expect(h.network.requests.filter(r => r.init?.method === 'PUT')).toHaveLength(1)
   h.wrapper.unmount()
 })
+
+it.each([
+  ['INITIAL_SNAPSHOT_TIMEOUT', '初始状态读取超时，正在重连'],
+  ['READ_TIMEOUT', '状态读取超时，请重试'],
+])('top_timeout_%s_keeps_existing_read_recovery', async (code, message) => {
+  const { ApiError } = await import('../../src/services/api')
+  const h = await shellPage(Response.json(playerState()))
+  try {
+    h.store.markDisconnected(new ApiError('network', null, code!, message!))
+    await flushPromises()
+    await h.wrapper.get('.status-toggle').trigger('click')
+    expect(h.wrapper.get('.status-details').text()).toContain(message)
+    expect(h.wrapper.findAll(`[data-notice="${code === 'READ_TIMEOUT' ? 'read' : 'connection'}"]`)).toHaveLength(1)
+    expect(h.wrapper.find('button[aria-label^="重新读取"]').exists()).toBe(true)
+  } finally { h.wrapper.unmount() }
+})

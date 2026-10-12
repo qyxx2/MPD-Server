@@ -2,7 +2,21 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
+
+SIDECAR_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS library_sidecar_signatures (
+    song_id TEXT PRIMARY KEY REFERENCES songs(song_id) ON DELETE CASCADE,
+    lrc_uri TEXT NOT NULL,
+    file_size INTEGER,
+    file_mtime_ns INTEGER,
+    CHECK (
+        (file_size IS NULL AND file_mtime_ns IS NULL)
+        OR (typeof(file_size) = 'integer' AND file_size >= 0
+            AND typeof(file_mtime_ns) = 'integer' AND file_mtime_ns >= 0)
+    )
+);
+"""
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS albums (
@@ -165,6 +179,8 @@ CREATE INDEX IF NOT EXISTS idx_playlist_items_playlist_position ON playlist_item
 CREATE INDEX IF NOT EXISTS idx_history_song_started_at ON history(song_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_idempotency_records_key ON idempotency_records(idempotency_key);
 """
+
+SCHEMA_SQL += SIDECAR_SCHEMA_SQL
 
 
 def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
@@ -343,6 +359,16 @@ def _migrate_v3_to_v4(connection: sqlite3.Connection) -> None:
         raise
 
 
+def _migrate_v4_to_v5(connection: sqlite3.Connection) -> None:
+    try:
+        connection.executescript(
+            f"BEGIN;\n{SIDECAR_SCHEMA_SQL}\nPRAGMA user_version = 5;\nCOMMIT;"
+        )
+    except Exception:
+        connection.rollback()
+        raise
+
+
 def apply_migrations(connection: sqlite3.Connection) -> None:
     current = connection.execute("PRAGMA user_version").fetchone()[0]
     if current > SCHEMA_VERSION:
@@ -362,3 +388,6 @@ def apply_migrations(connection: sqlite3.Connection) -> None:
         current = 3
     if current == 3:
         _migrate_v3_to_v4(connection)
+        current = 4
+    if current == 4:
+        _migrate_v4_to_v5(connection)

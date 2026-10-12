@@ -165,6 +165,12 @@ def test_saved_endpoint_overrides_invalid_old_environment_and_adapter_uses_it(
 ):
     from server.app import main
 
+    # Exercise adapter composition even when the suite defaults to mock mode;
+    # the adapter below still returns a deterministic MockMPD.
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setenv("MPD_MODE", "real")
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path / "config"))
+    monkeypatch.setenv("MUSIC_ROOT", str(tmp_path))
     path = tmp_path / "connection.json"
     path.write_text('{"host":"new.example","port":6601}')
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "music.db"))
