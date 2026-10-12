@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  server:
+    image: ghcr.io/qyxx2/mpd-server:sha-81129b9fb96e8bfb6f0a95c3324d3cd764d9cb56
+
+    container_name: mpd-server
+    restart: unless-stopped
+
+    environment:
+      # 运行环境
+      APP_ENV: "production"
+
+      # 真实 MPD 连接
+      MPD_MODE: "real"
+      MPD_HOST: "192.168.3.94"
+      MPD_PORT: "6600"
+      MPD_PASSWORD: ""
+      MPD_URI_PREFIX: ""
+
+      # 音乐目录
+      MUSIC_ROOT: "/music"
+
+      # 数据库与持久化配置
+      DATABASE_PATH: "/data/music-server.db"
+      CONFIG_DIR: "/config"
+      MPD_CONNECTION_PATH: "/data/mpd-connection.json"
+
+      # HTTP 服务
+      HTTP_HOST: "0.0.0.0"
+      HTTP_PORT: "8000"
+      WORKERS: "1"
+
+      # MPD 能力证明（有文件时才启用）
+      MPD_CAPABILITIES_PATH: "/config/mpd-capabilities.json"
+      OUTPUT_NAME: USB DAC
+      OUTPUT_PLUGIN: alsa
+
+    volumes:
+      # 数据库与持久化数据
+      - /volume1/docker/mpd-server/data:/data
+
+      # 配置文件
+      - /volume1/docker/mpd-server/config:/config
+
+      # 音乐目录（只读）
+      - /volume1/music:/music:ro
+
+    ports:
+      - "18000:8000"
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

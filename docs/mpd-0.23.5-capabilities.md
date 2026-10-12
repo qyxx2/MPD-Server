@@ -642,3 +642,17 @@ s11-fault-cleanup-20261008.json
 ### 2026-10-09 S12联合门禁状态
 
 S11能力证据仍限已授权现有NAS部署功能范围；本轮未取得新目标响应或改变目标。S12本地联合、全部规定回归及Ruff已通过；D6/Batch13/Task6 functional final PASSED，原本地DB保留审计UNVERIFIED独立记录，见[唯一D6 acceptance](superpowers/archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。main仅提前完成现有本地Queue初始化，目标harness的Adapter/Service/runner路径未变；不把本地GREEN改写为daemon精确0.23.5、源码溯源或物理DAC通过。默认运行配置未更改，Task10/12仍独立。
+
+
+### 2026-10-12 首次部署能力证明实测
+
+用户授权本机直接连接当前目标进行部署所需能力实测。endpoint=`192.168.3.94:6600`，本轮TCP greeting协议版本=`0.23.5`；不新增daemon binary身份或物理DAC证明。
+生成的本机运行文件为`deploy/config/mpd-capabilities.json`（Git ignored，不作为仓库内通用配置提交），envelope为endpoint/mpd_version/result。SHA256=`076e41b2fcd74fe17e6e85c057cec06012e29df8bfa58c1637b8b865bf142b35`。
+
+本轮真实Verified operations：`queue_entries/queue_add/queue_delete/queue_move/queue_play/queue_clear/set_output_enabled/stats/database_update_status/has_library_uri`，共10项。精确URI存在、缺失、相似但缺失及再次存在均经实际Adapter确认；唯一不存在探针URI的update取得job并由实际status观察完成，未更新真实音乐文件。`updating_db`未在轮询status中捕获，不伪造busy字段或耗时。
+
+队列和播放控制在临时partition执行，仅临时借用原关闭的HTTP Stream输出；测试重复URI不同ID、前后移动、删除、播放、暂停/resume/seek、next/previous、stop、clear及repeat/random回读，不操作USB DAC。最终default partition完整status（paused/Id5/elapsed12.620/version6）、playlistinfo（含原ID）及outputs逐项与前置相等。MPD配置根读取返回ACK4“只允许本地客户端”，本轮不能证明NAS实际music_directory；音乐根挂载对应关系仍待NAS验收。
+
+能力加载器使用真实greeting验证文件通过；错误endpoint/version的fail-closed检查通过。没有修改生产源码、测试、依赖、本地DB或媒体；不抵扣B03 NAS规模及时性、B08/B09及声音验收。
+
+**清理剩余项：**MPD持续拒绝删除本轮自建空partition `mpd_server_verify_c19f26e8de11`（ACK5 `partition still has clients`）。其中Queue为空、stopped、仅有移回后的dummy output；HTTP Stream已回default且关闭，主状态/原队列/输出恢复确认通过。临时partition清理Gate仍BLOCKED，不能记为完整清理成功。未重启daemon、未删除其它partition、未重建主队列或改变其ID。原始临时报告保留于`/tmp/mpd-live-capabilities-cdbyhzz1`，报告首次清理失败不改写为PASS；后续需NAS侧确认残留客户端后删除该唯一临时partition。
