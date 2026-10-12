@@ -263,12 +263,15 @@ class PlaybackObservations:
                 and entries[0].position == 0 and entries[0].mpd_song_id == binding.entries[0][1]
                 and entries[0].song_uri == binding.entries[0][2]
             )
-            if not matched:
+            controllable = matched and self.service._control_sample_supported(sample)
+            # External mode drift retires the old token even if publication rolls back.
+            if (not controllable or (self.service._control_targets.target is not None
+                                    and self.service._control_targets.consume != sample.consume)):
                 self.service._control_targets.invalidate()
             control_target = (
                 self.service._control_targets.publish(
-                    self.service._control_identity(), binding.entries[0][0],
-                ) if matched else None
+                    self.service._control_identity(), binding.entries[0][0], consume=sample.consume,
+                ) if controllable else None
             )
             actual_current = None
             if any(value is not None for value in (

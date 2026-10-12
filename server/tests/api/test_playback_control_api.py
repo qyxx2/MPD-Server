@@ -14,6 +14,234 @@ def target_for(playback):
     return target.model_dump()
 
 
+def consume_samples(player, monkeypatch, enabled):
+    """Keep MockMPD execution evidence intact, varying only the external mode."""
+    mode = {'consume': enabled}
+    read = player.read_execution_sample
+
+    async def sample():
+        return (await read()).model_copy(update=mode)
+
+    monkeypatch.setattr(player, 'read_execution_sample', sample)
+    return mode
+
+
+@pytest.mark.parametrize('consume', [True, False])
+def test_pause_resume_uses_published_target_without_changing_consume(
+    state_client, monkeypatch, consume,
+):
+    client, _, playback, player, _, _, _, _ = state_client
+    consume_samples(player, monkeypatch, consume)
+    player._elapsed = 37
+    paused = mutate(client, 'POST', '/api/playback/pause')
+    assert paused.status_code == 200, paused.text
+    run(playback.observe())
+    snapshot = client.get('/api/state').json()
+    assert snapshot['playback']['state'] == 'PAUSED'
+    assert snapshot['playback_observation']['sync_status'] == 'CONFIRMED'
+    target = snapshot['playback_observation']['control_target']
+    assert target is not None
+    before = server_snapshot(playback)
+    entries = run(player.queue_entries())
+    commands = []
+    play = player.play
+
+    async def resume_only(uri=None):
+        commands.append(uri)
+        await play(uri)
+
+    async def forbidden(*args):
+        raise AssertionError('resume rebuilt execution or changed modes')
+
+    monkeypatch.setattr(player, 'play', resume_only)
+    for name in ('seek', 'queue_play', 'queue_clear', 'queue_add', 'queue_delete',
+                 'queue_move', 'set_random', 'set_repeat'):
+        monkeypatch.setattr(player, name, forbidden)
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': target})
+    assert result.status_code == 200, result.text
+    assert result.json()['state'] == 'PLAYING'
+    assert result.json()['position_seconds'] == 37
+    assert commands == [None]
+    assert run(player.status()).state.value == 'playing'
+    assert run(player.read_execution_sample()).consume is consume
+    assert run(player.queue_entries()) == entries
+    after = server_snapshot(playback)
+    assert after[0] == before[0] and after[2:] == before[2:]
+    assert after[1].song_id == before[1].song_id
+    assert after[1].playback_context_id == before[1].playback_context_id
+    assert after[1].autoplay_enabled == before[1].autoplay_enabled
+
+
+@pytest.mark.parametrize('initial', [True, False])
+def test_resume_rejects_external_consume_change_before_command(
+    state_client, monkeypatch, initial,
+):
+    client, _, playback, player, _, _, _, _ = state_client
+    mode = consume_samples(player, monkeypatch, initial)
+    run(playback.pause())
+    target = target_for(playback)
+    before = server_snapshot(playback)
+    mode['consume'] = not initial
+
+    async def forbidden(*args):
+        raise AssertionError('changed mode target sent resume')
+
+    monkeypatch.setattr(player, 'play', forbidden)
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': target})
+    assert result.status_code == 409, result.text
+    assert result.json()['error']['code'] == 'PLAYBACK_TARGET_CONFLICT'
+    assert server_snapshot(playback) == before
+    assert client.get('/api/state').json()['playback_observation']['control_target'] is None
+    mode['consume'] = initial
+    fresh = target_for(playback)
+    assert fresh != target  # Rollback and restoring the mode cannot revive this token.
+
+
+@pytest.mark.parametrize('initial', [True, False])
+def test_observed_consume_change_rotates_target(state_client, monkeypatch, initial):
+    client, _, playback, player, _, _, _, _ = state_client
+    mode = consume_samples(player, monkeypatch, initial)
+    run(playback.pause())
+    target = target_for(playback)
+    mode['consume'] = not initial
+    fresh = target_for(playback)
+    assert fresh != target
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': target})
+    assert result.status_code == 409, result.text
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': fresh})
+    assert result.status_code == 200, result.text
+
+
+@pytest.mark.parametrize('initial', [True, False])
+def test_resume_does_not_confirm_external_consume_change_after_command(
+    state_client, monkeypatch, initial,
+):
+    client, _, playback, player, _, _, _, _ = state_client
+    mode = consume_samples(player, monkeypatch, initial)
+    run(playback.pause())
+    target = target_for(playback)
+    before = server_snapshot(playback)
+    play = player.play
+
+    async def changed_mode(uri=None):
+        await play(uri)
+        mode['consume'] = not initial
+
+    monkeypatch.setattr(player, 'play', changed_mode)
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': target})
+    assert result.status_code == 502, result.text
+    assert result.json()['error']['code'] == 'PLAYBACK_RECONCILIATION_FAILED'
+    assert server_snapshot(playback) == before
+    assert client.get('/api/state').json()['playback_observation']['control_target'] is None
+
+
+@pytest.mark.parametrize('mode', ['single', 'random', 'repeat', 'error'])
+def test_state_does_not_publish_target_rejected_by_mode_or_error(
+    state_client, monkeypatch, mode,
+):
+    client, _, playback, player, _, _, _, _ = state_client
+    read = player.read_execution_sample
+    run(playback.pause())
+
+    async def unsupported():
+        sample = await read()
+        if mode in {'random', 'repeat'}:
+            return sample.model_copy(update={'status': sample.status.model_copy(update={mode: True})})
+        return sample.model_copy(update={mode: '1' if mode == 'single' else 'decoder error'})
+
+    monkeypatch.setattr(player, 'read_execution_sample', unsupported)
+    run(playback.observe())
+    assert client.get('/api/state').json()['playback_observation']['control_target'] is None
+
+
+def test_expired_consume_target_requires_fresh_execution_evidence(state_client, monkeypatch):
+    client, _, playback, player, _, _, clock, _ = state_client
+    mode = consume_samples(player, monkeypatch, True)
+    player._elapsed = 37
+    run(playback.pause())
+    target = target_for(playback)
+    clock.advance(6.01)
+    assert client.get('/api/state').json()['playback_observation']['control_target'] is None
+    # Age alone does not end the binding lifetime; resume must read actual MPD.
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': target}, key='fresh-check')
+    assert result.status_code == 200, result.text
+    run(playback.pause())
+    target = target_for(playback)
+    clock.advance(6.01)
+    mode['consume'] = False
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': target}, key='expired-change')
+    assert result.status_code == 409, result.text
+
+
+def test_observed_consume_change_rollback_never_revives_old_target(state_client, monkeypatch):
+    client, _, playback, player, _, _, _, _ = state_client
+    mode = consume_samples(player, monkeypatch, True)
+    run(playback.pause())
+    target = target_for(playback)
+    mode['consume'] = False
+
+    set_observation = playback._observations._set
+
+    async def rolled_back(observation):
+        await set_observation(observation)
+        assert observation.control_target.model_dump() != target
+        raise RuntimeError('outer rollback')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(playback._observations, '_set', rolled_back)
+        with pytest.raises(RuntimeError, match='outer rollback'):
+            run(playback.observe())
+    mode['consume'] = True
+    fresh = target_for(playback)
+    assert fresh != target
+    result = mutate(client, 'POST', '/api/playback/resume', {'target': target})
+    assert result.status_code == 409, result.text
+
+
+@pytest.mark.parametrize('consume', [True, False])
+def test_next_previous_preserve_occurrences_with_consume(state_client, monkeypatch, consume):
+    client, _, playback, player, _, _, _, _ = state_client
+    consume_samples(player, monkeypatch, consume)
+    original = server_snapshot(playback)[0]
+    current = next(item for item in original.items if item.position == 0)
+    successor = next(item for item in original.items if item.position == 1)
+    result = mutate(client, 'POST', '/api/playback/next')
+    assert result.status_code == 200, result.text
+    assert next(item for item in run(playback.queue_manager.list_items())
+                if item.position == 0).queue_item_id == successor.queue_item_id
+    result = mutate(client, 'POST', '/api/playback/previous')
+    assert result.status_code == 200, result.text
+    assert next(item for item in run(playback.queue_manager.list_items())
+                if item.position == 0).queue_item_id == current.queue_item_id
+    assert result.json()['state'] == 'PLAYING'
+    assert run(player.read_execution_sample()).consume is consume
+
+
+@pytest.mark.parametrize('consume', [True, False])
+def test_guarded_seek_uses_same_consume_condition(state_client, monkeypatch, consume):
+    client, _, playback, player, _, _, _, _ = state_client
+    mode = consume_samples(player, monkeypatch, consume)
+    run(playback.pause())
+    target = target_for(playback)
+    before = server_snapshot(playback)
+    result = mutate(client, 'POST', '/api/playback/seek', {'seconds': 19, 'target': target})
+    assert result.status_code == 200, result.text
+    assert result.json()['state'] == 'PAUSED' and result.json()['position_seconds'] == 19
+    after = server_snapshot(playback)
+    assert after[0] == before[0] and after[2:] == before[2:]
+    assert run(player.read_execution_sample()).consume is consume
+    mode['consume'] = not consume
+
+    async def forbidden(*args):
+        raise AssertionError('changed mode target sent seek')
+
+    monkeypatch.setattr(player, 'seek', forbidden)
+    result = mutate(client, 'POST', '/api/playback/seek', {'seconds': 23, 'target': target})
+    assert result.status_code == 409, result.text
+    assert result.json()['error']['code'] == 'PLAYBACK_TARGET_CONFLICT'
+    assert server_snapshot(playback) == after
+
+
 def test_seek_replay_after_current_change_returns_original_receipt(state_client, monkeypatch):
     client, _, playback, player, _, coordinator, _, _ = state_client
     target = target_for(playback)

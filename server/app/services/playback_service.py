@@ -280,6 +280,13 @@ class PlaybackService:
         return (binding.service_epoch, binding.connection_epoch, binding.partition,
                 binding.binding_generation, binding.entries[0][0], self._control_targets.generation)
 
+    @staticmethod
+    def _control_sample_supported(sample: ExecutionSample) -> bool:
+        # In-place transport does not adopt/refill the queue. Consume may remain
+        # enabled, but its observed value belongs to the target's conditions.
+        return (sample.single == "0" and not sample.status.random
+                and not sample.status.repeat and sample.error is None)
+
     async def _require_control_target(self, target: PlaybackControlTarget) -> ExecutionSample:
         await self.get_execution_binding()
         if self._control_identity() != self._control_targets.identity:
@@ -293,8 +300,8 @@ class PlaybackService:
                 or status.state not in {PlayerState.PLAYING, PlayerState.PAUSED}
                 or status.song_id != binding.entries[0][1]
                 or status.song_uri != binding.entries[0][2] or status.song_position != 0
-                or sample.single != "0" or sample.consume or status.random or status.repeat
-                or sample.error is not None):
+                or not self._control_sample_supported(sample)
+                or sample.consume != self._control_targets.consume):
             self._control_targets.invalidate()
             raise PlaybackTargetConflictError("Playback control target no longer matches actual current")
         self._control_targets.require(target)
