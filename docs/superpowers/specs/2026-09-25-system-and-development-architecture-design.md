@@ -254,7 +254,7 @@ Service 通过 Repository 或 Adapter 访问外部资源。
 
 MPD 是独立进程，不由 Music Server 安装、启动或管理。
 
-**2026-10-12 播放执行层合同（FROZEN / NOT IMPLEMENTED）**：Playback Spec §8.10 `PB-BUF-*` 是新唯一执行权威。Music Server SQLite Queue/History/AutoPlay/Context持有全部业务顺序；MPD只持受控当前+下一首的有界短执行缓冲（稳态≤2、短暂过渡≤3），提供实际播放/暂停/进度/输出。禁止新实现将所有pending同步至MPD、以MPD playlist反向修改业务Queue或在长SQLite写事务中逐首等待MPD I/O。Adapter保留经能力验证的addid/playid/短样本/status/seek/pause等命令；已有完整MPD同步代码和本章以下通用MPD命令清单只属于旧实现/能力列表，不是新业务Queue权威。迁移计划见 [Bounded Execution Refactor Plan](../plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)。
+**2026-10-12 播放执行层合同（FROZEN / NOT IMPLEMENTED）**：Playback Spec §8.10为唯一新权威：Music Server SQLite Queue/History/AutoPlay/Context拥有全部业务顺序与Web下一首；MPD仅有当前+后续最多两首执行缓冲（稳态≤3/瞬态≤4），并独占Web播放/暂停/停止、实际当前歌曲与实际进度。MS后端ActualStateOwner须持续回读MPD真实Current/Next/Next Next而非操作日志；MPD物理Next不进入Web下一首。观察依§8.10.6、时效/Wire依§8.10.7；禁止全量pending复制MPD及在SQLite写事务中等待多轮MPD I/O。旧Port/Adapter和能力列表是迁移输入；实施计划见[Bounded Execution Refactor Plan](../plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)。
 
 ## 6. MPD 集成
 
@@ -517,6 +517,9 @@ WebSocket 是实时状态同步通道。
 - **Executable Invariant Proof**：用真实事务/Service 与 barrier 在 register/capture/send、commit/迟到 callback、并发 GET 返回处插入最后一次 mutation，证明其被覆盖或通知且不倒退；双客户端阻塞发送/队满/取消测试证明提交与正常连接独立；断线期间跨域变化、重启 epoch、重连首帧与真实 Services 对照。使用可控队列/FakeClock，不用 sleep 猜测竞态。具体测试由 Task 6 Plan 分配，尚未实现。
 
 ### 12.3 观察生命周期与完整 DTO
+
+**2026-10-12增量冻结（新执行器尚未实现）**：现有观察和Web客户端合同仍为底座；Playback Spec §8.10.6–7明确唯一ActualStateOwner、专用MPD `idle player playlist options`＋约1秒`status`轮询＋控制前后短缓冲一致实采样。Web显示的实际播放/暂停/停止、真实current、elapsed/duration仅取MPD，并经MS Library精确URI匹配展示元数据；Web下一首/后续业务Queue始终取MS，不以MPD实际next覆盖。旧绑定专用`position_seconds`保持原义，新增可选actual进度及actual_song用于未绑定的真实媒体展示。**现有§12.2「仅观测时间不触发通知」对新执行器播放真实采样租约特设例外**：有Web订阅时可限频≤每3秒一次既有`playback invalidate`，以便PAUSED/STOPPED持续新采样也能让客户端确认fresh，不动业务revision；须通过400首负载测试。浏览器独立3秒同步延迟/6秒stale检测及AppBar通知，不依赖新快照必定到达，不增加第二套Web下一首权威。
+
 
 2026-10-10 additive传播补充：完整snapshot的`explicit_stop_generation: int | null`只表达PlaybackService在当前epoch已确认提交的明确Stop累计代次，领域合同以[PB-STOP-LIFECYCLE-001](2026-09-24-playback-model-queue-semantics-design.md#332-明确-stop-生命周期传播--pb-stop-lifecycle-0012026-10-10-已冻结)为唯一权威。该字段与Playback/History同一提交切面，计数变化产生playback失效义务，GET/WS只读；有owner返回非负整数，无owner/旧服务器缺字段为未知，不由STOPPED/session补造。客户端同epoch拒绝已知计数回退的snapshot，新epoch重新建立基线；不引入操作事件重放或持久schema。
 

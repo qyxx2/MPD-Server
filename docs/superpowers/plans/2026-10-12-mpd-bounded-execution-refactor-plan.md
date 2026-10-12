@@ -6,7 +6,7 @@
 
 ## 1. 决策、事实及唯一权威
 
-**用户决定**：MS自身业务 Queue、Played、History、Context、AutoPlay、Next/Previous、收藏/元数据/扫描完全独立于MPD内部playlist；MPD仅担当播放/暂停/进度/输出和短执行缓冲。要求避免再对400首进行全量映射同步；用户接受「已确定当前 + 预备下一首」原则，而不是为零间隙盲目推完全部队列。
+**用户决定（2026-10-12修订冻结）**：MS唯一管理完整业务Queue、Current occurrence、Played/History、AutoPlay、Next/Previous、元数据/曲库；**MPD唯一提供Web正在播放/暂停/停止、实际当前曲目、实际进度**。Web下一首/再下一首和待播仅取MS Queue，不从MPD获取UI顺序。MPD稳态缓冲当前+两首预备≤3、瞬态≤4；MS后台必须由idle+轮询+每次控制前后实采样始终掌握MPD实际current/next/next-next，不靠MS命令日志推断。
 
 - **长期领域唯一权威**：[Playback Spec §8.10](../specs/2026-09-24-playback-model-queue-semantics-design.md) `PB-BUF-*`。旧 §8.9 对完整队列同步的**执行约束被替换**，其History保守证明、业务语义、Stop/Context等仍继承。
 - **跨模块/部署权威**：[Architecture §6/§12/§19.5](../specs/2026-09-25-system-and-development-architecture-design.md)；[Output Architecture §2](../specs/2026-09-24-system-architecture-playback-output-design.md)。唯一Web视觉规范仍归原Visual Spec。
@@ -20,11 +20,11 @@
 | 已有合同/实现 | 裁决 | 精确边界 |
 |---|---|---|
 | Playback Spec §2–7 / PB-SONG-NOW-001 | **INHERIT** | Queue Item ID、重复、MANUAL、Context、普通与Queue Play Now、Played、Stop provenance、API/HTTP idempotency及业务History、PlayNext/Add/清空待播语义不变；原 pending unavailable 整次拒绝暂保留 |
-| PB-CURRENT/BINDING/QUEUE-ADOPT / §8.9.1–3 | **REPLACE EXECUTION ONLY** | 业务必须有可信current不变；去掉全pending↔MPD ID和完整执行playlist相等约束，改短缓冲绑定与确认 |
+| PB-CURRENT/BINDING/QUEUE-ADOPT / §8.9.1–3 | **REPLACE EXECUTION ONLY** | MS业务current仍以可信occurrence推进；Web实际current/状态/进度只以MPD实时采样表示，即使未业务绑定也可显示实态；以三首实际执行缓冲替换全部MPD队列映射 |
 | PB-HISTORY / UNCERTIFIED / §8.9.4 | **INHERIT** | 无natural因果证明；不虚构missed项；只登记确证的显式离开/活动 |
-| PB-AUTOPLAY-EXEC / §8.9.5 | **REPLACE TRANSPORT** | 策略/低水位/候选不变；只预备第一next，不同步5项或全量 pending |
+| PB-AUTOPLAY-EXEC / §8.9.5 | **REPLACE TRANSPORT** | AutoPlay低水位/候选/来源不变；只向MPD预备当前后的两首，不同步batch/所有pending；Web Next仍MS Queue |
 | PB-RECOVERY-RETRY/RECOVERY-RUNNER / §8.9.6–7 | **REPLACE EXECUTION, INHERIT SAFETY** | 保留未知前缀、token、fail-closed、独立1s调度和恢复只读分离；执行器不持长SQLite事务 |
-| Architecture §4/§12, Task8/Task9 UI + Output/URI | **INHERIT** | API/WS snapshots、epoch/seq、confirmed business与actual独立、Output不动；仅确有必要时additive诊断 |
+| Architecture §4/§12, Task8/Task9 UI + Output/URI | **INHERIT + ADDITIVE ACTUAL STATE** | 保留API/WS epoch/sequence/旧DTO及Output，按§8.10.7增加actual_song/实际进度可选字段；Web Next仍取MS Queue，通知仅在AppBar |
 | Task9 Final NAS/Task4历史验收 | **HISTORICAL** | 旧运行方式有效记录，不自动给新执行器 GREEN；不把旧计划文本作为额外权威 |
 
 任何发现与既有已接受业务定义冲突：**先更新Playback唯一Spec，再本plan矩阵，再写RED invariants**；不能为了让Mock GREEN随意改用户业务语义。
@@ -36,17 +36,20 @@
 | ID / type | Preconditions + Δ / 必须不变 | External confirmation / H/T/F/R/O 增量 | Executable invariant proof（TO CREATE） |
 |---|---|---|---|
 | **PB-BUF-AUTH-001** STATE_TRANSITION | N=0/1/400，重复URI和Played/MANUAL/AUTOPLAY；仅业务Queue排序与occurrence改变 | MPD playlist不导出业务Queue；提交后原全量列表及revision一致；无执行时不写MPD | `test_buf_authority.py`：400、重复、Played、context、未绑定读取 |
-| **PB-BUF-EXEC-001** STATE_TRANSITION | 可用映射目标；steady≤2，瞬态≤3，0首next合法，未知旧大队列走takeover | addid确认ID→playid目标→短sample；不全量映射，不默认clear；版本/连接/模式fence | `test_buf_executor.py`：ID唯一/重复URI、≤2/≤3、命令交错 |
+| **PB-BUF-EXEC-001** STATE_TRANSITION | 受控执行短缓冲steady≤3/瞬态≤4；不把400首推MPD | 真实MPD id/URI/current确认，不能用ACK冒充；版本/连接/模式fence | `test_buf_executor.py`：3/4上限、重复URI、响应不明与实际进位 |
 | **PB-BUF-PLAY-001** STATE_TRANSITION | 明确Start/集合/普通Song/Queue/Played/Next/Previous；业务occurrence精确 | 真current+uri+state确认后提交；未确认不建History；不修改其它待播 | `test_buf_playback_actions.py`：各入口+重复URI/Stop/Context |
 | **PB-BUF-TAKEOVER-001** LIFECYCLE | unbound/legacy400/foreign/STOPPED；**只有用户明确选歌**授权 | 读实际mode/playlist；一次性安全清理/接管；未知结果失败，不在重启或GET清空 | `test_buf_takeover.py`：400旧队列、断线、模式、重启只读 |
-| **PB-BUF-NEXT-001** STATE_TRANSITION | MPD A→B或快速A→C；符合当前绑定代次 | B有可信MPD ID才接纳；不能二次play B；未见B不推测Played或History；清理后补C | `test_buf_natural_advance.py`：A→B/→C/PAUSED/极短曲/中途切歌 |
-| **PB-BUF-QUEUE-001** TRANSACTION | Add/PlayNext/reorder/delete/clear；仅next变化才需要MPD更新 | 变更next与MPD自然切换竞态需CAS/受控buffer确认；无成功假确认；不清current/Played | `test_buf_queue_mutations.py`：插队、清空、删除下一首、改序冲突 |
-| **PB-BUF-AUTO-001** STATE_TRANSITION | 低水位5/每批5，候选可用且runner活跃 | 仅首next进入执行缓冲；PAUSED不强启；无候选/未知Stop无隐式play | `test_buf_autoplay.py`：候选生成、追赶、多批次、后台无人 |
+| **PB-BUF-NEXT-001** STATE_TRANSITION | MPD A→B/→C；旧A未清理时B实际位置可为1 | 新MPD样本确认后才接纳B；不重复playid；按真实顺序补两个后续，不虚构漏播历史 | `test_buf_natural_advance.py`：position1/重复/pausing/race |
+| **PB-BUF-QUEUE-001** TRANSACTION | Add/PlayNext/reorder/delete/clear；只有触及物理预备两项才需MPD改变 | 实际采样+业务CAS重排受控预备项；不能假成功；Web下一首仍业务Queue | `test_buf_queue_mutations.py`：删除next/next-next、自然进位竞争 |
+| **PB-BUF-AUTO-001** STATE_TRANSITION | 低水位5/每批5，候选和Queue属MS | 仅把最多两个业务后续放MPD；PAUSED不强启、UNKNOWN/STOP不自动启动 | `test_buf_autoplay.py`：提前2首/批次/故障 |
 | **PB-BUF-MODE-001** STATE_TRANSITION | random/repeat/single/consume适配与能力门禁 | 明确取得控制权时校验/配置四模式；日常GET/runner不可覆盖外部模式；未知失败闭锁 | `test_buf_modes.py`：各模式、能力缺失、外部改变 |
 | **PB-BUF-TRANSPORT-001** STATE_TRANSITION | 已绑定token + PAUSED/PLAYING | Pause/resume/seek实态+token确认；不addid、重启或改变Queue/History | `test_buf_transport.py`：resume原位、seek迟到、token冲突 |
 | **PB-BUF-TX-001** TRANSACTION | 固定op+revision+代次，外部命令期间SQLite另有只读/业务读 | MPD ACK非commit；SQL commit/terminal失败回滚业务但保留unknown命令前缀，无成功通知 | `test_buf_transaction.py`：锁释放barrier、commit失败、取消、response lost |
 | **PB-BUF-RECOVERY-001** LIFECYCLE | 断线/重启/MPD外改/同URI外播/旧request | 无自动claim/clear/stop/重启；显示actual而非business；显式接管后恢复 | `test_buf_recovery.py`：epoch/版本漂移、未知key、同URI异ID |
-| **PB-BUF-STATE-001** STATE_PROPAGATION | accepted snapshot + 断线/unknown/error/bound Song元数据 | 联合版本一致、actual与confirmed分离，非绑定不能显示业务进度；GET/WS零控制 | `test_buf_state_wire.py` + Web client snapshot proof |
+| **PB-BUF-STATE-001** STATE_PROPAGATION | 联合业务snapshot与MPD最新实态分离 | Web只有实际播放/暂停/停止、current和progress取MPD；媒体URI精确查MS元数据；Web Next只取MS；GET/WS只读 | `test_buf_state_wire.py`及Web事实源proof |
+| **PB-BUF-ACTUAL-001** REPRESENTATION | MPD自然进位、外部改队列或MS命令记录尚存 | 后端实时MPD采样确定actual current/next/next-next，不能用上次控制ACK/计划代替；不覆盖MS业务Queue | `test_buf_actual_state.py`：position1、同URI异ID、旧400、未绑定 |
+| **PB-BUF-OBSERVE-001** LIFECYCLE | 一个专用idle连接、约1秒status poll、命令前后最新采样 | 收到player/playlist/options先读真实MPD、统一ActualStateOwner；晚样本丢弃，idle掉线poll兜底 | `test_buf_observer.py`：idle/poll/状态竞争/失败时效 |
+| **PB-BUF-WEB-001** STATE_PROPAGATION | MPD实时事实/URI精确Library匹配/业务Next独立 | actual播放/暂停/current/progress优先、未绑定也显示真实媒体不认领occurrence；3秒延迟6秒stale；AppBar告警；无MPD物理Next UI | `test_buf_actual_wire.py`＋Web actual-authority/freshness/next invariants |
 | **PB-BUF-PERF-001** REPRESENTATION | collection≥400，持久DB已有，前端加载 | MPD命令/样本条目≤常数，与N无关；浏览器资源加载有界，不阻塞控制 | `test_buf_scale.py` + Web Queue资源并发proof |
 | **PB-BUF-MIGRATION-001** LIFECYCLE | 旧Task9数据库与MPD大队列，现有NAS容器用户数据 | 新进程不自动清MPD；schema正向兼容；真实MPD受控实验可恢复；未通过不发布 | `test_buf_migration.py` + NAS用户验收记录 |
 
@@ -59,11 +62,11 @@
 | Batch | 仅允许的工作与主要文件 | EXIT / 验证 |
 |---|---|---|
 | **B0 Contract Freeze（本次）** | 唯一Spec更新、Architectural refs、主Plan迁移说明、本计划、doc地图；无产品/测试 | 冲突来源标记、矩阵完整、Task9 commit/branch精确可核对；**合同冻结，非代码验收** |
-| **B1 Executor + Port proof** | `player/{ports,mpd_adapter,models,mock_mpd}.py`，新 `services/*executor*.py`及Fake port tests；适配addid/playid/短sample/模式/外部状态与单owner fence | RED→GREEN证明2稳态/3瞬态、重复URI、响应丢失、未知旧列表安全，不再全量映射；不接API |
-| **B2 Explicit Playback** | `playback_service`, `queue_manager`接入新executor；Start Track/集合/普通Song/Queue/Played/Next/Previous及明确takeover | 保持业务occurrence/Context/History/版本/terminal、现有API status+token，400首不会逐条MPD add |
-| **B3 Pending/AutoPlay/runner** | Queue增删改排/清空、AutoPlay生成与已确定next更新、natural B接纳、1s runner和失败退避 | 强制竞态A→B同时删除B/重排/AutoPlay，未知与PAUSED、超短歌曲明确收敛/降级；不伪造natural |
-| **B4 Transactions/Recovery/State** | 生命周期短SQLite事务/fence/partial command journal/restart/外部漂移/Actual snapshot/WS | SQL事务期间能读本地数据；ACK丢失不重放；跨代次拒绝；accepted snapshot一致，GET/WS只读 |
-| **B5 Web/Scale/Regression** | 仅必要的Web shared owner/Queue元数据请求有界化与兼容读；完整Python/Web既有回归；不改已验收视觉 | 400首队列页面可读、按钮无全局死锁、绑定歌曲有Title/Artwork，真正unbound显示actual；API DTO快照兼容 |
+| **B1 Executor + Port proof** | `player/{ports,mpd_adapter,models,mock_mpd}.py`、短缓冲执行器、唯一ActualStateOwner及独立MPD idle连接；真实样本一致性与单写owner FakePort tests | 3稳态/4瞬态；实际status+受控playlist读取；idle+1s poll、重复URI、旧400及丢失响应RED→GREEN；本批不接API |
+| **B2 Explicit Playback** | `playback_service`/`queue_manager`接新执行器，Start/集合/普通Song/Queue/Played/Next/Previous及显式takeover；强制控制前后实样本 | 400首不逐项MPD add；业务occurrence/History/Context/Key/Token不变，确认的actual事实来自MPD而非操作日志 |
+| **B3 Pending/AutoPlay/runner** | Pending增删改/AutoPlay、MPD已预备两项维护、真实A→B自然进位接纳、独立后台runner | position1/并发删预备next/next-next/PAUSED与短曲；MS Web Next不改变，History不伪造 |
+| **B4 Transactions/Recovery/State** | 短SQLite事务/fence/journal/restart/实际观察单owner→兼容actual DTO+actual Song；播放租约有界限频invalidate | MPD ACK失败/旧采样不串曲；持续PAUSED状态lease可靠；HTTP/WS只读、现有epoch/seq兼容、SQLite读不被MPD I/O锁住 |
+| **B5 Web/Scale/Regression** | 仅改既有Web数据选择器、实际URI展示、可选actual字段解码、3/6秒独立过期、AppBar反馈及400 Queue元数据请求有界化 | MPD四类实际事实正确、Web Next始终MS Queue；unbound不错误显示业务current，UI布局保护，旧Wire及全部回归 |
 | **B6 NAS 真人验收与移交** | 独立验收说明/必要最小bugfix；真MPD/USB DAC可恢复实验；整套关系回归与分支diff | 用户亲测下列场景GREEN，未测逐项NOT RUN；再考虑PR/合并、镜像、生产替换，**不得自动进行** |
 
 实施时对每个Batch严格：先核对远端HEAD/CI和涉及的Spec/代码/历史proof→规定可改文件与不变项→先写精确失败证明RED→最小修复GREEN→小范围与跨模块回归→记录diff及已验证/未验证；只做用户指定Batch，不默认实施下一Batch。旧Task9/Final NAS并行分支发生变动，先做差异审计及rebase冲突决策，不静默覆盖。
@@ -71,20 +74,20 @@
 ## 5. 重点风险、验收事实与停止条件
 
 1. **双权威竞态**：MPD自主A→B的瞬间，用户删除/插队B；不能做到真正跨MPD+SQLite物理原子。必须允许明确冲突/UNKNOWN并用新样本和业务版本重新裁决，**不能**返回删除成功却把B继续当作受控下一首。
-2. **单点缓冲深度**：仅一首不能让MPD自主衔接；两首在普通歌曲可提前准备，但极短曲/服务掉线仍可能停播。目标是正常受控音轨的MPD自动衔接，并把调度落后可见化，不承诺未经实测的gapless bit-perfect。
+2. **三首短缓冲**：稳态Current+2首预备≤3、瞬态≤4；第三首用于MPD后台连续播放准备，**不是Web展示的下一首权威**。短曲/断线时仍可能停播，不能宣称绝对gapless。
 3. **协议能力**：MPD command列表包含不等于可按权限成功调用；`consume/single`设置、新加ID/删除正在播/自然进位/queue局部读取组合须后续真实NAS验证；禁止使用未知MPD命令试探当前正在听的队列。
 4. **部分成功不可回滚**：必须有sent/ACK/confirmed前缀、服务代次和旧key恢复边界；响应丢失后不根据URI猜唯一性，不能在CI模拟器里假装提供外部因果保证。
-5. **过渡接管**：旧MPD queue可能已有400首；不能把「steady≤2」用于初始真实MPD。仅明确播放意图触发受控清理，必要时先用户备份原MPD playlist/state后在隔离环境做恢复演练；从不在服务启动时执行clear。
-6. **后台持续性**：只有当前+next时MS runner更关键。需要事件唤醒+有界poll兜底；Web无打开也应运行；未知STOPPED不自动开播；短曲和NAS CPU高负载要真实测。
+5. **过渡接管**：旧MPD队列可有400首，不能把「稳态≤3」当成旧运行现实；仅明确播放接管授权才整理旧队列，先保留/确认现有状态及可恢复计划，不在startup/GET自动清空。
+6. **后台持续性与Web真实性**：idle player/playlist/options＋约1秒status poll＋命令前后强制实采样；仅一套actual缓存。Web三秒无新采样显延迟，六秒标stale；真实PAUSED时也需定期证明采样仍新鲜，Web Next始终MS Queue。客户端无连接时runner仍执行，未知STOPPED不自动播放。
 7. **旧持久数据**：Queue/History不删除、不重新编号、不批量丢pending；schema有增量须迁移/兼容proof与备份验证。失败升级保留可退回旧容器的数据库格式或明确迁移回退策略，不能无证明声称直接降级兼容。
 8. **Web资源成本**：400首Song详情并发可能引起独立负载；需要单独界定并发/缓存/分页策略，不改业务分页内容或现有layout。
-9. **端到端真人Gate**（真实MPD 0.23.5目标 + USB DAC，用户操作并回报）：单曲开始→pause/resume原位/seek；400首随机开始→Queue全量正确而MPD只当前+next；连续3首自然进位；Queue Next/插队/删除next/重排/清待播；Queue Played/Previous/同URI重复；AutoPlay无人打开页面的续播；输出/暂停音量不丢；断线/外部MPD操作/服务重启只读实际事实及显式恢复；MPD四模式行为；缓冲过程中服务停止与返回旧容器的回滚演练。每项标实际PASSED/FAILED/NOT RUN，不用CI模拟通过代替。
+9. **端到端真人Gate**（NAS真实MPD+USB DAC）：真实MPD播放/暂停/停止、当前歌曲标题及elapsed/duration与Web一致（包括业务unbound可识别URI）；MS 400首而MPD稳态3首；B在MPD位置1自然进位及预备C/D；Web Next/Queue/Played来自MS且不被MPD列表覆盖；Queue next/next-next删除/插队/重排/AutoPlay/前进后控制前后采样；idle失联轮询兜底、MPD断线与Web断线区分；PAUSED超过6秒持续新采样不会误stale、3秒延迟/6秒过期AppBar提示；旧镜像安全回退。每项实测PASSED/FAILED/NOT RUN，Mock/CI不代替。
 
 **停止/升级条件**：发现会改变业务语义、MPD版本不支持必要命令、部分成功无法给出保守终态、SQLite锁解耦证明失败、Web现有接口需要破坏性变更、NAS真机存在无法解释的自动切歌时，停止对应Batch，先修Spec/矩阵/RED再继续。没有本人真机结果不宣布B6完成。
 
 ## 6. 本次交付与退出状态
 
-- 合同冻结：**YES**（本计划+唯一Playback Spec；状态为目标设计）。
+- 合同冻结：**YES**（2026-10-12补充修订：MS唯一业务Queue与Web Next；MPD实际播放/暂停/当前/进度权威；三首MPD缓冲＋统一idle/poll/强制控制前后读取；实现仍NOT RUN）。
 - 分支：只允许基于 Task9 HEAD 的 `refactor/mpd-bounded-execution`；不动 `feature/task-9-web` 或 `main`。
 - 代码实施、测试RED/GREEN、CI、NAS播放/DAC验收：**NOT RUN**，只完成远端文档提交及读取校验。
 - 后续实施默认从 **B1** 开始；未获得新的范围指令不自行开工、不提交PR、不合并或生产部署。

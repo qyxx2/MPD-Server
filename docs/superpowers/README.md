@@ -51,7 +51,7 @@ Task8最新关闭记录只证明修订手机Web前置及保护基线；不抵扣
 
 ## 2026-10-12 播放执行重构（仅合同冻结）
 
-新工作分支 `refactor/mpd-bounded-execution` 基于 Task9 的 `098d6eaea81495d1686a09f9e0ee68768610ed7e` 创建；用户选择 MS 唯一业务Queue + MPD当前/下一首有界执行缓冲。**唯一长期领域合同是 [Playback Spec §8.10](specs/2026-09-24-playback-model-queue-semantics-design.md)，工作分批、迁移影响、Contract Matrix及真人Gate在 [Refactor Plan](plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)**。Task4 §8.9旧完整同步与Task9/NAS旧验收作为历史证据保留，但未来执行路径不再照旧实施；本次未改代码、未做测试、未进行实际MPD播放、未合并或替换NAS部署。后续只能按用户单独指定Batch执行，不默认从B1开始。
+新工作分支`refactor/mpd-bounded-execution`基于Task9 `098d6eaea81495d1686a09f9e0ee68768610ed7e`；MS唯一业务Queue和Web下一首，MPD是播放/暂停/停止、当前歌曲、实际进度的唯一事实权威。MPD内部受控稳态仅三首（Current+Next+Next Next），由MS通过专用idle事件、约1秒status轮询、每次控制前后实采样持续确认；Web不展示MPD的预备两项。**唯一长期领域合同：[Playback Spec §8.10](specs/2026-09-24-playback-model-queue-semantics-design.md)；唯一执行计划：[Refactor Plan](plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)**。沿用已验收Web视觉/Top AppBar与原API、队列语义，3秒延迟/6秒stale必须显性提示。Task4旧完整同步为历史证据，本次仅文档冻结，无产品修改/测试/MPD验收/merge；后续仅按用户明确指定Batch推进。
 
 ## Relationship / Invariant Test Gate
 

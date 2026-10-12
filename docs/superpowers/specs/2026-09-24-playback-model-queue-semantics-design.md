@@ -497,15 +497,15 @@ GET/WS/snapshot/StateObserver 只读；浏览器重连不是恢复命令。独�
 #### 8.10.1 权威边界和业务不变项 — PB-BUF-AUTH-001
 
 - **MS SQLite Queue 是唯一的业务 Queue**：由 queue_item_id 区分每一次 occurrence；Played/current/pending、MANUAL/AUTOPLAY、Context、歌曲重复、排序、原有 Queue revision/CAS 及清空「仅清待播」行为全部保留。MPD playlist **不是**业务 Queue，不是恢复 MS Queue 的来源，不得从 MPD playlist 反向生成/删除/重排用户业务项。永久 History 与 Queue Played 分开。AutoPlay 的候选选择/低水位5/每批最多5、固定随机顺序由 MS 决定；MPD random 绝不代表 Web 随机播放。
-- **MPD 独占实际音频事实**：实际 state（PLAYING/PAUSED/STOPPED）、song ID/URI、elapsed/duration、输出和错误必须取自经验证的 PlayerPort；MS 的 last-confirmed business current 不得冒充未确认的 MPD current。客户端只消费 MS API/WS，不直接驱动 MPD。
+- **MPD独占实际播放事实**：实际PLAYING/PAUSED/STOPPED、当前MPD Song ID/URI及elapsed/duration/输出和错误以最近一次**新鲜、实际、一致的MPD读取**为权威；MS上次发出的指令、操作日志、SQLite last-confirmed business current不能冒充MPD当前事实。**Web播放器的播放/暂停/停止、实际当前歌曲和该歌曲进度，只由MPD决定**；Web下一首/待播仍以MS业务Queue决定；MPD内部两个预备项只用于后端缓冲校验，参见§8.10.6–7。
 - **分离三种身份**：Song ID 是 MS 媒体库身份，queue_item_id 是业务 occurrence 身份，MPD song ID 是**当前连接/受控执行缓冲内**的临时执行身份；同 URI 重复出现也不得混淆。URI mapper 必须对发出的本地 URI 与 MPD 文件 URI 做可核对的双向转换；可播放/AVAILABLE 和 MPD 找得到文件是不同前提，失败不得按文件名猜测匹配。
 - **业务兼容**：Task8/9 已接受的 Start Track、集合替换/固定随机、普通 Song Play Now 新建 occurrence 并保留 pending、Queue occurrence Play Now、Next/Previous、重排、删除、Played 点击、明确 Stop 后恢复、AutoPlay、保存 Playlist、REST/WS DTO/HTTP key/sequence 与 Web 视觉合同不随执行器变更。§3.3.1 以前已接受的「任一保留 pending unavailable 则普通 Song Play Now 整次拒绝」暂时保留；取消该规则需要独立产品合同，不以旧技术原因消失而擅自修改。
 
 #### 8.10.2 有界 MPD 执行缓冲和确认 — PB-BUF-EXEC-001
 
-- **steady state 目标**：MS 已确认 current A 时，MPD 仅含受控 current A 和业务首个确定、可执行的 next B；只有一项/暂停/无 next 时允许只有 A；Stop 后允许空缓冲。稳定受控缓冲**至多2项**；执行插入目标、先确认再删除旧项的临界操作可短暂**至多3项**，并在完成后恢复上限。此上限仅指已经获得有效执行控制权的稳态；未知旧大队列/显式接管迁移期间不得假装符合上限。**不允许把400首待播批量提交给 MPD**。
+- **steady state目标**：已受控时MPD短缓冲由实际Current A、MS计划并经MPD确认的Next B、Next Next C组成，若仅1–2首可播放则相应减少。**稳定≤3项，执行插入/切换瞬态≤4项**；Stop可空。旧版本残留400首/foreign状态不是稳态，不得暗中clear；不把MS完整400首传给MPD。MPD缓冲后两项供后端实际核验，不是Web Next来源。
 - MPD原生命令无标准 `play_uri` 原子捷径；目标的正常执行为 `addid <mapped-uri>` 接收 MPD ID，再 `playid <id>`，或对已经确认属于该 occurrence 的现有 ID `playid`。禁止按URI扫描MPD全表选择「第一个相同歌曲」，禁止以 `clear → addid → playid` 作为普通切歌的默认序列；已有首曲播放期间更不得默认 clear。
-- 执行器拥有单实例写序列与 `operation_id + business_generation + connection_epoch + execution_generation` fence；相同 URI 不建立身份，不把 MPD entry ID 当跨连接/跨重启身份；绑定只含**当前、已预备下一首**的有序 `(queue_item_id, mpd_song_id, mapped_uri)`，以及连接/版本/模式/业务 revision 证据。不再验证/保留全部 pending 的 MPD 映射。
+- 执行器拥有单实例写序列与`operation_id + business_generation + connection_epoch + execution_generation` fence；相同URI不能证明重复occurrence的身份，MPD ID不跨连接/重启有效。受控执行绑定只包含**当前及预备的后续至多两项**`(queue_item_id, mpd_song_id, mapped_uri)`和版本/连接/模式/业务代次；这些操作记录只用于控制归属/异常恢复，**不得代替MPD最新实际Current/Next/Next Next采样**。
 - 每轮必须取得**一致的短缓冲样本**（前后 status + 实际条目、版本/当前 ID/连接代次核对）。MPD状态自然变化可以被接纳，但不允许通过忽略未知版本漂移来「通过测试」。每条有副作用命令记录送达阶段、ACK和可归属确认；至少最终的 `current MPD id+URI+state` 必须与目标绑定一致。不得因为 `addid` ACK 就提交业务播放成功。
 - 当已有合法受控缓冲发生正常自然进位，MPD自主从 A 播B；MS**绝不能再次 playid B**。先确认 B 的执行身份，再将 A 标为 Played、B 置 current，清理 A 并补业务下一项 C；PAUSED 的 B 仍保持 PAUSED。清理导致位置变化时以 ID 重新核验，不把 `position=0` 作为自然进位的前置条件。
 - MPD 写入模式需满足 `random=0, repeat=0, single=0, consume=0`。取得明确控制权时可以执行**经目标MPD能力验证的**模式预检查/必要配置，并重新核验；其余观察、runner、页面 GET/WS **不能偷偷重设模式**。未知、不支持、被外部修改或无法验证时 fail closed、展示真实状态，保留业务 Queue。MPD 的原生 `next/previous` 不是业务 Next/Previous 的权威入口；用户切歌由 MS 选择 queue_item_id 并用指定 ID 执行。
@@ -514,8 +514,8 @@ GET/WS/snapshot/StateObserver 只读；浏览器重连不是恢复命令。独�
 
 - **显式 Play Now/Start/集合播放**：MS 确定或创建精确业务 occurrence，预校验目标 Song/URI 可用，规划业务变更，执行 `addid/playid` 或已绑定目标的 `playid`；确认 MPD 实际播放目标后联合提交业务 current、Context/History/Queue revision、完成回执。即使此前未绑定，用户的**明确选曲**也是唯一允许的新接管授权；但不得把此前不可信的 History 自动补成自然结束/用户跳过。若取得控制权前 MPD 残留旧实现400首或其它客户端队列，采用**单独、明确受控 takeover/清理路径**，对真实MPD状态和实际副作用记录证据；不得在启动/刷新/只读时自动清空，也不能用稳态缓冲上限掩盖迁移风险。
 - **Queue/Played/Previous/Next**：目标只能按 MS queue_item_id/Played顺序裁决；重复 Song/URI 不去重、不选错 occurrence。目标若已在短缓冲中，直接用绑定 ID；否则按受控 addid→playid 引入目标，并在确认后清理不再需要的 MPD 旧条目，刷新预备 next。旧 item 的 Played/History 原因仅按已验证的显式操作提交，不把未观察的中间项视为已播放。
-- **单纯改 pending**：MS 数据库独立维护完整排序；非缓冲区内项目的重排/添加不产生对应 MPD add/move/delete。若改动触及**当前预备 next**（包括插队、删除、清空待播、可用性变更、AutoPlay候选），执行器必须同步调整至新的首个可执行 next 并重新确认；不允许旧 B 在用户成功收到「B 已删除/清空」之后仍被当作受控下一首。与 MPD 自动进位竞争时，优先确认已经发生的进位、采用 Queue CAS 后重新计算目标，无法线性确认则明确 conflict/unknown，不谎报成功；物理播放和SQLite提交不是原子事务，不能承诺排除毫秒级竞态，只能确认或保守失败。
-- **AutoPlay**：原有低水位/候选策略在**MS business pending** 中执行，先确认候选身份及 Queue 版本，再仅准备当前后的首个可执行 next；不把一次最多5项的 AutoPlay batch 全部推给MPD。下一首提前存在于 MPD 时，MPD自行衔接，MS通过独立runner/MPD player事件及时接纳、清理和再准备。没有候选、不可信绑定、外部模式不符、runner追不上极短歌曲、服务停机时**不承诺绝对无缝/永不停播**；不把 STOPPED 冒充用户 Stop 或自然完成，不让 GET/WS 启动歌曲。
+- **单纯改pending**：MS数据库独立保存全部待播与排序；未触及MPD预备next/next-next的项目不触发对应MPD变动。若插队、删除、排序、清空待播、AutoPlay或availability影响任一已预备项目，应基于**最新真实MPD样本**调整并确认两个预备位置；不允许用户成功删除B后仍将B作为受控下一首。与MPD自然进位并发时先采样确认，采用业务CAS/代次或保守冲突，不能假成功。旧业务Current/Played不随后台采样自动冒进。
+- **AutoPlay**：原有低水位5/每批最多5候选和全量业务Queue策略不变；仅预备MPD当前后的**最多两首**可执行项。MPD从A自然进位到B后，MS按实际ID/URI确认B再清理A、预备C和D；不重复playid B，不把AutoPlay batch或400首交给MPD。未知/无候选/断线时不得静默接管或按猜测历史继续。
 - **暂停/恢复/seek**：控制目标仍使用现有 current-target token、绑定代次与 MPD 实际 current 确认。暂停和恢复不得重新分配 occurrence、重排 Queue、重新起播目标；seek 不影响 Queue/History，只用对应目标的 MPD 进度回读确认。explicit Stop 仍是明确独立意图，终止 AutoPlay 接管，停止MPD并作受控缓冲清理；Stop 不隐式选择下一首。音量/输出由既有 Output Manager/MPD adapter继续管理，播放迁移不重定义输出。
 
 #### 8.10.4 事务、重试与一致性 — PB-BUF-TX-001 / PB-BUF-RECOVERY-001
@@ -528,11 +528,30 @@ GET/WS/snapshot/StateObserver 只读；浏览器重连不是恢复命令。独�
 
 #### 8.10.5 状态展示、性能界限和过渡 — PB-BUF-STATE-001 / PB-BUF-PERF-001 / PB-BUF-MIGRATION-001
 
-- 服务端的业务 `QueueSnapshot` 继续返回完整数据库 Queue；MPD执行样本与状态观察**另行**表示，快照包含 last confirmed business current、绑定状态、实际 MPD current/state/progress/URI、错误或降级原因。Web Now Playing 的曲名/专辑/艺术家/封面/歌词从 MS 已绑定的 Song ID/Library 读取，**不得从不可信的MPD裸文件名伪装出已确认曲名**；未绑定时仍可如实单独显示 MPD 实际URI/状态而不谎称业务current。外部样本 stale 时进度保持null/未知而非0；GET/WS不发MPD命令或做隐式恢复。
+- 服务端业务`QueueSnapshot`继续返回完整MS SQLite Queue，但**Web播放/暂停/停止、当前歌曲、进度只选MPD实际采样**。实际URI经精确URI Mapper反查MS Library的Song元数据（标题/艺人/封面/歌词），即使尚未绑定业务queue_item_id，也可显示该实际媒体事实和进度，**不能据URI认领业务occurrence、History或控制令牌**；无法反查则显示真实URI/未知歌曲并提示。**Web下一首、再下一首、待播Queue、Played、AutoPlay始终仅依MS业务Queue**；异常时标业务尚未与执行缓冲同步，不取MPD下一首作Web替代。MPD实际样本stale/unknown时标明最后观察，停止进度外推、不填0；GET/WS只消费缓存无控制。
 - Web保留现有 Task8/9 API、路由、Player/Queue视觉与点击语义。若旧DTO观察字段不足，可以**向后兼容 additive 扩展**运行诊断，但不更换现有字段含义、响应成功语义或旧键，且先冻结wire增量和consumer proof。400首 Queue 的 Web 元数据读取/虚拟化可单独优化，不借执行器重构改变业务展示或已验收布局。
-- **复杂度门禁**：在N≥400 pending下，普通启动只把当前+下一首传MPD；普通切歌/缓冲更新只处理受影响的至多3项，其 MPD 请求数量/读取playlist大小不随业务 Queue 长度增长（候选选择和 MS DB/Web 读取成本另外计量）。禁止在每个已添加条目后读取逐渐增长的完整MPD playlist；正常稳态在MPD层为 O(1) 条目/每次切歌，不据此宣称全应用总耗时恒定。
+- **复杂度门禁**：当N≥400 pending时，MPD只容纳当前和至多两首预备歌曲（稳态≤3、瞬态≤4），普通操作涉及至多4个MPD条目；MPD控制及局部读取规模不随MS业务Queue数量增长。不得每添一首重新读取逐渐增长的全MPD playlist；MS SQLite/HTTP和Web元数据成本须单独监测、不能在状态lease发送时每秒盲目重传400首。
 - **部署迁移**：Task9当前镜像及持久数据库是改造基线，不直接在其上实验播放；不删除、重建或批量重写现有SQLite/音乐。可新增执行器所需 schema，但须正向迁移/rollback策略和老数据兼容；不保留跨进程旧完整映射作为新可信绑定。需要清理历史大MPD队列时仅在明确播放接管授权下执行；真实NAS验收在自有验证环境、原队列备份/可恢复预案后进行。旧Task9、Final NAS验收不得替代新执行器的真实 MPD/DAC 门禁。
 - 新合同的实现依赖、Contract Matrix、逐Batch RED→GREEN、真实MPD门禁及未关闭风险，唯一由 [Bounded Execution Refactor Plan](../plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)分配。本次只冻结文档，不修改production/test，不声称任何测试或实机结果。
+
+#### 8.10.6 MPD实际状态单一观察源 — PB-BUF-ACTUAL-001 / PB-BUF-OBSERVE-001
+
+- **事实源**：后端维护唯一`ActualStateOwner`（具体类名不强制），持有最新、可验证的`connection_epoch/sample_generation/observed_at/actual_state/actual_current(songid,URI,position)/elapsed/duration/playlist_version/length/modes/actual_next/actual_next_next/freshness/error`。Current及物理后两首必须来自**MPD当下真实回读**，不允许从上一次addid/playid成功、恢复账本或MS预定列表直接推导为实际事实。实际next/next-next只供后端校验执行缓冲和安排下一条命令，**不作为Web下一首权威或Web展示字段**。
+- **监听与兜底**：MPD协议监听使用独立TCP连接执行`idle player playlist options`；通知仅是变更信号，不包含当前事实，触发尽快重新采样。正常约每轮完成后1秒调用`status`读取真实状态/进度作漏事件兜底，状态变更/重连/控制确认立即做有界一致采样。idle与查询连接分离；idle断线重连/退避期间仍保留轮询，轮询失败显示unknown/stale，不忙循环。一个服务进程只拥有一个actual事实缓存与单个播放写owner，不允许StateObserver与RecoveryRunner各自建立可冲突的实际当前。
+- **MPD小缓冲回读**：当已受控且实际MPD playlistlength≤4时，使用`status → playlistinfo 0:4 → status`（或目标MPD验证通过的等价命令）核对connection/partition/playlist版本/长度/current ID/position/播放模式。elapsed自然推进允许；不稳定样本有界重读后UNKNOWN，不拼接两个时间点。计算实际Next/Next Next从**实际Current position之后**找，不默认current在位置0：例如A尚未清理、B已在position1播放时，B才是实际Current。旧大队列>4/foreign/越界样本不认领为短缓冲；可以额外只读`currentsong`或`playlistid <id>`取得actual current用于Web真实显示，但不得因局部读取猜测完整队列/自行清空。旧MPD能力探针仅证实命令存在，具体组合在B6真实验证。
+- **任何播放控制强制实态前置及事后确认**：用户Play Now/Queue/Played/Next/Previous、pause/resume/seek及改变物理预备后两首的Queue/AutoPlay操作，均须在串行控制fence内获得**新的MPD实际样本**，核对真实Current、缓冲、代次、模式及业务Queue CAS，再制定实际命令。发送后重新采样，确认精确目标MPD ID/URI/state才提交MS成功。命令记录/ACK仅证明已尝试/被接受，不证明「现在正在播放什么」。MPD自然进位可能发生在两次读取之间，出现竞态需重新规划或fail closed，不承诺跨SQLite/MPD原子。
+- **MS History与业务状态不受推测污染**：MPD新样本能够证实采样时A或B是current，不能证明中间漏看的歌曲是否播放/自然完成。只有可信的当前转移或已验证显式操作才可按既有规则更新Played/History；不能凭MPD下一首或日志补造History，不能从MPD物理playlist回写/覆盖完整MS业务Queue。
+
+#### 8.10.7 Web实际播放权威与过期合同 — PB-BUF-WEB-001
+
+- **唯一MPD权威显示范围**：Web Player的「正在播放/暂停/停止」、「实际当前曲目」、「曲目实际elapsed/duration」是MPD实际采样的表示；实际媒体标题/艺人/封面/歌词/音频参数只从MS Library按已核实MPD URI取得。**Web下一首/再下一首、Queue/Played、AutoPlay与下一首按钮目标完全使用MS业务Queue**，即使MPD物理缓冲下一首不同也不静默替换。真正发生实际进位时Web先反映MPD实际Current，MS再完成可信业务Queue推进；未推进期间标记「业务Queue未确认」。
+- **脱离业务occurrence也须如实显示**：fresh、有效的MPD current即使业务绑定失败，也应以独立actual身份显示其真实state/当前曲目/进度；URI→Library匹配只用于展示，不形成Queue ID绑定、控制令牌或History证明。实际STOPPED但playlist还保留曲目时，不能称其「正在播放」；缺少可信媒体映射时显示「实际歌曲未识别」及URI诊断，而非错拿业务Current标题。现有绑定专用`position_seconds/duration_seconds`语义不变，不能将其偷换为所有actual进度。
+- **兼容DTO**：保留现有`GET /api/state`、WS`snapshot/invalidate`、`epoch/sequence`、业务`playback/current_song/queue`及旧Web合同；仅作向后兼容additive字段：`playback_observation.actual_elapsed_seconds/actual_duration_seconds`（与MPD actual ID/URI同一采样）、必要的实际采样代次/观察时刻与可空`FullStateSnapshot.actual_song`（经URI精确唯一映射的MS Song）。Web播放器读actual字段；未提供字段时明确降级，不能借业务进度/标题伪装实态。MPD的物理next/next-next不增加Web展示DTO。必须以真实后端fixture→旧/新Web decoder + Player proof冻结增量。
+- **推送与过期时间**：后端idle驱动变化、约1秒状态采样；MPD播放进度的真实变化经已有playback invalidation→GET刷新。针对PAUSED/STOPPED等值不变但确有**新成功采样**的情况，在有Web订阅时允许至多每3秒一次仅用于保持实际观测租约的`playback`限频invalidate（使用原有WS帧和读取链，业务Queue revision不得因lease增加），作为Architecture §12.2「观测时间单独不发通知」的唯一新执行路线例外。不得以重发旧样本延长租约，不得为1秒status轮询每秒无差异地全量GET 400首。性能专项必须验证这项限频传播不使大Queue页面阻塞；必要的轻量传输优化需另先冻结兼容合同，不擅自改WS协议。
+- **显性反馈**：连续>3秒没有新的可信MPD样本，Web以自身单调时钟显示「实际状态同步延迟」；>6秒或明确断线/观测失败时显示「已过期/未知」并冻结进度外推。旧`fresh`字段、不断重复的旧snapshot或新到达但observed_at未更新的消息都不能刷新实际事实租约。按MPD断线、Web↔MS断线、实际MPD正常但业务Queue未绑定分别告知；复用WEB-UI-NOTIFY-001唯一AppBar活动/通知，禁止增加Player正文新状态栏或修改已通过的UI布局。MPD断线时无法知道当前即时事实，只能显示最后观察并明确stale，不能承诺断网也实时同步。
+- **顺序/只读**：相同epoch内只有更新的sample_generation/真实observed_at可覆盖旧MPD事实；迟到采样、旧WS/HTTP及控制执行前的样本不能覆盖已确认的新current。GET/WS/idle/status轮询不得触发MPD播放、Queue/History变化或自动创建occurrence，按§8.10.4继续执行外部控制的确认/幂等规则。Web只收到MS的业务Next，不根据MPD物理next移动业务Queue。
+
+**专项RED proof（均未实施）**：真实Adapter/MockMPD/FakeClock/SQLite/API/WS/Web分别验证：A→B且MPD实际current处于position1、A→C、重复URI不同MPD ID、三首稳态/四首短暂过渡、旧400首只读退化、漏idle通知1秒轮询兜底、PAUSED>6秒但持续真实采样仍显示fresh、MPD断线/Web单独断线、3秒延迟与6秒超时、同旧样本不能续租、业务绑定失效时仍显示正确实际标题/进度而不认领occurrence、Web Next只由MS业务Queue决定、MPD控制前后实采样和无业务读副作用。真实MPD/DAC验收单列，不用Mock绿色冒充。
 
 ## 9. 本章验收标准
 

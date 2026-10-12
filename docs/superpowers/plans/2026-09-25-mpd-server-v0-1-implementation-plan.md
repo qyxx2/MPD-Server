@@ -46,7 +46,7 @@
 - 容器通过群晖 LAN IP 连接 MPD，禁止用容器 localhost 连接宿主机。
 - 浏览器和未来 Android 不直接连接 MPD TCP。
 - Queue、History、Playback Context、Saved Playlist 独立。
-- Music Server 是 Queue、AutoPlay、播放状态和业务状态权威。
+- Music Server 是业务Queue、AutoPlay和完整待播顺序（包括Web下一首）的权威；2026-10-12新执行合同中，实际播放/暂停/停止、当前MPD歌曲及歌曲进度必须来自MPD最新实采样而非MS历史命令（Playback Spec §8.10）。旧系统中的「MS播放状态权威」只指业务意图，不指实际播放器事实。
 - API 不直接操作 SQLite 或 MPD；业务进入 services，持久化进入 repositories，MPD 进入 player/adapter。
 - 音乐目录只读挂载，不修改/删除原文件。
 - SQLite、配置、备份位于容器外持久化目录。
@@ -758,7 +758,7 @@ class QueueItem(BaseModel):
 MPD Queue mapping:
 - Server queue_item_id and MPD mpd_song_id are separate identifiers.
 - Server Queue is authoritative business state.
-- **Historical Task4 implementation**: Queue mutation is persisted through QueueRepository, then synchronized to MPD through PlayerPort Queue methods. **2026-10-12 FROZEN refactor supersedes this transport for future implementation**: MS retains full business Queue; MPD only receives current + prepared next (Playback Spec §8.10). Refactor branch `refactor/mpd-bounded-execution` (Task9 baseline) holds the sole [active implementation plan](2026-10-12-mpd-bounded-execution-refactor-plan.md). No Batch implemented or live MPD acceptance implied.
+- **Historical Task4 implementation**: QueueRepository的完整pending曾逐条同步到MPD。**2026-10-12 FROZEN refactor supersedes transport**：MS保留完整业务Queue及Web下一首；MPD短执行缓冲为实际Current＋后续最多2首（steady≤3/transient≤4），并独占Web播放/暂停/当前曲目/进度事实。工作分支`refactor/mpd-bounded-execution`（Task9基线）只有[重构活动计划](2026-10-12-mpd-bounded-execution-refactor-plan.md)。代码、CI、真实设备均未验收。
 - MPD unavailability does not erase or silently replace the server Queue; synchronization state is explicit and can be reconciled later.
 - Playback state advances only after MPD command success and status reconciliation.
 
