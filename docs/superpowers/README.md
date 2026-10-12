@@ -49,6 +49,10 @@ Task8最新关闭记录只证明修订手机Web前置及保护基线；不抵扣
 
 当前B10证据与未关闭Gate：[Task9 final acceptance](archive/task-9/2026-10-11-task-9-final-acceptance.md)。真实地址请填写本轮LIVE Adapter页面（5188），旧Mock页面保存地址不会连接实机。
 
+## 2026-10-12 播放执行重构（仅合同冻结）
+
+新工作分支 `refactor/mpd-bounded-execution` 基于 Task9 的 `098d6eaea81495d1686a09f9e0ee68768610ed7e` 创建；用户选择 MS 唯一业务Queue + MPD当前/下一首有界执行缓冲。**唯一长期领域合同是 [Playback Spec §8.10](specs/2026-09-24-playback-model-queue-semantics-design.md)，工作分批、迁移影响、Contract Matrix及真人Gate在 [Refactor Plan](plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)**。Task4 §8.9旧完整同步与Task9/NAS旧验收作为历史证据保留，但未来执行路径不再照旧实施；本次未改代码、未做测试、未进行实际MPD播放、未合并或替换NAS部署。后续只能按用户单独指定Batch执行，不默认从B1开始。
+
 ## Relationship / Invariant Test Gate
 
 主 Implementation Plan 的 `Cross-Module Relationship / Invariant Test Gate` 是所有当前和未来 Task/Batch 的强制验收规则。

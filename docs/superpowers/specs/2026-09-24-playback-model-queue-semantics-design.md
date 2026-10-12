@@ -19,7 +19,7 @@
 3.  **播放一个集合时，默认整体替换当前 Queue，而不是逐首追加。**
 4.  **AutoPlay
     是全局兜底行为。在在线、已绑定、执行顺序受控且有可用候选的正常条件下，提前准备后续内容；异常限制见 §8.9。**
-5.  **Queue 必须明确展示已确定的下一首；尚未同步或无候选时明确显示该状态。**
+5.  **Queue 必须明确展示已确定的业务下一首；执行器仅按 §8.10 预备 MPD 下一首，不再要求完整业务 Queue 与 MPD playlist 同步；无候选或未确认必须明确显示。**
 6.  **Queue、播放历史、临时播放集合与用户保存的 Playlist
     是不同概念，不得混为一体。**
 7.  播放规则由 Music Server 统一执行，避免 Web、PWA、Android
@@ -96,7 +96,7 @@ Saved Playlist。
 
 ### 2.5 AutoPlay
 
-AutoPlay 是全局连续播放机制。在在线正常条件下，当待播 Queue 即将耗尽时，系统生成后续歌曲、提交业务 Queue 并提前同步到 MPD 执行队列，避免等待 STOPPED 后才补充。
+AutoPlay 是全局连续播放机制。在在线正常条件下，当待播 Queue 即将耗尽时，系统生成后续歌曲、提交业务 Queue 并仅将立即需要的下一首预备到 MPD 有界执行缓冲，避免等待 STOPPED 后才补充；详见 §8.10（原 §8.9 完整同步仅属历史实现）。
 
 AutoPlay 不属于某个专辑或 Playlist
 的私有功能。它是播放会话的兜底行为。用户明确 Stop 结束接管；异常停止不改写该意图，但暂停自动控制，见 §8.9.5。
@@ -148,13 +148,13 @@ AutoPlay 不属于某个专辑或 Playlist
 
 用户批准方案并明确授权“冻结相关内容，再直接进行B2”。本节关闭 Task9 G9-01；只定义普通 song-id Play Now，既有 Start Track、集合播放及 queue_item_id Play Now 不变。
 
-- **P / Authority**：PlaybackService 是唯一编排者，在既有同库外层串行事务内先校验 Song 存在且 AVAILABLE，再控制 MPD。未知歌曲及不可用歌曲沿用 404 `PLAYBACK_REQUEST_INVALID`，无 MPD 控制、Queue/History/revision/terminal 变更。Web 沿用 Architecture §4.1–4.2 baseline/writable 与 key 合同。
-- **保留项 availability（同日补充已接受）**：用户明确选择沿用整次拒绝并保留队列。所选 Song 可用但任一原 pending 为 MISSING/UNREADABLE（或其 Song 缺失）时，因现有完整 occurrence↔MPD 映射无法保证，操作在 MPD 控制、token失效及 Queue 修改之前返回既有404 PLAYBACK_REQUEST_INVALID；原 Queue/History/Context/revision/token不变，无成功terminal。不能静默删除、跳过或重新分配保留项；允许跳过的执行映射扩展需另行审核，不属B02。
+- **P / Authority**：PlaybackService 是唯一编排者，先在服务端互斥/业务版本边界校验 Song 存在且 AVAILABLE，再控制 MPD；目标 §8.10 禁止将多轮 MPD 网络 I/O 包在长期 SQLite 写事务内，按分阶段确认后短事务提交。未知歌曲及不可用歌曲沿用 404 `PLAYBACK_REQUEST_INVALID`，无 MPD 控制、Queue/History/revision/terminal 变更。Web 沿用 Architecture §4.1–4.2 baseline/writable 与 key 合同。
+- **保留项 availability（同日补充已接受）**：用户明确选择沿用整次拒绝并保留队列。所选 Song 可用但任一原 pending 为 MISSING/UNREADABLE（或其 Song 缺失）时，该既有用户接受的整次拒绝规则在 §8.10 执行器迁移中暂不变更（放宽须另行用户裁决），因此操作在 MPD 控制、token失效及 Queue 修改之前返回既有404 PLAYBACK_REQUEST_INVALID；原 Queue/History/Context/revision/token不变，无成功terminal。不能静默删除、跳过或重新分配保留项；允许跳过的执行映射扩展需另行审核，不属B02。
 - **Occurrence / provenance**：每个新意图创建新的 MANUAL occurrence，即使所选 song 是 current 或已在 pending 中出现多次。position=0，song_id 为目标，playback_context_id 为本次保留/新建 Context。原 position>0 项的 ID/song/source/context 及相对顺序全部保留，只规范化连续正 position；不选择、移动、去重已有同 song 项。AutoPlay 新项追加在原 pending 后。
 - **Context / lifecycle**：会话内 PLAYING/PAUSED 且 PlaybackState 有非空 Context ID 时保留该 ID；现有模型没有独立 Context 表，Service 从权威 Queue 重建候选范围，不能把 MPD 绑定当 Context 是否存在的依据。首次无 Context、Context 缺失时创建 `source_type=TRACK/source_id=song_id/ordered_song_ids=(song_id,)` 单曲 Context。本服务已确认并提交的明确 Stop 后，即使旧 Context ID 尚存，也创建新单曲 Context。任何已确认的开始播放（含既有 Queue/Start Track/集合入口）消费上次 Stop provenance；Stop provenance 使用服务拥有的、随外层事务提交/回滚的运行时标记，不新增 schema；服务重启丢失标记，不能仅凭 STOPPED、AutoPlay=false 或空 session 推断用户 Stop。
 - **Played / old current**：保留 Context 时保留原 Played；旧业务 current 在成功显式切换后成为最近 Played，其余 Played 顺延。创建新 Context 时删除旧 position<=0 展示，保留所有原 pending；不删除永久 History。Played 表示曾成为业务 current 后离开，不证明听完/natural；未知外部停止后的旧 current 不因此获得永久 History 结束原因。
 - **History**：正常已认证 active 切换沿用 session，按 §8.9.4 记录既有 SWITCH_AWAY。旧 active 不可信时丢弃，不补原因，保留已有 session；新 active 在目标完整确认后建立，session 不存在则创建。明确 Stop 已清 session，随后产生新 session。Context 缺失但 session 尚存时创建 Context 而保留 session；服务重启/无 active 不回填历史起点。
-- **STOPPED / unbound**：未知外部 STOPPED、无绑定、外部队列漂移时，本次请求是新的明确播放/接管授权；有 Context 就保留，否则创建，保留已有 session、无 session 则创建。不把该分支归类为用户 Stop，不自动恢复执行。实际身份、PLAYING、完整 occurrence↔MPD 映射及 current position=0 必须确认才能成功。
+- **STOPPED / unbound**：未知外部 STOPPED、无绑定、外部队列漂移时，本次请求是新的明确播放/接管授权；有 Context 就保留，否则创建，保留已有 session、无 session 则创建。不把该分支归类为用户 Stop，不自动恢复执行。旧执行器以完整 occurrence↔MPD 映射及 current position=0 确认；§8.10 新执行器以短缓冲中精确目标 occurrence 的 MPD ID/URI/实际 PLAYING 和有效代次确认成功，不要求其余 pending 进入 MPD。
 - **AutoPlay**：保留 Context 的已有会话保留原 AutoPlay 意图；明确 Stop 后、新 Context 或没有既有 History session 的初始化启用 AutoPlay。沿用 §8.9.5 低水位5/每批最多5、候选/current fallback、模式/绑定限制；不改 MANUAL 顺序或来源。无候选不阻止所选歌曲播放，按已有 NO_CANDIDATES 表达；不扩展候选策略。真实补充独立 Queue revision，整个 endpoint 的净变化仍一次联合对外提交。
 - **API / observable result**：additive `POST /api/playback/songs/{song_id}/play`，无业务请求体，必须有 Idempotency-Key；200 返回已有 QueueItemResponse，包含新 MANUAL current（position=0），不扩展 DTO。错误沿用既有 Playback typed error：404 validation、502 PLAYER_COMMAND_FAILED/PLAYBACK_RECONCILIATION_FAILED、503 PLAYER_UNAVAILABLE；同 key scope/payload 冲突409 IDEMPOTENCY_KEY_CONFLICT。客户端成功后重读 snapshot，不从单项 DTO 拼装 Queue/History/token。
 - **Confirmation / transaction**：复用 §8.9.6 账本与现有 current-target 代次；Queue 切换 revision +1，真实 AutoPlay batch 另按现有规则计数。Queue/Playback/Context ID/History runtime与持久事件、terminal record 及 realtime delta 均在最外层成功提交后可见，事件覆盖实际发生变化的 queue/playback/history，提交前无成功通知。旧 token 在显式控制前失效，新 token 完整确认并提交后可供读取；rollback 不复活因外部连续性丢失而失效的 token。
@@ -382,9 +382,11 @@ Web 的 pending/同步/未知/错误及恢复操作入口只遵守 [全局 UI �
 
 自然结束与外部恢复的领域能力仍由 Task 4 corrective 承担：不能将 MPD STOPPED 本身当作“用户明确 Stop”，不能由采样推测或补造遗漏播放事件。必须按本章 §8.9、PB-HISTORY-001 和确认/回滚合同区分当前转移事实、显式操作原因、未知过去与重试。Task 6 只暴露 reconciliation_required，不直接调用尚未通过该验收的恢复路径。自动恢复启用及 Task 6 最终验收以该专项能力验收为前置；独立的只读观察、传播基础和 snapshot Batch 可以先执行。此实施依赖不表示本节的新观察语义待决，也不授权本轮修改 production code。
 
-### 8.9 原版 MPD 当前状态接纳与连续执行合同（2026-10-04 修订）
+### 8.9 原版 MPD 当前状态接纳与连续执行合同（2026-10-04 历史完整同步实现）
 
-本节是唯一领域 authority，替换此前人工 A 的严格自然完成 SOURCE 路线。用户选择保留原版 MPD 0.23.5、不采用后端扩展，授权收窄原因、实际结束时间和遗漏历史；Queue、AutoPlay、页面真实性、事务和只读边界不收窄。历史 consumer Step2.1–Step3 的定义和验收保存在 [计划历史归档](../archive/task-4/2026-10-04-task-4-d6-recovery-plan-history.md) 与专项 acceptance，不能据此声称本节已实现。合同已定义，R1重启接管体验已由用户接受（§8.9.2）；新实现、新自动测试、目标运行时验证均未完成，D6/Batch13/Task6 final **BLOCKED**。
+> **2026-10-12 迁移标注**：本节描述 Task4/D6 已完成的完整MPD执行列表绑定路线；其产品业务与未知因果/History安全规则保留，但 §8.9.1–3/5–7 关于「将所有pending同步MPD、完整playlist映射/playlist version、旧执行账本、自动runner同步目标」的**执行约束**由新 §8.10 取代。此处保留原文供历史验收与旧代码审计，不再作为新执行器实施指令。新合同为 FROZEN / NOT IMPLEMENTED；旧实现与新目标的验收状态不得混同。
+
+本节在2026-10-04为当时唯一领域 authority，替换此前人工 A 的严格自然完成 SOURCE 路线；2026-10-12起执行映射/同步的权威由新 §8.10 取代，业务与 History 安全语义仍继承。用户选择保留原版 MPD 0.23.5、不采用后端扩展，授权收窄原因、实际结束时间和遗漏历史；Queue、AutoPlay、页面真实性、事务和只读边界不收窄。历史 consumer Step2.1–Step3 的定义和验收保存在 [计划历史归档](../archive/task-4/2026-10-04-task-4-d6-recovery-plan-history.md) 与专项 acceptance，不能据此声称本节已实现。合同于2026-10-04已定义，R1重启接管体验已由用户接受（§8.9.2）。**历史状态说明**：当时新实现、自动测试、目标运行时验证尚未完成，D6/Batch13/Task6 final 为 **BLOCKED**；其后2026-10-09已有专项验收，详见 [D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)；**§8.10的新执行器仍未实现/未验收**。
 
 #### 8.9.1 事实词汇与能力边界 — PB-CURRENT-001
 
@@ -485,7 +487,52 @@ GET/WS/snapshot/StateObserver 只读；浏览器重连不是恢复命令。独�
 
 旧 `D6-SOURCE` 严格因果 producer 不再是本路线实施前置，状态为 **SUPERSEDED（合同替换，不是 capability PASSED）**。`PB-NATURAL-001` / `PB-NATURAL-EMPTY-001` 退为历史 consumer 合同，不可转写成“原版自然识别已通过”。取代它们的新义务为 PB-BINDING/CURRENT/QUEUE-ADOPT/HISTORY-UNCERTIFIED/AUTOPLAY-EXEC/RECOVERY-RUNNER-001，以及修订的 PB-RECOVERY-UNKNOWN/RETRY-001、RT-ACTUAL-001。
 
-必须证明真实 Adapter/Port→一致采样→绑定→Service→Queue/History/AutoPlay→outer commit→snapshot/WS 的显式联合路径，再证明 runner 生命周期。协议模拟器只验证给定输入；官方 v0.23.5 静态依据与目标运行时测试分开记账。新目标模式/执行组合必须单列待授权实测；本轮不访问 live MPD、不运行 probe。全部实现、专项及直接回归、D6 联合验收和 Batch13/Task6 gate 复验未满足前，最终门禁保持 BLOCKED。
+必须证明真实 Adapter/Port→一致采样→绑定→Service→Queue/History/AutoPlay→outer commit→snapshot/WS 的显式联合路径，再证明 runner 生命周期。协议模拟器只验证给定输入；官方 v0.23.5 静态依据与目标运行时测试分开记账。该段为2026-10-04撰写时的目标门禁说明；其后2026-10-09完成旧D6专项验收，以对应归档为准。§8.10新模式/短执行缓冲组合尚须独立授权实测；本次文档冻结不访问live MPD、不运行probe，新的重构联合/真人门禁为 NOT RUN。
+
+
+### 8.10 MS 唯一业务 Queue / MPD 有界执行缓冲合同 — PB-BUF-*（2026-10-12 FROZEN）
+
+> **变更授权与生效边界**：用户已授权在 Task9 当前分支基础上重新设计播放执行层，并要求先冻结合同；本文是新路线的**唯一长期领域权威**。冻结仅证明设计决定，不表示实现、CI、真实MPD/DAC验收成功。§8.9 仍记录已经交付的**旧完整队列同步实现及其历史证据**；凡涉及「完整业务 Queue ↔ 完整 MPD playlist 映射」「为每个 pending 维护 MPD ID」「以完整 MPD playlist version 维护所有业务 occurrence」的执行细节，**未来目标以本节取代**。§8.9 和 §3.3.1 中的业务 Queue/History/Context/AutoPlay/explicit Stop/retry 与用户交互语义仍然有效，除非本节明确指出执行实现替换。切换完成前旧系统的验收结果不能冒称本节验收。
+
+#### 8.10.1 权威边界和业务不变项 — PB-BUF-AUTH-001
+
+- **MS SQLite Queue 是唯一的业务 Queue**：由 queue_item_id 区分每一次 occurrence；Played/current/pending、MANUAL/AUTOPLAY、Context、歌曲重复、排序、原有 Queue revision/CAS 及清空「仅清待播」行为全部保留。MPD playlist **不是**业务 Queue，不是恢复 MS Queue 的来源，不得从 MPD playlist 反向生成/删除/重排用户业务项。永久 History 与 Queue Played 分开。AutoPlay 的候选选择/低水位5/每批最多5、固定随机顺序由 MS 决定；MPD random 绝不代表 Web 随机播放。
+- **MPD 独占实际音频事实**：实际 state（PLAYING/PAUSED/STOPPED）、song ID/URI、elapsed/duration、输出和错误必须取自经验证的 PlayerPort；MS 的 last-confirmed business current 不得冒充未确认的 MPD current。客户端只消费 MS API/WS，不直接驱动 MPD。
+- **分离三种身份**：Song ID 是 MS 媒体库身份，queue_item_id 是业务 occurrence 身份，MPD song ID 是**当前连接/受控执行缓冲内**的临时执行身份；同 URI 重复出现也不得混淆。URI mapper 必须对发出的本地 URI 与 MPD 文件 URI 做可核对的双向转换；可播放/AVAILABLE 和 MPD 找得到文件是不同前提，失败不得按文件名猜测匹配。
+- **业务兼容**：Task8/9 已接受的 Start Track、集合替换/固定随机、普通 Song Play Now 新建 occurrence 并保留 pending、Queue occurrence Play Now、Next/Previous、重排、删除、Played 点击、明确 Stop 后恢复、AutoPlay、保存 Playlist、REST/WS DTO/HTTP key/sequence 与 Web 视觉合同不随执行器变更。§3.3.1 以前已接受的「任一保留 pending unavailable 则普通 Song Play Now 整次拒绝」暂时保留；取消该规则需要独立产品合同，不以旧技术原因消失而擅自修改。
+
+#### 8.10.2 有界 MPD 执行缓冲和确认 — PB-BUF-EXEC-001
+
+- **steady state 目标**：MS 已确认 current A 时，MPD 仅含受控 current A 和业务首个确定、可执行的 next B；只有一项/暂停/无 next 时允许只有 A；Stop 后允许空缓冲。稳定受控缓冲**至多2项**；执行插入目标、先确认再删除旧项的临界操作可短暂**至多3项**，并在完成后恢复上限。此上限仅指已经获得有效执行控制权的稳态；未知旧大队列/显式接管迁移期间不得假装符合上限。**不允许把400首待播批量提交给 MPD**。
+- MPD原生命令无标准 `play_uri` 原子捷径；目标的正常执行为 `addid <mapped-uri>` 接收 MPD ID，再 `playid <id>`，或对已经确认属于该 occurrence 的现有 ID `playid`。禁止按URI扫描MPD全表选择「第一个相同歌曲」，禁止以 `clear → addid → playid` 作为普通切歌的默认序列；已有首曲播放期间更不得默认 clear。
+- 执行器拥有单实例写序列与 `operation_id + business_generation + connection_epoch + execution_generation` fence；相同 URI 不建立身份，不把 MPD entry ID 当跨连接/跨重启身份；绑定只含**当前、已预备下一首**的有序 `(queue_item_id, mpd_song_id, mapped_uri)`，以及连接/版本/模式/业务 revision 证据。不再验证/保留全部 pending 的 MPD 映射。
+- 每轮必须取得**一致的短缓冲样本**（前后 status + 实际条目、版本/当前 ID/连接代次核对）。MPD状态自然变化可以被接纳，但不允许通过忽略未知版本漂移来「通过测试」。每条有副作用命令记录送达阶段、ACK和可归属确认；至少最终的 `current MPD id+URI+state` 必须与目标绑定一致。不得因为 `addid` ACK 就提交业务播放成功。
+- 当已有合法受控缓冲发生正常自然进位，MPD自主从 A 播B；MS**绝不能再次 playid B**。先确认 B 的执行身份，再将 A 标为 Played、B 置 current，清理 A 并补业务下一项 C；PAUSED 的 B 仍保持 PAUSED。清理导致位置变化时以 ID 重新核验，不把 `position=0` 作为自然进位的前置条件。
+- MPD 写入模式需满足 `random=0, repeat=0, single=0, consume=0`。取得明确控制权时可以执行**经目标MPD能力验证的**模式预检查/必要配置，并重新核验；其余观察、runner、页面 GET/WS **不能偷偷重设模式**。未知、不支持、被外部修改或无法验证时 fail closed、展示真实状态，保留业务 Queue。MPD 的原生 `next/previous` 不是业务 Next/Previous 的权威入口；用户切歌由 MS 选择 queue_item_id 并用指定 ID 执行。
+
+#### 8.10.3 四类播放动作和前置下一首 — PB-BUF-PLAY-001 / PB-BUF-AUTO-001
+
+- **显式 Play Now/Start/集合播放**：MS 确定或创建精确业务 occurrence，预校验目标 Song/URI 可用，规划业务变更，执行 `addid/playid` 或已绑定目标的 `playid`；确认 MPD 实际播放目标后联合提交业务 current、Context/History/Queue revision、完成回执。即使此前未绑定，用户的**明确选曲**也是唯一允许的新接管授权；但不得把此前不可信的 History 自动补成自然结束/用户跳过。若取得控制权前 MPD 残留旧实现400首或其它客户端队列，采用**单独、明确受控 takeover/清理路径**，对真实MPD状态和实际副作用记录证据；不得在启动/刷新/只读时自动清空，也不能用稳态缓冲上限掩盖迁移风险。
+- **Queue/Played/Previous/Next**：目标只能按 MS queue_item_id/Played顺序裁决；重复 Song/URI 不去重、不选错 occurrence。目标若已在短缓冲中，直接用绑定 ID；否则按受控 addid→playid 引入目标，并在确认后清理不再需要的 MPD 旧条目，刷新预备 next。旧 item 的 Played/History 原因仅按已验证的显式操作提交，不把未观察的中间项视为已播放。
+- **单纯改 pending**：MS 数据库独立维护完整排序；非缓冲区内项目的重排/添加不产生对应 MPD add/move/delete。若改动触及**当前预备 next**（包括插队、删除、清空待播、可用性变更、AutoPlay候选），执行器必须同步调整至新的首个可执行 next 并重新确认；不允许旧 B 在用户成功收到「B 已删除/清空」之后仍被当作受控下一首。与 MPD 自动进位竞争时，优先确认已经发生的进位、采用 Queue CAS 后重新计算目标，无法线性确认则明确 conflict/unknown，不谎报成功；物理播放和SQLite提交不是原子事务，不能承诺排除毫秒级竞态，只能确认或保守失败。
+- **AutoPlay**：原有低水位/候选策略在**MS business pending** 中执行，先确认候选身份及 Queue 版本，再仅准备当前后的首个可执行 next；不把一次最多5项的 AutoPlay batch 全部推给MPD。下一首提前存在于 MPD 时，MPD自行衔接，MS通过独立runner/MPD player事件及时接纳、清理和再准备。没有候选、不可信绑定、外部模式不符、runner追不上极短歌曲、服务停机时**不承诺绝对无缝/永不停播**；不把 STOPPED 冒充用户 Stop 或自然完成，不让 GET/WS 启动歌曲。
+- **暂停/恢复/seek**：控制目标仍使用现有 current-target token、绑定代次与 MPD 实际 current 确认。暂停和恢复不得重新分配 occurrence、重排 Queue、重新起播目标；seek 不影响 Queue/History，只用对应目标的 MPD 进度回读确认。explicit Stop 仍是明确独立意图，终止 AutoPlay 接管，停止MPD并作受控缓冲清理；Stop 不隐式选择下一首。音量/输出由既有 Output Manager/MPD adapter继续管理，播放迁移不重定义输出。
+
+#### 8.10.4 事务、重试与一致性 — PB-BUF-TX-001 / PB-BUF-RECOVERY-001
+
+- **不允许跨MPD多轮网络I/O持有SQLite写事务**。建立单owner序列化的预检/固定计划（Queue revision、current occurrence、预期目标、connection/binding generations、request key），释放DB锁后执行外部命令；在最终短原子事务内重验 CAS、提交 Queue/Playback/History/runtime/journal terminal与 event-registration。最终 Web成功回执、Queue/History/版本通知只在 MPD确认和 SQLite成功提交后出现。若阶段实现必须变更架构的一致性锁，先提供跨服务 barrier/invariant；绝不把「事务已开且await MPD」当作最终方案。
+- SQLite rollback **不撤销**已发送的MPD命令。超时、取消、通信断开、写入/提交失败、其他 owner、命令响应丢失进入明确 `UNKNOWN/SYNC_FAILED/UNBOUND`，记录**可归属的命令前缀**并失效不可信绑定；绝不能自动重发 `addid/playid`，不能按URI回猜一次未知 addid，也不能把部分MPD成功写成业务成功。能证明原意图、前缀、代次和唯一结果时，原 key可恢复或返回已提交 terminal；不能唯一证明则显式接管/只读恢复，不承诺进程崩溃前未提交操作跨重启 exactly-once。
+- 多客户端/连续点击由服务端单owner序列 + Queue revision/CAS + token generation 拒绝迟到意图；收到未知终态的前端遵循现有共享 TaskActions/key 恢复，不因为新executor把所有 unknown 伪报成功或重试成功。重复提交成功 key返回原 terminal，**零新增 MPD 控制、occurrence、History、revision**。新 key 的新意图必须重新验证，不复用旧 current。
+- **外部MPD客户端修改playlist/song/modes，MPD或MS重启/连接 epoch 改变，样本不一致**：不得凭URI认领 MS current，不反向覆盖 MS Queue，不自动 stop/clear/play，不补造 History；业务保留，观察实际状态单独可见，写权限按已有只读门禁受控；只有明确选择歌曲经完整再确认可以重建执行控制权。特别要证明外部播放相同 URI 但不同 MPD ID 不会误认业务 current。断线后若MPD仍自主播放短缓冲中的剩余项，重新连接也不得凭猜测重建业务历史。
+- **History**：沿用 §8.9.4 的保守证据规则。有效绑定内确认 A→B 只证明离开当前，不证明自然播放完；未被确认的B/C不可计入 Played 或永久 History；不知道原因就不要写成 Stop/Skip/NATURAL_COMPLETION。§3.3.2 `explicit_stop_generation`、History active/session/事件提交时机不变。
+
+#### 8.10.5 状态展示、性能界限和过渡 — PB-BUF-STATE-001 / PB-BUF-PERF-001 / PB-BUF-MIGRATION-001
+
+- 服务端的业务 `QueueSnapshot` 继续返回完整数据库 Queue；MPD执行样本与状态观察**另行**表示，快照包含 last confirmed business current、绑定状态、实际 MPD current/state/progress/URI、错误或降级原因。Web Now Playing 的曲名/专辑/艺术家/封面/歌词从 MS 已绑定的 Song ID/Library 读取，**不得从不可信的MPD裸文件名伪装出已确认曲名**；未绑定时仍可如实单独显示 MPD 实际URI/状态而不谎称业务current。外部样本 stale 时进度保持null/未知而非0；GET/WS不发MPD命令或做隐式恢复。
+- Web保留现有 Task8/9 API、路由、Player/Queue视觉与点击语义。若旧DTO观察字段不足，可以**向后兼容 additive 扩展**运行诊断，但不更换现有字段含义、响应成功语义或旧键，且先冻结wire增量和consumer proof。400首 Queue 的 Web 元数据读取/虚拟化可单独优化，不借执行器重构改变业务展示或已验收布局。
+- **复杂度门禁**：在N≥400 pending下，普通启动只把当前+下一首传MPD；普通切歌/缓冲更新只处理受影响的至多3项，其 MPD 请求数量/读取playlist大小不随业务 Queue 长度增长（候选选择和 MS DB/Web 读取成本另外计量）。禁止在每个已添加条目后读取逐渐增长的完整MPD playlist；正常稳态在MPD层为 O(1) 条目/每次切歌，不据此宣称全应用总耗时恒定。
+- **部署迁移**：Task9当前镜像及持久数据库是改造基线，不直接在其上实验播放；不删除、重建或批量重写现有SQLite/音乐。可新增执行器所需 schema，但须正向迁移/rollback策略和老数据兼容；不保留跨进程旧完整映射作为新可信绑定。需要清理历史大MPD队列时仅在明确播放接管授权下执行；真实NAS验收在自有验证环境、原队列备份/可恢复预案后进行。旧Task9、Final NAS验收不得替代新执行器的真实 MPD/DAC 门禁。
+- 新合同的实现依赖、Contract Matrix、逐Batch RED→GREEN、真实MPD门禁及未关闭风险，唯一由 [Bounded Execution Refactor Plan](../plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)分配。本次只冻结文档，不修改production/test，不声称任何测试或实机结果。
 
 ## 9. 本章验收标准
 

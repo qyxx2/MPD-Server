@@ -254,6 +254,8 @@ Service 通过 Repository 或 Adapter 访问外部资源。
 
 MPD 是独立进程，不由 Music Server 安装、启动或管理。
 
+**2026-10-12 播放执行层合同（FROZEN / NOT IMPLEMENTED）**：Playback Spec §8.10 `PB-BUF-*` 是新唯一执行权威。Music Server SQLite Queue/History/AutoPlay/Context持有全部业务顺序；MPD只持受控当前+下一首的有界短执行缓冲（稳态≤2、短暂过渡≤3），提供实际播放/暂停/进度/输出。禁止新实现将所有pending同步至MPD、以MPD playlist反向修改业务Queue或在长SQLite写事务中逐首等待MPD I/O。Adapter保留经能力验证的addid/playid/短样本/status/seek/pause等命令；已有完整MPD同步代码和本章以下通用MPD命令清单只属于旧实现/能力列表，不是新业务Queue权威。迁移计划见 [Bounded Execution Refactor Plan](../plans/2026-10-12-mpd-bounded-execution-refactor-plan.md)。
+
 ## 6. MPD 集成
 
 生产环境使用群晖宿主机已有 MPD 0.23.5。

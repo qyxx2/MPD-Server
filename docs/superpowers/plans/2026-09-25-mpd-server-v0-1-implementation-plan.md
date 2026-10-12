@@ -758,7 +758,7 @@ class QueueItem(BaseModel):
 MPD Queue mapping:
 - Server queue_item_id and MPD mpd_song_id are separate identifiers.
 - Server Queue is authoritative business state.
-- Queue mutation is persisted through QueueRepository, then synchronized to MPD through PlayerPort Queue methods.
+- **Historical Task4 implementation**: Queue mutation is persisted through QueueRepository, then synchronized to MPD through PlayerPort Queue methods. **2026-10-12 FROZEN refactor supersedes this transport for future implementation**: MS retains full business Queue; MPD only receives current + prepared next (Playback Spec §8.10). Refactor branch `refactor/mpd-bounded-execution` (Task9 baseline) holds the sole [active implementation plan](2026-10-12-mpd-bounded-execution-refactor-plan.md). No Batch implemented or live MPD acceptance implied.
 - MPD unavailability does not erase or silently replace the server Queue; synchronization state is explicit and can be reconciled later.
 - Playback state advances only after MPD command success and status reconciliation.
 

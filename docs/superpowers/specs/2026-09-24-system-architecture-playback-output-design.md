@@ -27,6 +27,7 @@
 2. MPD 是首期实际播放引擎，不另建并行播放核心。
 3. 客户端展示服务端状态，不自行推断 Queue 或 AutoPlay 状态。
 4. 输出模式可扩展：首期实现 USB DAC，第二阶段通过预定义接口增加客户端串流。
+5. **2026-10-12 新执行路线（FROZEN、未实施）**：完整业务Queue仅在MS SQLite保存；MPD playlist只用作当前+下一首的短执行缓冲，禁止以MPD队列作为业务权威或把全部pending预同步。执行确认、失败闭锁、迁移的唯一规则见 [Playback Spec §8.10](2026-09-24-playback-model-queue-semantics-design.md)，不是输出层的新业务定义。
 
 ## 3. 模块划分
 
