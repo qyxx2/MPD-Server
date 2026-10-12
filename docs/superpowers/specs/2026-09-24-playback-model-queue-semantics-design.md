@@ -416,7 +416,7 @@ status、idle、elapsed≈duration、URI 变化、played URI 日志、未见本�
 
 执行计划删除已确认离开的 A 的 MPD entry，保留目标的 MPD ID，不重播目标、不 seek；必要时把其余 pending 排到目标后。清理/移动会改变 MPD current position：最终确认要求目标 position=0、完整执行映射与业务目标一致。若清理期间 MPD 又前进，放弃本次提交并按已执行命令账本重新核验；不得宣布旧目标成功。MPD 自动前进时 position 可先为1/2，不能因为旧实现只接受0而误认 foreign。
 
-整个业务 current/Played/pending 调整一次 CAS、Queue revision 恰 +1；仅 MPD position 随清理变化、同态采样或 retry/replay 不额外增加 revision。后续独立 AutoPlay batch 的真实 Queue 变更另 +1。pending 手动动作保持原 revision 合同、MANUAL 相对顺序和来源；先处理/拒绝未接纳当前转移，再执行用户队列操作，禁止用旧 position=0 误删实际 current。外部漂移下普通 pending mutation 失败且业务不变；用户显式 Start/Play Now 的重新接管不属于偷偷修复漂移。
+整个业务 current/Played/pending 调整一次 CAS、Queue revision 恰 +1；仅 MPD position 随清理变化、同态采样或 retry/replay 不额外增加 revision。后续独立 AutoPlay batch 的真实 Queue 变更另 +1。pending 手动动作保持原 revision 合同、MANUAL 相对顺序和来源；先处理/拒绝未接纳当前转移，再执行用户队列操作，禁止用旧 position=0 误删实际 current。显式用户 Queue 操作的漂移处理采用下述安全规则；后台恢复与读取不得借此自动接管。
 
 #### 8.9.4 History 决定 — PB-HISTORY-001 / PB-HISTORY-UNCERTIFIED-001
 
@@ -427,6 +427,16 @@ status、idle、elapsed≈duration、URI 变化、played URI 日志、未见本�
 接纳 A→C 的同一事务中，用新内部 `discard_unconfirmed_active()` 清除 A 的 runtime active，不写结束事件、保留 session；C 不凭 observed_at 创建 History active，因为实际起点未知。后续显式操作若无可信 active，操作可成功但无旧歌曲 History。若显式操作建立新 active，仍按既有确认开始时间合同创建；在任何 finalizer 前须核对绑定/当前身份，失配则丢弃未经认证 active 而不写 reason。只读 observer 不执行这些修改。
 
 未知 STOPPED 的 UNKNOWN 结果保留最后业务状态与 runtime active（作为最后业务资料），页面以 reconciliation_required 标明其未获实际确认；后续 Service 显式操作先做上述 active 资格检查。采样 observed_at 只作观察时间，不是 ended_at，也不以 duration 倒推 started_at。永久旧记录不改写、不删除；has_entries 仍只由持久记录决定。
+
+#### Task 9 用户确认的队列安全规则（2026-10-13）
+
+用户明确请求播放单曲/集合、Play Next、加入队尾、排序、清空待播、删除、Next/Previous 时，首条 MPD 控制命令前核对操作前完整 MS 执行队列（position>=0，含 current 和全部 pending）与 MPD 有序队列及实际 current/state。不能用 Web AutoPlay 折叠后的可见列表代替；重复歌曲按 occurrence/MPD ID 区分，Played 不参与核对。无可靠映射（包括重启丢失运行时绑定）视为需要重建，禁止仅凭 URI 接纳旧 MPD ID。
+
+不一致时，先确认 MPD clear，再执行明确用户请求。保留当前项的操作按请求后的完整 MS 队列重建，按 MS 当前项恢复 PLAYING/PAUSED；只有清空前新鲜 MPD actual 确认同一歌曲且有 elapsed 时恢复该进度，否则从头恢复。STOPPED 保持停止。主动选曲操作按本次选择播放，不继承旧歌进度。物理重建不额外修改 Queue revision、用户 Stop 世代、Context 或永久 History。
+
+请求参数、CAS 与歌曲可用性校验仍先于控制副作用。读取失败不能当作“已确认不一致”而盲目清空。重试同一固定操作时，部分执行按已确认的命令前缀核对；不得重新与回滚后的 MS 基线比较而再次清空。响应未知的 add/play/pause/seek 不自动重发；成功终态重放只读。每条后续命令仍遵守 ExecutionSynchronizer 的所有权和结果确认规则。
+
+该授权仅适用于明确用户队列操作；GET、observe、后台恢复/AutoPlay 不自动清空外部队列。模式限制继续遵守 §8.9.5，不偷偷改变 consume/random/repeat/single。
 
 #### 8.9.5 AutoPlay 提前准备与异常终态 — PB-AUTOPLAY-EXEC-001
 

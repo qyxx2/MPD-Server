@@ -42,3 +42,26 @@
 受影响golden/URI证明的MPD数字ID少一次临时add，按真实生成器更新（golden仅四处entry_id减1）。Stock fake补充真实协议clear实现及相应本地能力声明，不能当作目标新实测。没有减弱未知漂移、同URI不同occurrence、失败回滚或重试断言。
 
 第二次fresh验证：针对性138项（丢失响应追加前）、Stock/URI25项、context请求重试与丢失clear/add响应再连接3项、完整后端1667项（新增丢失响应2项收集前）全部通过；完整Web318、typecheck/build、全后端Ruff/diff通过。两轮独立审阅发现已修正，最终无Critical/Important。CI将运行最终包含全部新增测试的suite。没有删DB/重启容器/再次修改consume；新代码尚未部署到NAS，不将自动回归或上一轮consume调整误记为当前实机问题已关闭。
+
+## 用户确认的完整队列安全规则
+
+用户明确要求每个 Queue 操作发送 MPD 命令前核对完整 MS 执行队列，而非 Web 折叠后的 AutoPlay 列表。用户进一步确认：不一致时先 clear；保留当前项的动作按 MS 当前项恢复播放/暂停，同一歌曲有新鲜 elapsed 证据时恢复进度。合同已记录于播放规格 Task 9 安全规则，实施范围见 `docs/superpowers/plans/2026-10-13-task-9-queue-preflight-safety.md`。
+
+实现统一放在 PlaybackService：捕获操作前完整 baseline，参数/CAS/保留曲目校验先行，在首条控制命令前核对全部 occurrence/MPD ID、URI、位置、连接、partition、playlist version 与当前状态。不一致时使用固定 ExecutionIntent 和命令 receipts 确认 clear/rebuild/play/pause/seek。普通保留操作直接重建请求后的目标队列；选曲操作先 clear 后按本次选择准备。读取/后台不清空；重试按已拥有前缀继续，未确认的响应不盲目重发。
+
+回归覆盖：多项/少项、重复 URI 的 occurrence 映射、绑定丢失、外部当前改变、全部变更入口、暂停/进度、无 successor 的 Next、无 Played 的 Previous、STOPPED 导航不自动播放、clear 各阶段故障、外部确认后的业务回滚、保留 pending 不可用时零控制副作用。原先禁止明确用户 pending mutation 修复绑定的两条测试按新授权改为核验 clear、完整队列、revision 与 current；GET/后台漂移拒绝测试保留。
+
+### 实机 MPD 验证
+
+使用本地新版 PlaybackService、独立临时 SQLite、真实 VerifiedPlayerPort/MPDAdapter（正确 `/music` URI 映射），连接用户授权的 `192.168.3.94:6600`；未改 NAS 容器数据库、未删除数据库、未重启容器。MPD 模式为 consume=0/single=0/random=0/repeat=0。
+
+- 全部 406 首顺序播放：MS=406、MPD=406，current position=0，约 16.59 秒。
+- 故意往 MPD 多加一项后加入队尾：clear/rebuild 后 MS=407、MPD=407，按 MS 恢复 PAUSED、elapsed=23.0。
+- 丢失运行时绑定后清空待播：按既有 AutoPlay 规则产生目标 MS=6、MPD=6，恢复 PAUSED、elapsed=23.0。
+- 全部 406 首固定随机顺序播放：MS=406、MPD=406，current position=0，约 17.28 秒。
+
+临时验收输出：`/tmp/task9-live-preflight-result.json`（本机，不提交）。结束时暂停实机播放。该证据验证新版服务到真实 MPD 的路径；NAS Web 容器尚未更新，不能据此声称新容器 UI 已验收。
+
+进一步实机控制验证使用三首集合及既有 AutoPlay 候选：修复后观察 matches_current=true 且 control_target 非空；通过 PlaybackService 的 target 校验执行 resume、seek(20)、pause，最终 MPD PAUSED、elapsed=20.842，MS/MPD 完整队列均8项。输出 `/tmp/task9-live-controls-result.json`（本机，不提交），不能把此小集合控制验证当作另一次406首性能证据。
+
+最终本地验证：完整后端1698通过（114.20秒），新增安全规则29项通过；全server Ruff、git diff --check通过。独立复核无剩余Critical/Important；所有被复现问题均有永久回归。无依赖、环境、镜像部署配置或API wire变化；Web全量验证由本次CI再次执行。

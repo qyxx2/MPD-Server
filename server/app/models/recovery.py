@@ -70,12 +70,13 @@ class ExecutionBinding:
 
 @dataclass(frozen=True)
 class ExecutionCommand:
-    kind: Literal["add", "delete", "move", "play", "pause", "clear"]
+    kind: Literal["add", "delete", "move", "play", "pause", "clear", "seek"]
     item_id: str | None = None
     mpd_song_id: int | None = None
     before_item_id: str | None = None
     before_mpd_song_id: int | None = None
     uri: str | None = None
+    seconds: float | None = None
 
 
 @dataclass(frozen=True)

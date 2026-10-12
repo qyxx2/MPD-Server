@@ -87,6 +87,8 @@ class ExecutionSynchronizer:
         elif command.kind == "play":
             status.update(state=PlayerState.PLAYING, song_id=mpd_id,
                           song_uri=next(uri for key, uri in entries if key == mpd_id))
+        elif command.kind == "seek":
+            status["elapsed_seconds"] = command.seconds
         else:
             status["state"] = PlayerState.PAUSED
         status["song_position"] = next((i for i, e in enumerate(entries) if e[0] == status["song_id"]), None)
@@ -138,6 +140,8 @@ class ExecutionSynchronizer:
                 await self.player.play(command.uri)
             else:
                 await self.player.queue_play(self._id(intent, command.item_id))
+        elif command.kind == "seek":
+            await self.player.seek(command.seconds)
         else:
             await self.player.pause()
         return None
@@ -173,7 +177,7 @@ class ExecutionSynchronizer:
                 command = intent.commands[index]
                 receipt = receipts.get(index)
                 if receipt and receipt.phase in {"sent", "ack"}:
-                    if receipt.phase == "sent" and command.kind in {"add", "play", "pause"}:
+                    if receipt.phase == "sent" and command.kind in {"add", "play", "pause", "seek"}:
                         self.journal.unknown_executions.add(intent.operation_id)
                         # A current fact cannot distinguish an unacknowledged
                         # play from natural advance or another transport owner.
@@ -201,6 +205,10 @@ class ExecutionSynchronizer:
                     actual = await self.player.read_execution_sample()
                     self._verify_fence(intent)
                     self._verify(intent, actual, after, append_only=append_only)
+                if command.kind == "seek" and (actual.status.elapsed_seconds is None
+                        or abs(actual.status.elapsed_seconds - command.seconds) > 2):
+                    self.journal.unknown_executions.add(intent.operation_id)
+                    raise self.journal.conflict("UNKNOWN seek was not confirmed")
                 self.journal.record_command(intent.operation_id, index, CommandReceipt(
                     "confirmed", receipt.returned_id, actual,
                 ))

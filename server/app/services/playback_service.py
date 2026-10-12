@@ -88,6 +88,8 @@ def _atomic_history_transition(
                 args = (self._recovery.prepare_context(kwargs["request_id"], kwargs["request_payload"], args[0]), *args[1:])
             owner = transaction_identity(self.queue_manager.queue_repository.path)
             prior = getattr(self, "_execution_owner", None)
+            prior_preflight = getattr(self, "_queue_preflight", None)
+            prior_repaired = getattr(self, "_queue_preflight_repaired", False)
             if prior is None or prior[0] is not owner:
                 snapshot = await self.queue_manager.get_snapshot()
                 key = (self._recovery.business_generation, snapshot.revision,
@@ -103,6 +105,11 @@ def _atomic_history_transition(
                             raise PlaybackReconciliationError("Song Play Now retry has a stale execution baseline")
                         operation_id = request[4]
                 self._execution_owner = (owner, operation_id)
+                self._queue_preflight_repaired = False
+                self._queue_preflight = (snapshot, await self.queue_manager.get_playback_state(), operation.__name__) if operation.__name__ in {
+                    "start_track", "play_context", "play_now", "play_song_now", "play_next",
+                    "add_to_queue", "reorder", "clear", "delete", "next", "previous",
+                } else None
             else:
                 operation_id = prior[1]
             try:
@@ -123,6 +130,8 @@ def _atomic_history_transition(
                 raise
             finally:
                 self._execution_owner = prior
+                self._queue_preflight = prior_preflight
+                self._queue_preflight_repaired = prior_repaired
 
         return await run_transaction(self.queue_manager.queue_repository.path, transition)
 
@@ -521,6 +530,7 @@ class PlaybackService:
         if item is None:
             raise QueueItemNotFoundError(queue_item_id)
         song = await self._require_available_song(item.song_id)
+        await self._desired_song_uris()
         await self._discard_unconfirmed_history_active()
         await self._prepare_play(song)
 
@@ -728,6 +738,7 @@ class PlaybackService:
                 state.playback_context_id if state else selected.playback_context_id
             )
             if promoted is None:
+                await self._verify_user_queue_baseline(selecting=True)
                 await self.player.stop()
                 status = await self.player.status()
                 if status.state != PlayerState.STOPPED:
@@ -831,6 +842,8 @@ class PlaybackService:
     async def next(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
+            await self._sync_player_queue()
+            await self._confirm_preserved_state()
             return state
 
         await self._discard_unconfirmed_history_active()
@@ -887,6 +900,8 @@ class PlaybackService:
     async def previous(self) -> PlaybackState | None:
         state = await self.queue_manager.get_playback_state()
         if state is None or state.state == "STOPPED":
+            await self._sync_player_queue()
+            await self._confirm_preserved_state()
             return state
 
         await self._discard_unconfirmed_history_active()
@@ -897,10 +912,13 @@ class PlaybackService:
             if item.position < 0
         ]
         if not played:
+            await self._sync_player_queue()
+            await self._confirm_preserved_state()
             return state
 
         target = played[0]
         song = await self._require_available_song(target.song_id)
+        await self._desired_song_uris()
         await self._prepare_play(song)
         selected = await self.queue_manager.play_now(
             target.queue_item_id,
@@ -1469,8 +1487,96 @@ class PlaybackService:
         journal.commit(identity, result)
         return result
 
+    async def _verify_user_queue_baseline(self, *, selecting: bool = False) -> None:
+        """Repair only a fresh user operation, before its first MPD command."""
+        baseline = getattr(self, "_queue_preflight", None)
+        if baseline is None:
+            return
+        snapshot, state, operation = baseline
+        journal = self._recovery
+        allocation_id = self._execution_owner[1]
+        attempt_id = journal.execution_attempts.get(allocation_id, allocation_id)
+        operation_id = attempt_id + "/preflight"
+        intent = journal.execution_intents.get(operation_id)
+        # A retry owns a fixed external prefix. Its executor, rather than the
+        # rolled-back business queue, is the authority for its remaining suffix.
+        if any(key.startswith(attempt_id + "/") and key != operation_id for key in journal.execution_intents):
+            if intent is not None:
+                self._queue_preflight_repaired = True
+                if operation_id in journal.execution_samples:
+                    journal.commit_execution(operation_id, RecoveryResult("APPLIED", state, operation_id))
+            self._queue_preflight = None
+            return
+        if intent is None:
+            sample = await self._read_execution_sample()
+            execution = sorted((item for item in snapshot.items if item.position >= 0), key=lambda item: item.position)
+            items = []
+            for item in execution:
+                song = await self.library_repository.get_song(item.song_id)
+                known = next((uri for key, _, uri in journal.synced_entries or () if key == item.queue_item_id), None)
+                items.append((item.queue_item_id, song.file_uri if song is not None else known))
+            items = tuple(items)
+            binding = journal.binding
+            mapped = binding.entries if binding else journal.synced_entries or ()
+            owned_sample = journal.sync_sample
+            identity_matches = (
+                tuple((key, uri) for key, _, uri in mapped) == items
+                and tuple((entry.mpd_song_id, entry.song_uri, entry.position) for entry in sample.entries)
+                == tuple((mpd_id, uri, position) for position, (_, mpd_id, uri) in enumerate(mapped))
+                and owned_sample is not None
+                and (sample.connection_epoch, sample.partition, sample.playlist_version)
+                == (owned_sample.connection_epoch, owned_sample.partition, owned_sample.playlist_version)
+            )
+            current_matches = (
+                state is None and sample.status.state == PlayerState.STOPPED
+                or state is not None and sample.status.state.value.upper() == state.state
+                and (state.state == "STOPPED" or bool(mapped)
+                     and sample.status.song_id == mapped[0][1] and sample.status.song_position == 0)
+            )
+            if (identity_matches and current_matches) or (not items and not sample.entries and state is None):
+                self._queue_preflight = None
+                return
+            selecting = selecting or operation == "play_song_now"
+            if operation == "delete":
+                staged = await self.queue_manager.get_snapshot()
+                selecting = next((item.queue_item_id for item in staged.items if item.position == 0), None) != next((item.queue_item_id for item in execution if item.position == 0), None)
+            target_items = ()
+            if not selecting:
+                staged = await self.queue_manager.get_snapshot()
+                staged_execution = sorted((item for item in staged.items if item.position >= 0), key=lambda item: item.position)
+                staged_uris = await self._desired_song_uris()
+                target_items = tuple((item.queue_item_id, uri) for item, uri in zip(staged_execution, staged_uris, strict=True))
+            target = target_items[0][0] if target_items and state is not None and state.state != "STOPPED" else None
+            commands = [ExecutionCommand("clear")] if sample.entries else []
+            commands.extend(ExecutionCommand("add", key, uri=uri) for key, uri in target_items)
+            if target is not None:
+                await self._require_available_song(execution[0].song_id)
+                commands.append(ExecutionCommand("play", target))
+                if state.state == "PAUSED":
+                    commands.append(ExecutionCommand("pause"))
+                if (sample.status.song_uri == target_items[0][1]
+                        and sample.status.state in {PlayerState.PLAYING, PlayerState.PAUSED}
+                        and sample.status.elapsed_seconds is not None):
+                    commands.append(ExecutionCommand("seek", target, seconds=sample.status.elapsed_seconds))
+            intent = ExecutionIntent(
+                journal.service_epoch, journal.binding.binding_generation if journal.binding else journal._binding_generation,
+                operation_id, snapshot.revision, sample, (), target_items, tuple(commands),
+                target, state.state if target is not None else "STOPPED", True,
+            )
+        journal.preserve_binding()
+        executor = ExecutionSynchronizer(self.player, journal)
+        final = await executor.execute(intent)
+        # Do not advance the binding generation until the requested queue change
+        # is confirmed: fixed preflight receipts must survive outer rollback.
+        journal.binding = None
+        journal.synced_entries, journal.sync_sample = executor.mapping(intent), final
+        self._queue_preflight_repaired = True
+        journal.commit_execution(operation_id, RecoveryResult("APPLIED", state, operation_id))
+        self._queue_preflight = None
+
     async def _prepare_context_execution(self, song: Song) -> PlayerStatus:
         """Prepare an explicitly replaced collection before starting its current."""
+        await self._verify_user_queue_baseline(selecting=True)
         self._control_targets.invalidate()
         queue = await self.queue_manager.get_snapshot()
         uris = await self._desired_song_uris()
@@ -1528,6 +1634,7 @@ class PlaybackService:
         return status
 
     async def _prepare_play(self, song: Song) -> PlayerStatus:
+        await self._verify_user_queue_baseline(selecting=True)
         self._control_targets.invalidate()
         journal = self._recovery
         operation_id = self._execution_owner[1]
@@ -1612,6 +1719,7 @@ class PlaybackService:
     async def _sync_player_queue(
         self, *, previous_items: Sequence[QueueItem] | None = None,
     ) -> None:
+        await self._verify_user_queue_baseline()
         desired = await self._desired_song_uris()
         queue = await self.queue_manager.get_snapshot()
         execution = sorted((item for item in queue.items if item.position >= 0), key=lambda item: item.position)
@@ -1628,7 +1736,7 @@ class PlaybackService:
             sample = await self._read_execution_sample()
             binding = journal.binding
             state = await self.queue_manager.get_playback_state()
-            explicit = (
+            explicit = getattr(self, "_queue_preflight_repaired", False) or (
                 getattr(self, "_binding_control_owner", None) is transaction_identity(journal.path)
                 and (getattr(self, "_binding_origin_id", None) is None
                      or (bool(execution) and execution[0].queue_item_id != self._binding_origin_id))
