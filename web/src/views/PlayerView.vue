@@ -43,4 +43,5 @@ const dacDetail = computed(() => {
 .media-stage { width: 100%; min-height: 4rem; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); container-type: size; }
 .artwork-toggle { width: min(100%, 100cqh); height: auto; align-self: center; justify-self: center; max-width: 100%; aspect-ratio: 1; padding: 0; border: 0; border-radius: var(--radius-medium); background: transparent; cursor: pointer; }
 .artwork-toggle > .artwork-stage { width: 100%; height: 100%; }
+.identity h2 { display: block; height: auto; max-height: none; margin: .75rem 0 .15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

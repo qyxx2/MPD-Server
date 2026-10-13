@@ -161,7 +161,8 @@ async def mpd_runtime(components) -> AsyncIterator[dict]:
         await fake.close()
 
 
-def test_start_track_keeps_server_and_mpd_playback_state_in_sync(components):
+def test_start_track_keeps_server_and_mpd_playback_state_in_sync(components, monkeypatch):
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: None)
     async def scenario():
         async with mpd_runtime(components) as runtime:
             await seed_songs(runtime["library"], *"abcdef")
@@ -192,8 +193,9 @@ def test_start_track_keeps_server_and_mpd_playback_state_in_sync(components):
 
 
 def test_play_next_and_add_to_queue_keep_server_and_mpd_queues_in_sync(
-    components,
+    components, monkeypatch,
 ):
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: None)
     async def scenario():
         async with mpd_runtime(components) as runtime:
             await seed_songs(runtime["library"], *"abcdefgh")

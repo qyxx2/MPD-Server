@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -199,7 +200,9 @@ def test_next_keeps_server_current_mpd_current_and_history_consistent(
     components: dict[str, object],
     tmp_path: Path,
     media_fixture_dir: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: None)
     async def scenario() -> None:
         root, _ = scan_fixture_files(tmp_path, media_fixture_dir, 3)
         scanner = LibraryScanner(components["library"])
@@ -242,7 +245,9 @@ def test_autoplay_play_next_and_add_to_queue_match_server_and_mpd_queue(
     components: dict[str, object],
     tmp_path: Path,
     media_fixture_dir: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: None)
     async def scenario() -> None:
         root, _ = scan_fixture_files(tmp_path, media_fixture_dir, 8)
         scanner = LibraryScanner(components["library"])

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 
 import pytest
 
@@ -234,8 +235,9 @@ def test_queue_revision_conflict_precedes_player_side_effects(real_client, opera
 
 @pytest.mark.parametrize("available", [True, False])
 def test_delete_current_without_pending_uses_autoplay_or_confirmed_stop(
-    real_client, available
+    real_client, available, monkeypatch,
 ):
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: ids.sort())
     client, library, player, service = real_client
     items = start(client)
     current = next(item for item in items if item["position"] == 0)

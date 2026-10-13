@@ -78,6 +78,6 @@ watch(() => active.value.join(','), () => { void locate() })
 .lyrics-content { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; position: relative; user-select: text; -webkit-user-select: text; touch-action: pan-y; overflow-wrap: anywhere; }
 .lyric-cue { color: var(--text-secondary); padding: .65rem .25rem; line-height: 1.7; white-space: pre-wrap; }
 .lyric-cue.seekable { cursor: pointer; }
-.lyric-cue[aria-current="true"] { color: var(--accent); font-weight: 650; background: rgba(49, 183, 226, .1); border-radius: .5rem; }
+.lyric-cue[aria-current="true"] { color: var(--accent); font-weight: 650; font-size: 1.15em; }
 .lyrics-plain, .lyric-note { white-space: pre-wrap; line-height: 1.8; color: var(--text-secondary); }
 </style>

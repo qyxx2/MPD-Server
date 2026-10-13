@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 
 import pytest
 
@@ -25,7 +26,9 @@ def run(coro):
 
 
 @pytest.fixture
-def components(tmp_path):
+def components(tmp_path, monkeypatch):
+    # Fix entropy for orchestration assertions; AutoPlay tests cover fresh shuffles.
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: ids.sort())
     path = str(tmp_path / "playback-service.db")
     run(initialize_database(path))
 

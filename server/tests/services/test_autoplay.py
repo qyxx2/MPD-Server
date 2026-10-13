@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 
 import pytest
 
@@ -45,7 +46,53 @@ def seed_songs(library: LibraryRepository, *song_ids: str) -> None:
         run(library.upsert_song(make_song(song_id)))
 
 
-def test_plan_refill_preserves_candidate_policy_without_persistence(components):
+@pytest.mark.parametrize("planned", [False, True])
+def test_autoplay_uses_fresh_random_candidates_after_restart(
+    components, monkeypatch, planned,
+):
+    library, queue, manager = components
+    seed_songs(library, *"abcdefg")
+    context = run(manager.start_track("a"))
+    orders = iter([list("gfedcb"), list("cdefgb")])
+
+    def shuffle(_random, candidates):
+        assert set(candidates) == set("bcdefg")
+        candidates[:] = next(orders)
+
+    monkeypatch.setattr(random.SystemRandom, "shuffle", shuffle)
+    batches = []
+    for _ in range(2):
+        autoplay = AutoPlay(queue, library, manager.playback_state_repository)
+        if planned:
+            generated = run(autoplay.plan_refill(context, run(queue.get_snapshot())))
+        else:
+            generated = run(autoplay.refill(context))
+        batches.append([item.song_id for item in generated])
+        run(queue.clear_pending())
+    assert batches == [list("gfedc"), list("cdefg")]
+
+
+def test_new_operations_randomize_but_same_operation_keeps_its_refill(components):
+    library, queue, manager = components
+    seed_songs(library, *"abcdefghijklmnop")
+    context = run(manager.start_track("a"))
+    snapshot = run(queue.get_snapshot())
+    autoplay = AutoPlay(queue, library)
+    batches = []
+    for operation_id in ("operation-one", "operation-one", "operation-two"):
+        with autoplay.fixed_random(operation_id):
+            planned = run(autoplay.plan_refill(context, snapshot))
+        batches.append([item.song_id for item in planned])
+    assert batches[0] == batches[1]
+    assert batches[0] != batches[2]
+    assert all(len(batch) == len(set(batch)) == 5 for batch in batches)
+    assert all(set(batch) <= set("bcdefghijklmnop") for batch in batches)
+
+
+def test_plan_refill_preserves_candidate_policy_without_persistence(
+    components, monkeypatch,
+):
+    monkeypatch.setattr(random.SystemRandom, "shuffle", lambda _rng, ids: ids.reverse())
     library, queue, manager = components
     seed_songs(library, *"abcdefg")
     context = run(manager.start_track("a"))
@@ -54,12 +101,12 @@ def test_plan_refill_preserves_candidate_policy_without_persistence(components):
     before = run(queue.get_snapshot())
     state = run(manager.get_playback_state())
     planned = run(autoplay.plan_refill(context, before))
-    assert [item.song_id for item in planned] == ["d", "c", "b", "e", "f"]
+    assert [item.song_id for item in planned] == ["d", "c", "b", "g", "f"]
     assert len({item.queue_item_id for item in planned}) == 5
     assert [item.position for item in planned] == [1, 2, 3, 4, 5]
     assert all(item.source == "AUTOPLAY" and item.playback_context_id == context.context_id for item in planned)
     assert run(queue.get_snapshot()) == before and run(manager.get_playback_state()) == state
-    assert [item.song_id for item in run(autoplay.refill(context))] == ["d", "c", "b", "e", "f"]
+    assert [item.song_id for item in run(autoplay.refill(context))] == ["d", "c", "b", "g", "f"]
 
 
 def current_context(song_id: str = "a") -> PlaybackContext:
@@ -76,8 +123,9 @@ def up_next(queue: QueueRepository):
 
 
 def test_autoplay_refill_uses_playback_context_before_global_available_candidates(
-    components,
+    components, monkeypatch,
 ):
+    monkeypatch.setattr(random.SystemRandom, "shuffle", lambda _rng, ids: ids.reverse())
     library, queue, manager = components
     seed_songs(library, "a", "b", "c", "d", "e", "f", "g")
     started_context = run(manager.start_track("a"))
@@ -91,12 +139,12 @@ def test_autoplay_refill_uses_playback_context_before_global_available_candidate
 
     generated = run(AutoPlay(queue, library).refill(context))
 
-    assert [item.song_id for item in generated] == ["d", "c", "b", "e", "f"]
+    assert [item.song_id for item in generated] == ["d", "c", "b", "g", "f"]
     assert all(item.source == "AUTOPLAY" for item in generated)
     assert all(
         item.playback_context_id == context.context_id for item in generated
     )
-    assert [item.song_id for item in up_next(queue)] == ["d", "c", "b", "e", "f"]
+    assert [item.song_id for item in up_next(queue)] == ["d", "c", "b", "g", "f"]
 
 
 def test_autoplay_does_nothing_when_up_next_is_at_low_watermark(components):
@@ -122,16 +170,9 @@ def test_autoplay_refills_five_when_up_next_is_below_low_watermark(components):
     generated = run(AutoPlay(queue, library).refill(context))
 
     assert len(generated) == 5
-    assert [item.song_id for item in generated] == ["d", "e", "f", "g", "h"]
-    assert [item.song_id for item in up_next(queue)] == [
-        "b",
-        "c",
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-    ]
+    assert len({item.song_id for item in generated}) == 5
+    assert {item.song_id for item in generated} <= set("defghi")
+    assert [item.song_id for item in up_next(queue)] == ["b", "c"] + [item.song_id for item in generated]
 
 
 def test_autoplay_never_removes_or_reorders_manual_items(components):
@@ -149,13 +190,8 @@ def test_autoplay_never_removes_or_reorders_manual_items(components):
         ("b", "MANUAL"),
     ]
     assert all(item.source == "AUTOPLAY" for item in generated)
-    assert [item.song_id for item in generated] == [
-        "d",
-        "e",
-        "f",
-        "g",
-        "h",
-    ]
+    assert {item.song_id for item in generated} == set("defgh")
+    assert items[2:] == generated
     assert items[0].position != items[1].position
     assert all(
         item.source != "MANUAL"
@@ -191,7 +227,7 @@ def test_autoplay_insufficient_candidates_does_not_duplicate_within_batch(compon
 
     generated = run(AutoPlay(queue, library).refill(context))
 
-    assert [item.song_id for item in generated] == ["b", "c"]
+    assert {item.song_id for item in generated} == {"b", "c"}
     assert len({item.song_id for item in generated}) == len(generated)
     assert all(item.source == "AUTOPLAY" for item in generated)
 
@@ -258,8 +294,9 @@ def test_autoplay_preserves_manual_queue_mutation_during_refill(components):
     manual, generated, items = run(exercise())
 
     assert manual.source == "MANUAL"
-    assert [item.song_id for item in generated] == ["b", "c", "d", "e", "f"]
-    assert [item.song_id for item in items] == ["j", "b", "c", "d", "e", "f"]
+    assert len(generated) == len({item.song_id for item in generated}) == 5
+    assert {item.song_id for item in generated} <= set("bcdefghi")
+    assert items[0] == manual and items[1:] == generated
     assert items[0].source == "MANUAL"
 
 
@@ -336,5 +373,5 @@ def test_queue_exhaustion_does_not_turn_playback_terminal(components):
 
     after = run(manager.playback_state_repository.get_state())
     assert after == before
-    assert [item.song_id for item in generated] == ["b", "c", "d"]
+    assert {item.song_id for item in generated} == {"b", "c", "d"}
     assert after.state != "STOPPED"

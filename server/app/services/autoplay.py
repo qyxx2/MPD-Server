@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from random import Random, SystemRandom
 from uuid import uuid4
 
 from server.app.models.queue import PlaybackContext, QueueItem, QueueSnapshot
@@ -10,11 +13,22 @@ from server.app.repositories.queue_repository import (
     QueueRevisionConflictError,
 )
 
+_random_operation: ContextVar[str | None] = ContextVar("autoplay_random_operation", default=None)
+
 
 class AutoPlay:
     LOW_WATERMARK = 5
     REFILL_COUNT = 5
     MAX_CAS_RETRIES = 1
+
+    @contextmanager
+    def fixed_random(self, operation_id: str):
+        """Keep a random operation's candidates stable across rollback/retry."""
+        token = _random_operation.set(operation_id)
+        try:
+            yield
+        finally:
+            _random_operation.reset(token)
 
     def __init__(
         self,
@@ -52,11 +66,19 @@ class AutoPlay:
                 candidates.append(song_id)
                 seen.add(song_id)
 
+        global_candidates: list[str] = []
         for song_id in available_ids:
             if song_id in seen or song_id in queued_song_ids:
                 continue
-            candidates.append(song_id)
+            global_candidates.append(song_id)
             seen.add(song_id)
+
+        # Operation IDs are fresh random UUIDs, retained by the recovery journal
+        # for retries. Standalone refills draw directly from system entropy.
+        operation_id = _random_operation.get()
+        rng = Random(operation_id) if operation_id is not None else SystemRandom()
+        rng.shuffle(global_candidates)
+        candidates.extend(global_candidates)
 
         current = self._current_item(snapshot_items)
         current_song_id = current.song_id if current is not None else None

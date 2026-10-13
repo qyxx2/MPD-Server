@@ -114,7 +114,8 @@ def _atomic_history_transition(
                 operation_id = prior[1]
             try:
                 if prior is None or prior[0] is not owner:
-                    with self.queue_manager.queue_repository.fixed_allocation(operation_id):
+                    with (self.queue_manager.queue_repository.fixed_allocation(operation_id),
+                          self.autoplay.fixed_random(operation_id)):
                         return await operation(self, *args, **kwargs)
                 return await operation(self, *args, **kwargs)
             except (PlayerUnavailable, PlayerCommandError, TimeoutError) as error:
