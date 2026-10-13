@@ -28,6 +28,21 @@ async function lyrics(song = playerState().current_song, position: number | null
   wrapper = mount(Stage, { props: { song, position, resourceScope: scope } })
   return wrapper
 }
+it('cached embedded LYRICS tagged as text follows timed cues and scrolls when playback advances', async () => {
+  const scroll = vi.fn()
+  Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scroll })
+  const song = { ...playerState().current_song!, lyrics: '[00:37]甲\n[00:39]乙', lyrics_format: 'text', lyrics_source: 'embedded' }
+  const w = await lyrics(song)
+  await flushPromises()
+  expect(w.findAll('[aria-current="true"]').map(e => e.text())).toEqual(['甲'])
+  scroll.mockClear()
+  await w.setProps({ position: 39 })
+  await flushPromises()
+  expect(w.findAll('[aria-current="true"]').map(e => e.text())).toEqual(['乙'])
+  expect(scroll).toHaveBeenCalled()
+  await w.setProps({ position: null })
+  expect(w.find('[aria-current="true"]').exists()).toBe(false)
+})
 it('read_error retains fallback text and source; plain, missing and malformed LRC remain distinguishable in header details', async () => {
   const { playerPage } = await import('../support/player')
   const h = playerPage(); wrapper = h.wrapper
