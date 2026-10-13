@@ -38,6 +38,25 @@ docker-compose -f docs/docker-compose.yml logs --tail=100
 
 **部署前必须编辑示例中的镜像 SHA、NAS IP、MPD 地址、音乐路径和输出设备名。** 仓库中的 `docs/docker-compose.yml` 是用于指定环境的参考示例，不应直接照搬其中的私有局域网地址或硬件名称。保存 MPD 地址并不会立即切换活跃连接，需要手动重启容器。
 
+
+### 生成 `mpd-capabilities.json`
+
+在能直接连接目标 MPD 的仓库环境中运行；`SONG_URI` 使用 MPD 曲库中真实存在的一首歌的**相对 URI**：
+
+```sh
+export MPD_HOST=192.168.3.94 MPD_PORT=6600 SONG_URI='Artist/Album/song.flac'
+mkdir -p deploy/config
+
+python -m server.app.player.capabilities \
+  --host "$MPD_HOST" --port "$MPD_PORT" \
+  --probe-transport --probe-song-uri "$SONG_URI" \
+  > /tmp/mpd-capabilities-result.json
+
+python -c 'import json,os; r=json.load(open("/tmp/mpd-capabilities-result.json")); json.dump({"endpoint":{"host":os.environ["MPD_HOST"],"port":int(os.environ["MPD_PORT"])},"mpd_version":r["version"],"result":r},open("deploy/config/mpd-capabilities.json","w"),ensure_ascii=False,indent=2)'
+```
+
+生成后将该文件挂载到容器的 `/config/mpd-capabilities.json`，并设置 `MPD_CAPABILITIES_PATH=/config/mpd-capabilities.json`。能力探测会临时执行 Queue / Output 等真实 MPD 操作并尝试恢复原状态，应在允许短暂改变播放状态时运行；不要把其他 MPD 地址生成的旧文件直接复用到当前目标。
+
 ## 开发及验证
 
 ```sh
