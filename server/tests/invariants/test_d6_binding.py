@@ -204,36 +204,36 @@ def test_sample_failure_invalidates_binding_without_business_change(real_client,
     assert controls == []
 
 
-def test_pending_mutation_cannot_rebuild_lost_binding(real_client, monkeypatch):
-    from server.app.services.playback_service import PlaybackReconciliationError
-
+def test_explicit_pending_mutation_rebuilds_lost_binding(real_client, monkeypatch):
     client, _, player, service = real_client
     start(client)
     player.reconnect()
     assert run(service.reconcile_external_status()).outcome == 'UNKNOWN'
-    before = server_snapshot(service)
+    before = run(service.queue_manager.get_snapshot())
     controls = capture_controls(monkeypatch, player)
-    with pytest.raises(PlaybackReconciliationError):
-        run(service.add_to_queue('b'))
-    assert run(service.get_execution_binding()) is None
-    assert server_snapshot(service) == before
-    assert controls == []
+    run(service.add_to_queue('b'))
+    binding = run(service.get_execution_binding())
+    assert binding is not None
+    assert controls[0][0] == 'queue_clear'
+    after = run(service.queue_manager.get_snapshot())
+    assert after.revision == before.revision + 1
+    assert run(player.status()).song_uri == 'a.flac'
+    assert tuple(entry.song_uri for entry in run(player.queue_entries())) == tuple(uri for _, _, uri in binding.entries)
 
 
-def test_pending_mutation_does_not_replay_unaccepted_current(real_client, monkeypatch):
-    from server.app.services.playback_service import PlaybackReconciliationError
-
+def test_explicit_pending_mutation_restores_ms_current_after_external_advance(real_client, monkeypatch):
     client, _, player, service = real_client
     start(client)
     entries = run(player.queue_entries())
     run(player.queue_play(entries[1].mpd_song_id))
-    before = server_snapshot(service)
+    before = run(service.queue_manager.get_snapshot())
     controls = capture_controls(monkeypatch, player)
-    with pytest.raises(PlaybackReconciliationError):
-        run(service.add_to_queue('c'))
-    assert server_snapshot(service) == before
-    assert run(player.status()).song_id == entries[1].mpd_song_id
-    assert controls == []
+    run(service.add_to_queue('c'))
+    assert controls[0][0] == 'queue_clear'
+    assert run(service.queue_manager.get_snapshot()).revision == before.revision + 1
+    assert run(player.status()).song_uri == 'a.flac'
+    assert run(player.status()).song_position == 0
+    assert run(service.get_execution_binding()) is not None
 
 
 def test_confirmation_never_rebinds_a_changed_version(real_client, monkeypatch):

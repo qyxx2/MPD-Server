@@ -3,10 +3,24 @@ from __future__ import annotations
 import asyncio
 import base64
 import gzip
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def capture_application_diagnostics(caplog):
+    """Inspect raw records in tests even when the safe console blocks propagation."""
+    logger = logging.getLogger('server.app')
+    original_propagate = logger.propagate
+    logger.addHandler(caplog.handler)
+    try:
+        yield
+    finally:
+        logger.removeHandler(caplog.handler)
+        logger.propagate = original_propagate
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +38,12 @@ def isolate_application_observer(monkeypatch):
     @asynccontextmanager
     async def isolated(application):
         async with lifespan(application):
+            # Stop before the library runtime's first turn: legacy API fixtures
+            # replace services on separate loops and must never scan/connect.
+            application.state.library_runtime_task.cancel()
+            application.state.state_observer_task.cancel()
+            await application.state.library_runtime.close()
+            await asyncio.gather(application.state.library_runtime_task, return_exceptions=True)
             await application.state.state_observer.close()
             await asyncio.gather(application.state.state_observer_task, return_exceptions=True)
             yield

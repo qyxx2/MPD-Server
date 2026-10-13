@@ -5,7 +5,7 @@ import type { PlayerStore } from '../../stores/player'
 import type { JsonValue, MutationIntent } from '../../types/api'
 import { ApiError } from '../../types/api'
 import { derivePlayerFacts } from './playerFacts'
-export interface PlayerRuntime { api: ReturnType<typeof createApiClient>; refresh(): Promise<void> }
+export interface PlayerRuntime { api: ReturnType<typeof createApiClient>; refresh(): Promise<void>; mutationLocked?(): boolean }
 export const playerRuntimeKey: InjectionKey<PlayerRuntime> = Symbol('player-runtime')
 export function controlIdentity(store: PlayerStore) {
   const s = store.snapshot, o = s?.playback_observation, t = o?.control_target
@@ -40,7 +40,7 @@ export function createPlayerActions(store: PlayerStore, runtime: PlayerRuntime) 
     const o = store.snapshot?.playback_observation
     if (observationUnknown(store) && pendingScope(store) === waiting.scope && store.writable) return
     if (controlIdentity(store) !== waiting.identity || !store.writable || facts.value.stale) { waiting = null; ui.syncing = false; ui.seekPreview = null; return }
-    if (facts.value.bound && o?.observed_at && Date.parse(o.observed_at) >= waiting.updatedAt) { waiting = null; ui.syncing = false; ui.seekPreview = null }
+    if (facts.value.bound && o?.observed_at && Date.parse(o.observed_at) >= waiting.updatedAt) { waiting = null; ui.syncing = false; ui.seekPreview = null; ui.readFailed = false }
   }
   const dispose = watch(() => [controlIdentity(store), store.writable, store.snapshot, store.marker.generation, pendingScope(store)] as const, (value, old) => {
     if (value[0] !== old[0] || value[4] !== old[4] || !value[1]) {
@@ -90,7 +90,7 @@ export function createPlayerActions(store: PlayerStore, runtime: PlayerRuntime) 
       revoke(); ui.action = 'stop'; ui.stopPending = true
       return send(runtime.api.createIntent('POST', '/api/playback/stop', undefined), action, null, ++stopVersion)
     }
-    if (ui.pending || ui.stopPending || ui.syncing || ui.unknown || !facts.value.capabilities[action]) return Promise.resolve()
+    if (runtime.mutationLocked?.() || ui.pending || ui.stopPending || ui.syncing || ui.unknown || !facts.value.capabilities[action]) return Promise.resolve()
     const target = store.snapshot?.playback_observation.control_target
     const payload: JsonValue | undefined = action === 'resume' && target ? { target: { ...target } }
       : action === 'seek' && target ? { seconds: seconds!, target: { ...target } } : undefined
@@ -101,7 +101,7 @@ export function createPlayerActions(store: PlayerStore, runtime: PlayerRuntime) 
   }
   return {
     ui, facts, dispose() { dispose(); revoke(); ++stopVersion; ui.stopPending = false },
-    get locked() { return ui.pending || ui.stopPending || ui.syncing || ui.unknown },
+    get locked() { return Boolean(runtime.mutationLocked?.() || ui.pending || ui.stopPending || ui.syncing || ui.unknown) },
     beginSeek() { if (!facts.value.capabilities.seek || this.locked) return; draftIdentity = controlIdentity(store); ui.draft = facts.value.position ?? 0 },
     preview(seconds: number) { if (draftIdentity && ui.draft !== null && Number.isFinite(seconds)) ui.draft = Math.max(0, Math.min(seconds, facts.value.duration!)) },
     cancelDraft,

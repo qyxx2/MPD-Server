@@ -13,6 +13,17 @@ it('last legal integer offset advances display matching and invalid offsets cann
   expect(activeCue(doc, 0.9)).toEqual([])
   expect(activeCue(parseLyrics('[offset:-1000]\n[00:02]延后', 'lrc'), 2)).toEqual([])
 })
+it('detects valid timing in cached text while ordinary and malformed text remain unsynchronized', () => {
+  const doc = parseLyrics('[offset:500]\n[00:01.50]甲\n[00:03]乙', 'text')
+  expect(doc.synchronized).toBe(true)
+  expect(activeCue(doc, 1)).toEqual([0])
+  for (const raw of ['普通文本 <b>原样</b>', '[00:99]坏秒\n[00:01.1234]坏小数']) {
+    const plain = parseLyrics(raw, 'text')
+    expect(plain.synchronized).toBe(false)
+    expect(plain.text).toBe(raw)
+    expect(activeCue(plain, 100)).toEqual([])
+  }
+})
 it('preserves non-time text and malformed tags without inventing cues; no valid cue falls back to raw plain text', () => {
   const raw = '[ar:作者]\n[00:99]坏秒\n[00:01.1234]坏小数\n普通文本 <b>不解释</b>'
   const doc = parseLyrics(raw, 'lrc')

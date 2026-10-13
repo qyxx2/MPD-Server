@@ -253,8 +253,10 @@ def test_library_and_playlist_share_one_outer_commit_and_restart(tmp_path, media
         scanner = LibraryScanner(library, coordinator=coordinator)
         playlists = PlaylistService(PlaylistRepository(path), coordinator=coordinator)
 
+        prepared = await scanner.prepare(root)
+
         async def joint(_):
-            result = await scanner.scan_full(root)
+            result = await scanner.commit(prepared)
             song_id = result.added_song_ids[0]
             playlist = await playlists.save_queue_as_playlist("Joint", [song_id])
             await playlists.set_favorite(song_id, True)

@@ -218,6 +218,11 @@ def parse_media_file(path: Path) -> ParsedSongMetadata:
             sidecar_error,
         ) = _read_sidecar(path)
         embedded_lyrics = _extract_embedded_lyrics(audio)
+        embedded_format: LyricsFormat = None
+        if embedded_lyrics is not None:
+            embedded_format = (
+                "lrc" if _LRC_TIMESTAMP.search(embedded_lyrics) else "text"
+            )
 
         if sidecar_lyrics is not None:
             lyrics = sidecar_lyrics
@@ -225,11 +230,11 @@ def parse_media_file(path: Path) -> ParsedSongMetadata:
         elif sidecar_error is not None:
             lyrics = embedded_lyrics
             lyrics_status = "read_error"
-            lyrics_format = "text" if embedded_lyrics else None
+            lyrics_format = embedded_format if embedded_lyrics else None
             lyrics_source = "embedded" if embedded_lyrics else None
         elif embedded_lyrics is not None:
             lyrics = embedded_lyrics
-            lyrics_format = "text"
+            lyrics_format = embedded_format
             lyrics_source = "embedded"
             lyrics_status = "available"
         else:

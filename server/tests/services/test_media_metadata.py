@@ -6,6 +6,29 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.parametrize("invalid_sidecar", [False, True])
+def test_embedded_vorbis_lyrics_with_timestamps_are_lrc(
+    media_fixture_dir: Path, invalid_sidecar: bool,
+) -> None:
+    from mutagen.flac import FLAC
+
+    from server.app.services.media_metadata import parse_media_file
+
+    path = media_fixture_dir / "metadata.flac"
+    text = "[offset:500]\n[00:01.50]第一行\n[00:03]第二行"
+    audio = FLAC(path)
+    audio["LYRICS"] = [text]
+    audio.save()
+    if invalid_sidecar:
+        path.with_suffix(".lrc").write_text("invalid sidecar", encoding="utf-8")
+
+    metadata = parse_media_file(path)
+    assert metadata.lyrics == text
+    assert metadata.lyrics_format == "lrc"
+    assert metadata.lyrics_source == "embedded"
+    assert metadata.lyrics_status == ("read_error" if invalid_sidecar else "available")
+
+
 def test_step1_media_fixtures_cover_flac_mp3_lrc_and_parse_failure(
     media_fixture_dir: Path,
 ) -> None:

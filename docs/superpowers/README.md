@@ -14,6 +14,12 @@
 
 发生冲突时，不通过增加另一份解释文档解决；回到 spec、主 Plan、实际代码/测试定位冲突，并在必要时修正唯一权威来源。
 
+## v0.1 最终最小交付入口（2026-10-11）
+
+开始配置、URI映射、曲库同步、AppBar活动、基本健康日志或NAS部署时，先读[Final Batch Plan](plans/2026-10-11-v0-1-nas-final-batch-plan.md)，再按Batch读取Architecture §22、Library §7.2和Visual §6。主Plan只保留范围映射；长期语义不复制到执行计划。
+
+2026-10-11用户仅授权执行B00，现为CLOSED / BASELINE PASSED；指定后端36项、Web36项fresh通过，基线/合同/安全装配证据见Final Batch Plan B00。B00C及B01–B09 NOT STARTED，未改产品或执行Docker/实机/手机验收。核心目标是实际Docker部署和真实MPD功能；备份恢复、update.sh、重启API、PWA延期。AppBar完善独立B04，同步wire独立B05。旧Task9 B10剩余Gate保留，重叠实机项可引用B08同一次真实证据，不能自动关闭。历史计划/验收中的成功通知撤下方案属于旧轮次，后续活动展示按Visual本次增量。
+
 ## 当前 Task 8 最小读取集
 
 Task 0–7、D6及Task6后端功能验收已完成；D6最终逐合同证明位于 `archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md`，Task6 Batch13状态位于 `archive/task-6/2026-10-04-task-6-batch-13-acceptance.md`。原本地DB保留未验证审计事件单独保留，不宣称已恢复。
@@ -33,7 +39,19 @@ Task 8 的 Contract Audit / 执行计划应在开始该 Task 时另行制定，�
 
 2026-10-09 用户优先级调整：手机浏览器为主要交付/触摸验收环境，Ubuntu Firefox/Chromium 仅辅助；PWA 安装/SW/冷离线壳延期，不阻塞 Task 8 手机 Web acceptance 或 Task 9，不声明延期部分完成。详见 Architecture §4.3 和 active Batch Plan。
 
-当前入口：[Task 8 Web Batch Plan](plans/2026-10-09-task-8-web-batch-plan.md) 与 [W6 acceptance](archive/task-8/2026-10-10-task-8-web-w6-acceptance.md) 最新关闭记录。W1–W6 手机 Web 范围已实现，必要自动与真人 Gate 通过，满足当前 Task 9 前置；A04 歌词保护基线保持。PWA 仍延期，真实 MPD/NAS/DAC NOT RUN，不宣称原始 Task 8 整体验收完成。[Contract Audit](plans/2026-10-09-task-8-contract-audit.md)保留决策/证明索引；公共接口归Architecture §4.2.1，后端前置证据归archive/task-8，不据旧计划措辞判断未实施。Task9先审计交付共享UI基础再扩展内容，遵守全局UI合同§8；song Play Now原子入口仍需后续审计。
+Task 8入口：[Task 8 Web Batch Plan](plans/2026-10-09-task-8-web-batch-plan.md) 与 [W6 acceptance](archive/task-8/2026-10-10-task-8-web-w6-acceptance.md) 最新关闭记录。W1–W6 手机 Web 范围已实现，必要自动与真人 Gate 通过，满足当前 Task 9 前置；A04 歌词保护基线保持。PWA 仍延期，真实 MPD/NAS/DAC NOT RUN，不宣称原始 Task 8 整体验收完成。[Contract Audit](plans/2026-10-09-task-8-contract-audit.md)保留决策/证明索引；公共接口归Architecture §4.2.1，后端前置证据归archive/task-8，不据旧计划措辞判断未实施。Task9继承全局UI合同§8；共享基础及song Play Now原子入口已分别由B01/B02完成，当前Task9状态以下方入口为准。
+
+## 当前 Task 9 最小读取集
+
+Task 9 审计基线为 main `14c6239`；当前feature/task-9-web中B01–B09已实现并获必要验收，**CLOSED / HUMAN PASSED**，B06 Search（A04）已获用户手机验收，CLOSED / HUMAN PASSED；B07 Playlist已获用户验收，CLOSED / HUMAN PASSED；B08 Favorites/爱心及A02展示整改已获用户验收，CLOSED / HUMAN PASSED；B09 Settings、MPD接入配置及A02布局整改已获用户验收，CLOSED / HUMAN PASSED；B10自动/关系及production/LAN预检完成，手机综合PENDING、新实机功能Gate BLOCKED/NOT RUN。先读[Contract Audit](plans/2026-10-10-task-9-contract-audit.md)与[Web Batch Plan](plans/2026-10-10-task-9-web-batch-plan.md)，再读全局 UI 合同、Architecture §4.1–4.3/§12/§19.5及本 Batch 所属领域 Spec、主 Plan Task9、实际代码/测试。B01共享基础已交付；B02普通song Play Now生命周期PB-SONG-NOW-001已冻结并实现。最新关闭依据见[B09 acceptance最终关闭记录](archive/task-9/2026-10-11-task-9-b09-acceptance.md)。后端精确接口证据见[研究输入](plans/2026-10-10-task-9-backend-research.md)，不把研究报告当作并列规格或验收。
+
+Task8最新关闭记录只证明修订手机Web前置及保护基线；不抵扣Task9新共享UI或页面验收。各Batch Contract/Relationship REQUIRED，必要手机Gate通过才关闭；PWA延期、真实MPD/NAS/DAC尚未运行分别报告。
+
+当前B10证据与未关闭Gate：[Task9 final acceptance](archive/task-9/2026-10-11-task-9-final-acceptance.md)。真实地址请填写本轮LIVE Adapter页面（5188），旧Mock页面保存地址不会连接实机。
+
+## Task 9 Startup corrective 当前入口（2026-10-12）
+
+本次仅 Startup Library Reconciliation / Web Readiness。C1–C4、C0 十项证明与 C5 本地证据见[Startup corrective acceptance](archive/task-9/2026-10-12-task-9-startup-reconciliation-acceptance.md)，原始行为证据见[root-cause / C0–C4](plans/2026-10-12-task-9-startup-root-cause-evidence.md)，合同与范围归[corrective spec](specs/2026-10-12-task-9-startup-library-reconciliation-design.md)和[Batch plan](plans/2026-10-12-task-9-startup-library-reconciliation-batch-plan.md)。`7a2b8fb67caba7eec2e89c3fe74caa38c5535842` 已提交/push，CI validate/image 成功；部署后发现真实浏览器 timer receiver 装配缺口。最新最小修复与永久/真实浏览器 RED→GREEN 见[2026-10-13 timer binding acceptance](archive/task-9/2026-10-13-task-9-browser-timer-binding-acceptance.md)，本地验收通过，远程交付以对应修复新 SHA 的实际 CI 结果为准，不用旧镜像抵扣。分支仍 `fix/task-9-startup-library-reconciliation`；作者自审已完成；独立 review NOT RUN，未冒充审查通过。NAS 重新部署、手机及真实设备完整人工 Gate 仍待复验，不自动关闭 Task 9 历史 Gate。
 
 ## Relationship / Invariant Test Gate
 

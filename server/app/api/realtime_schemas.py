@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from server.app.models.library_sync import LibrarySyncState
 from server.app.models.playback_control import PlaybackControlTarget
 
 from .schemas import (
@@ -97,6 +98,7 @@ class StateOutputSnapshotResponse(BaseModel):
 
 class FullStateSnapshotResponse(BaseModel):
     epoch: str
+    explicit_stop_generation: int | None = Field(default=None, ge=0)
     sequence: int = Field(ge=0)
     captured_at: datetime
     revisions: StateRevisionsResponse
@@ -107,3 +109,4 @@ class FullStateSnapshotResponse(BaseModel):
     output: StateOutputSnapshotResponse
     playback_observation: PlaybackObservationResponse
     output_observation: OutputObservationResponse
+    library_sync: LibrarySyncState = Field(default_factory=LibrarySyncState)

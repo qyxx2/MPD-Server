@@ -178,6 +178,7 @@ class StatefulFakeMPD:
             "status": self._cmd_status,
             "currentsong": self._cmd_currentsong,
             "playlistinfo": self._cmd_playlistinfo,
+            "clear": self._cmd_clear,
             "addid": self._cmd_addid,
             "deleteid": self._cmd_deleteid,
             "moveid": self._cmd_moveid,
@@ -271,6 +272,14 @@ class StatefulFakeMPD:
         )
         self.playlist_version += 1
         return f"Id: {song_id}\nOK\n"
+
+    def _cmd_clear(self, args: list[str]) -> str:
+        self.playlist_version += int(bool(self.queue))
+        self.queue.clear()
+        self.current_song_id = None
+        self.player_state = 'stop'
+        self.elapsed = 0.0
+        return 'OK\n'
 
     def _cmd_deleteid(self, args: list[str]) -> str:
         if len(args) != 1:

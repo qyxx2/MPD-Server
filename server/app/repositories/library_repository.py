@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from server.app.models.library import ArtworkRef, ScanBatch, ScanResult, Song
+from server.app.models.library import (
+    ArtworkRef,
+    ScanBatch,
+    ScanResult,
+    SidecarSignature,
+    Song,
+)
+from server.app.models.library_scan import ScanBaseline
 
 from .database import run_transaction
 
@@ -413,6 +422,40 @@ class LibraryRepository:
 
         return await run_transaction(self.path, operation)
 
+    async def read_scan_baseline(self) -> ScanBaseline:
+        async def operation(connection):
+            songs = tuple(
+                self._song_from_row(connection, row)
+                for row in connection.execute(f"{SONGS_SELECT} ORDER BY song_id")
+            )
+            sidecars = tuple(
+                (row[0], SidecarSignature(
+                    lrc_uri=row[1], file_size=row[2], file_mtime_ns=row[3],
+                ))
+                for row in connection.execute(
+                    "SELECT song_id, lrc_uri, file_size, file_mtime_ns "
+                    "FROM library_sidecar_signatures ORDER BY song_id"
+                )
+            )
+            content = {
+                "songs": [song.model_dump(
+                    mode="json", exclude={"last_scanned_at", "last_seen_at"},
+                ) for song in songs],
+                "sidecars": [(song_id, signature.model_dump())
+                             for song_id, signature in sidecars],
+                # Album artwork ownership affects fallback selection even when
+                # two source songs expose the same ArtworkRef in their DTOs.
+                "artwork_sources": connection.execute(
+                    "SELECT album_id, song_id FROM album_art_refs ORDER BY album_id"
+                ).fetchall(),
+            }
+            fingerprint = hashlib.sha256(json.dumps(
+                content, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            return ScanBaseline(songs, sidecars, fingerprint, tuple(content["artwork_sources"]))
+
+        return await run_transaction(self.path, operation)
+
     async def list_available_songs(self) -> list[Song]:
         async def operation(connection):
             rows = connection.execute(
@@ -773,7 +816,10 @@ class LibraryRepository:
                 batch_album_ids[song_id] = current_album_id
 
             if batch.reconciled_root_uri_prefix is not None:
-                observed_uris = {song.file_uri for song in batch.songs}
+                observed_uris = (
+                    {song.file_uri for song in batch.songs}
+                    | set(batch.observed_file_uris)
+                )
                 unreadable_uris = set(batch.unreadable_file_uris)
                 rows = connection.execute(
                     """
@@ -818,6 +864,33 @@ class LibraryRepository:
                         (now, row[0]),
                     )
                     unreadable.append(row[0])
+
+            successful_uris = (
+                {song.file_uri for song in batch.songs}
+                | set(batch.observed_file_uris)
+            ) - set(batch.unreadable_file_uris)
+            for uri, signature in batch.sidecar_signatures.items():
+                if uri not in successful_uris:
+                    continue
+                row = connection.execute(
+                    "SELECT song_id, availability_status, lyrics_status "
+                    "FROM songs WHERE file_uri = ?", (uri,),
+                ).fetchone()
+                if row is None or row[1] != "AVAILABLE" or row[2] == "read_error":
+                    continue
+                connection.execute(
+                    """
+                    INSERT INTO library_sidecar_signatures(
+                        song_id, lrc_uri, file_size, file_mtime_ns
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(song_id) DO UPDATE SET
+                        lrc_uri = excluded.lrc_uri,
+                        file_size = excluded.file_size,
+                        file_mtime_ns = excluded.file_mtime_ns
+                    """,
+                    (row[0], signature.lrc_uri,
+                     signature.file_size, signature.file_mtime_ns),
+                )
 
             ref_album_rows = connection.execute(
                 "SELECT album_id FROM album_art_refs ORDER BY album_id"

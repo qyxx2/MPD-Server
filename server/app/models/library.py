@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 AvailabilityStatus = Literal["AVAILABLE", "MISSING", "UNREADABLE"]
 LyricsFormat = Literal["lrc", "text"] | None
@@ -67,10 +67,40 @@ class Song(BaseModel):
         return self.genres
 
 
+class SidecarSignature(BaseModel):
+    """A successfully observed LRC; paired null stats mean known absence."""
+
+    model_config = ConfigDict(frozen=True)
+
+    lrc_uri: str
+    file_size: int | None = Field(default=None, ge=0, strict=True)
+    file_mtime_ns: int | None = Field(default=None, ge=0, strict=True)
+
+    @model_validator(mode="after")
+    def paired_stats(self) -> SidecarSignature:
+        if (self.file_size is None) != (self.file_mtime_ns is None):
+            raise ValueError("sidecar size and mtime must both be known or absent")
+        return self
+
+
 class ScanBatch(BaseModel):
     songs: tuple[Song, ...] = ()
+    observed_file_uris: tuple[str, ...] = ()
+    sidecar_signatures: dict[str, SidecarSignature] = Field(default_factory=dict)
     unreadable_file_uris: tuple[str, ...] = ()
     reconciled_root_uri_prefix: str | None = None
+
+
+class SearchGroup(BaseModel):
+    kind: Literal["albums", "artists", "genres", "years", "tags"]
+    source_id: str
+    name: str
+    song_ids: tuple[str, ...]
+
+
+class SearchResults(BaseModel):
+    groups: tuple[SearchGroup, ...] = ()
+    song_ids: tuple[str, ...] = ()
 
 
 class ScanResult(BaseModel):

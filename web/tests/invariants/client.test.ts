@@ -15,7 +15,8 @@ test('HTTP uses ws and GET stays same-origin without an idempotency key', async 
   const api = createApiClient({ fetch: network.fetch, origin: 'http://192.168.1.4:5173/view' })
   expect(api.realtimeUrl).toBe('ws://192.168.1.4:5173/api/realtime')
   expect(await api.get('/api/state', decode)).toEqual({ confirmed: true })
-  expect(network.requests).toEqual([{ url: 'http://192.168.1.4:5173/api/state', init: { method: 'GET', cache: 'no-store', redirect: 'error' } }])
+  expect(network.requests).toEqual([{ url: 'http://192.168.1.4:5173/api/state', init: { method: 'GET', cache: 'no-store', redirect: 'error', signal: expect.any(AbortSignal) } }])
+  expect(network.requests[0]!.init?.signal?.aborted).toBe(false)
 })
 
 test('204 does not parse empty JSON and decodes undefined', async () => {

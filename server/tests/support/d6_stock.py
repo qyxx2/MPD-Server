@@ -58,9 +58,9 @@ class StockJoint:
         # Injected LOCAL protocol capabilities, never a target runtime capability claim.
         capabilities = replace(MPDCapabilities.from_commands({
             'status', 'currentsong', 'playlistinfo', 'addid', 'deleteid', 'moveid',
-            'playid', 'play', 'pause', 'stop', 'next', 'seekcur', 'outputs',
+            'playid', 'play', 'pause', 'stop', 'next', 'seekcur', 'outputs', 'clear',
         }), version='0.23.5', verified_operations=frozenset({
-            'queue_entries', 'queue_add', 'queue_delete', 'queue_move', 'queue_play',
+            'queue_entries', 'queue_add', 'queue_delete', 'queue_move', 'queue_play', 'queue_clear',
         }))
         self.player = VerifiedPlayerPort(self.adapter, capabilities)
         self.library = LibraryRepository(self.path)

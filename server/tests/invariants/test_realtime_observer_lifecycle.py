@@ -149,6 +149,11 @@ def test_composition_root_starts_one_sampler_without_clients_and_awaits_shutdown
     from server.app.player.mock_mpd import MockMPD
     from server.app.player.models import OutputInfo
 
+    # Select the adapter branch whose injected MockMPD we observe below.
+    monkeypatch.setenv('APP_ENV', 'development')
+    monkeypatch.setenv('MPD_MODE', 'real')
+    monkeypatch.setenv('CONFIG_DIR', str(tmp_path / 'config'))
+    monkeypatch.setenv('MUSIC_ROOT', str(tmp_path))
     monkeypatch.setenv('DATABASE_PATH', str(tmp_path / 'composition.db'))
 
     async def scenario():

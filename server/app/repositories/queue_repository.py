@@ -425,6 +425,36 @@ class QueueRepository:
 
         return await run_transaction(self.path, operation)
 
+    async def play_song_now(
+        self, song_id: str, playback_context_id: str, *, reset_played: bool,
+        expected_revision: int | None = None,
+    ) -> QueueItem:
+        async def operation(connection):
+            self._reserve_mutation(connection, expected_revision)
+            items = self._list_from_connection(connection)
+            pending = sorted((i for i in items if i.position > 0), key=lambda i: i.position)
+            if reset_played:
+                connection.execute("DELETE FROM queue_items WHERE position <= 0")
+            else:
+                played = sorted((i for i in items if i.position < 0), key=lambda i: -i.position)
+                current = next((i for i in items if i.position == 0), None)
+                if current is not None:
+                    played.insert(0, current)
+                for position, item in enumerate(played, start=1):
+                    connection.execute("UPDATE queue_items SET position = ? WHERE queue_item_id = ?",
+                                       (-position, item.queue_item_id))
+            for position, item in enumerate(pending, start=1):
+                connection.execute("UPDATE queue_items SET position = ? WHERE queue_item_id = ?",
+                                   (position, item.queue_item_id))
+            item = QueueItem(queue_item_id=self._new_item_id(), song_id=song_id,
+                             position=0, source="MANUAL", playback_context_id=playback_context_id)
+            connection.execute("""
+                INSERT INTO queue_items(queue_item_id, song_id, position, source, playback_context_id)
+                VALUES(?, ?, 0, 'MANUAL', ?)
+            """, (item.queue_item_id, song_id, playback_context_id))
+            return item
+        return await run_transaction(self.path, operation)
+
     async def play_next(
         self,
         song_id: str,

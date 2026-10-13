@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from server.app.models.history import HistoryEvent
 from server.app.models.library import Song
+from server.app.models.library_sync import LibrarySyncState
 from server.app.models.output import OutputSnapshot
 from server.app.models.playback_control import PlaybackControlTarget
 from server.app.models.queue import PlaybackState, QueueSnapshot
@@ -60,6 +61,7 @@ class OutputObservation(BaseModel):
 
 class FullStateSnapshot(BaseModel):
     epoch: str
+    explicit_stop_generation: int | None = Field(default=None, ge=0)
     sequence: int = Field(ge=0)
     captured_at: datetime
     revisions: dict[str, int]
@@ -70,6 +72,7 @@ class FullStateSnapshot(BaseModel):
     output: OutputSnapshot
     playback_observation: PlaybackObservation = Field(default_factory=PlaybackObservation)
     output_observation: OutputObservation = Field(default_factory=OutputObservation)
+    library_sync: LibrarySyncState = Field(default_factory=LibrarySyncState)
 
 
 class StateMarker(BaseModel):

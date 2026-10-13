@@ -185,7 +185,7 @@ describe('artwork resource identity', () => {
 })
 
 describe('application route and connection ownership', () => {
-  it('default route renders Player without Task 9 navigation', async () => {
+  it('default route renders Player with shared Task 9 navigation', async () => {
     const { createMemoryHistory, RouterView } = await import('vue-router')
     const { createPlayerRouter } = await import('../../src/router')
     const router = createPlayerRouter(createMemoryHistory())
@@ -198,7 +198,7 @@ describe('application route and connection ownership', () => {
     wrappers.push(wrapper)
     socket.snapshot(fixture.snapshot); await flushPromises()
     expect(wrapper.get('[data-testid="actual-identity"]').text()).toContain('长标题 / Song A')
-    expect(wrapper.find('nav').exists()).toBe(false)
+    expect(wrapper.findAll('nav a')).toHaveLength(4)
     await router.push('/unknown'); await flushPromises()
     expect(router.currentRoute.value.path).toBe('/')
     expect(opened).toBe(1)

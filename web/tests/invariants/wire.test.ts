@@ -85,3 +85,21 @@ test('integer decoder keeps negative Played positions and large nanosecond times
   expect(parseSnapshot(state).queue.items[0]?.position).toBe(-1)
   expect(parseSnapshot(state).current_song?.file_mtime_ns).toBe(1791532800000000000)
 })
+
+test('Stop lifecycle counter validates without guessing missing legacy provenance', () => {
+  const state = { ...structuredClone(fixture.snapshot), explicit_stop_generation: 3 }
+  expect(parseSnapshot(state).explicit_stop_generation).toBe(3)
+  const legacy = { ...state } as Record<string, unknown>
+  delete legacy.explicit_stop_generation
+  expect(parseSnapshot(legacy).explicit_stop_generation).toBeNull()
+  expect(() => parseSnapshot({ ...state, explicit_stop_generation: -1 })).toThrow(WireError)
+  expect(() => parseSnapshot({ ...state, explicit_stop_generation: 1.5 })).toThrow(WireError)
+})
+
+test('Library single Song and SongList use the real public serializer contract', async () => {
+  const { parseSongResource, parseSongList } = await import('../../src/services/resourceWire')
+  expect(parseSongResource(fixture.song_resource, '/api/library/songs/song-a')).toEqual(parseSnapshot(fixture.snapshot).current_song)
+  expect(parseSongList(fixture.song_list_resource).items[0]?.song_id).toBe('song-a')
+  expect(() => parseSongList({ items: [{ ...fixture.song_resource, artists: [42] }], count: 1 })).toThrow(WireError)
+  expect(() => parseSongList({ items: [], count: -1 })).toThrow(WireError)
+})

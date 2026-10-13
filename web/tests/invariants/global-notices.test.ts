@@ -1,0 +1,193 @@
+import { expect, it } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
+import { deferred } from '../support/transport'
+import { shellPageWithSongReads as shellPage } from '../support/shell'
+import { playerState } from '../support/player'
+it('pending_and_unknown_intent_survive_route_change', async () => {
+  const request = deferred<Response>()
+  const h = await shellPage(request.promise, Response.json(playerState().playback), Response.json(playerState()))
+  const baseline = h.store.snapshot
+  await h.wrapper.get('button[aria-label="继续播放"]').trigger('click')
+  const key = h.network.requests[0]!.init!.headers
+  // Removing Player must not dispose the already dispatched action.
+  await h.router.push('/queue'); await flushPromises()
+  expect(h.songRequests).toHaveLength(1)
+  expect(h.wrapper.find('[data-testid="actual-identity"]').exists()).toBe(false)
+  expect(h.wrapper.findAll('[data-testid="operation-status"]')).toHaveLength(1)
+  request.reject(new TypeError('lost response')); await flushPromises()
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.get('.status-details').text()).toContain('结果未知')
+  expect(h.wrapper.find('button[aria-label="重试原操作"]').exists()).toBe(true)
+  expect(h.store.snapshot).toBe(baseline)
+  await h.wrapper.get('button[aria-label="重试原操作"]').trigger('click'); await flushPromises()
+  expect(h.network.requests.filter(r => r.init?.method === 'POST')).toHaveLength(2)
+  expect(h.network.requests[1]!.init!.headers).toEqual(key)
+  expect(h.network.requests[1]!.init!.body).toBe(h.network.requests[0]!.init!.body)
+  // HTTP success only rereads; navigation cannot replay it.
+  await h.router.push('/settings'); await h.router.push('/'); await flushPromises()
+  expect(h.network.requests.filter(r => r.init?.method === 'POST')).toHaveLength(2)
+  h.store.markDisconnected(); await flushPromises()
+  await h.wrapper.get('button[aria-label="继续播放"]').trigger('click')
+  expect(h.network.requests.filter(r => r.init?.method === 'POST')).toHaveLength(2)
+  h.wrapper.unmount()
+})
+it('concurrent_unknowns_keep_original_keys_offline_and_retire_on_new_epoch', async () => {
+  const first = deferred<Response>(), second = deferred<Response>()
+  const h = await shellPage(first.promise, second.promise, new Response(null, { status: 204 }), Response.json(playerState()), Response.json(playerState()))
+  const a = h.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  const b = h.api.createIntent('DELETE', '/api/playback/queue/items/b', undefined)
+  const read = async () => {}
+  const one = h.tasks.run(a, () => undefined, read), two = h.tasks.run(b, () => undefined, read)
+  await h.router.push('/queue')
+  first.reject(new Error('first lost')); second.reject(new Error('second lost')); await Promise.all([one, two]); await flushPromises()
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.get(`[data-notice="${a.key}"]`).text()).toContain('NETWORK_UNKNOWN')
+  expect(h.wrapper.get(`[data-notice="${b.key}"]`).text()).toContain('NETWORK_UNKNOWN')
+  h.store.markDisconnected(); await h.tasks.retry(a.key); await h.tasks.retry(b.key)
+  expect(h.network.requests).toHaveLength(2)
+  // Successful HTTP GET cannot restore write authority or trigger queued mutations.
+  h.store.acceptRefresh(playerState(), 1); await h.tasks.retry(a.key)
+  expect(h.network.requests).toHaveLength(2)
+  h.store.beginConnection(2); h.store.acceptInitial(playerState(), 2)
+  expect(h.network.requests).toHaveLength(2)
+  await h.tasks.retry(a.key); await flushPromises()
+  expect(h.network.requests[2]!.init!.headers).toEqual(h.network.requests[0]!.init!.headers)
+  expect(h.tasks.entries.value.find(r => r.intent.key === a.key)?.state).toBe('confirmed')
+  expect(h.wrapper.find(`[aria-label="重新读取 ${a.key}"]`).exists()).toBe(false)
+  expect(h.network.requests.filter(r => r.init?.method === 'DELETE')).toHaveLength(3)
+  const next = playerState(); next.epoch = 'new-epoch'
+  h.store.beginConnection(3); h.store.acceptInitial(next, 3); await flushPromises()
+  expect(h.tasks.entries.value.find(r => r.intent.key === b.key)?.state).toBe('retired')
+  await h.tasks.retry(b.key)
+  expect(h.network.requests.filter(r => r.init?.method === 'DELETE')).toHaveLength(3)
+  h.wrapper.unmount()
+})
+it('late_read_failure_cannot_overwrite_epoch_retirement', async () => {
+  const read = deferred<void>()
+  const h = await shellPage(new Response(null, { status: 204 }), Response.json(playerState()))
+  const intent = h.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  const done = h.tasks.run(intent, () => undefined, () => read.promise)
+  await flushPromises()
+  const next = playerState(); next.epoch = 'new-epoch'
+  h.store.beginConnection(2); h.store.acceptInitial(next, 2)
+  read.reject(new Error('old read failed')); await done
+  expect(h.tasks.entries.value[0]?.state).toBe('retired')
+  expect(h.tasks.entries.value[0]?.message).toContain('服务会话已改变')
+  h.wrapper.unmount()
+})
+it('terminal_error_and_failed_read_remain_distinct_in_top_detail', async () => {
+  const h = await shellPage(Response.json({ error: { code: 'TARGET_CONFLICT', message: '目标已改变' } }, { status: 409 }), new Error('state read failed'))
+  const intent = h.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  await h.tasks.run(intent, () => undefined, async () => {}); await flushPromises()
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.get('.status-details').text()).toContain('TARGET_CONFLICT')
+  expect(h.wrapper.get('.status-details').text()).toContain('读取失败')
+  expect(h.tasks.entries.value[0]?.retry).toBeUndefined()
+  h.wrapper.unmount()
+})
+it('settled_success_stays_in_recent_activities_while_unknown_keeps_recovery', async () => {
+  const unknown = deferred<Response>()
+  const h = await shellPage(new Response(null, { status: 204 }), Response.json(playerState()), unknown.promise)
+  const a = h.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  await h.tasks.run(a, () => undefined, async () => {}); await flushPromises()
+  expect(h.wrapper.find('.status-toggle').exists()).toBe(true)
+  expect(h.wrapper.get(`[data-notice="${a.key}"]`).attributes('data-status')).toBe('success')
+  const b = h.api.createIntent('DELETE', '/api/playback/queue/items/b', undefined)
+  const done = h.tasks.run(b, () => undefined, async () => {})
+  unknown.reject(new Error('unknown')); await done; await flushPromises()
+  expect(h.wrapper.get('.status-toggle').classes()).toContain('warning')
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.findAll('.notice-entry').map(n => n.attributes('data-notice'))).toEqual([b.key, a.key])
+  h.wrapper.unmount()
+})
+it.each(['epoch', 'dispose'] as const)('retired_read_closure_is_not_invoked_after_refresh_spans_%s', async boundary => {
+  const { createTaskActions } = await import('../../src/runtime/taskActions')
+  const { createPlayerStore } = await import('../../src/stores/player')
+  const { createApiClient } = await import('../../src/services/api')
+  const { transport } = await import('../support/transport')
+  const store = createPlayerStore(); store.beginConnection(1); store.acceptInitial(playerState(), 1)
+  const refresh = deferred<void>(), network = transport(new Response(null, { status: 204 }))
+  const api = createApiClient({ origin: 'http://localhost', fetch: network.fetch })
+  const actions = createTaskActions({ api, player: store, refresh: () => refresh.promise })
+  let resourceReads = 0
+  const done = actions.run(api.createIntent('DELETE', '/api/playback/queue/items/a', undefined), () => undefined, async () => { resourceReads++ })
+  await flushPromises()
+  if (boundary === 'dispose') actions.dispose()
+  else { const s = playerState(); s.epoch = 'next-epoch'; store.beginConnection(2); store.acceptInitial(s, 2) }
+  refresh.resolve(); await done
+  expect(resourceReads).toBe(0)
+  actions.dispose()
+})
+it('top_detail_identifies_each_original_action_target_across_routes', async () => {
+  const a = deferred<Response>(), b = deferred<Response>()
+  const h = await shellPage(a.promise, b.promise)
+  const removeA = h.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  const removeB = h.api.createIntent('DELETE', '/api/playback/queue/items/b', undefined)
+  const one = h.tasks.run(removeA, () => undefined, async () => {}, '删除队列条目 · 夜航')
+  const two = h.tasks.run(removeB, () => undefined, async () => {}, '删除队列条目 · 长夜')
+  await h.router.push('/settings')
+  a.reject(new Error('lost')); b.reject(new Error('lost')); await Promise.all([one, two]); await flushPromises()
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.get(`[data-notice="${removeA.key}"]`).text()).toContain('删除队列条目 · 夜航')
+  expect(h.wrapper.get(`[data-notice="${removeB.key}"]`).text()).toContain('删除队列条目 · 长夜')
+  expect(h.wrapper.find(`[aria-label="重试操作 ${removeA.key}"]`).exists()).toBe(true)
+  h.wrapper.unmount()
+})
+
+it('sync_activity_becomes_bounded_success_without_recovery_and_retires_on_epoch', async () => {
+  const synced = deferred<Response>()
+  const h = await shellPage(new Response(null, { status: 204 }), synced.promise)
+  const intent = h.api.createIntent('PUT', '/api/playback/queue/items/a', { before_queue_item_id: 'b' })
+  const done = h.tasks.run(intent, () => undefined, async () => {}, '排序 夜航')
+  await flushPromises()
+  expect(h.wrapper.find('.status-spinner').exists()).toBe(true)
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.findAll('.notice-entry')).toHaveLength(1)
+  expect(h.wrapper.get('.notice-entry').text()).toContain('正在同步状态')
+  expect(h.wrapper.find('.notice-entry .recovery-row').exists()).toBe(false)
+  synced.resolve(Response.json(playerState())); await done; await flushPromises()
+  expect(h.wrapper.findAll('.notice-entry')).toHaveLength(1)
+  expect(h.wrapper.get('.notice-entry').attributes('data-status')).toBe('success')
+  expect(h.wrapper.find('.notice-entry .recovery-row').exists()).toBe(false)
+  expect(h.wrapper.find('.status-toggle').exists()).toBe(true)
+  await h.router.push('/settings'); await h.router.push('/'); await flushPromises()
+  expect(h.wrapper.get(`[data-notice="${intent.key}"]`).attributes('data-status')).toBe('success')
+  const next = playerState(); next.epoch = 'new-epoch'
+  h.store.beginConnection(2); h.store.acceptInitial(next, 2); await flushPromises()
+  expect(h.wrapper.findAll('.notice-entry')).toHaveLength(0)
+  expect(h.wrapper.find('.status-toggle').exists()).toBe(false)
+  h.wrapper.unmount()
+})
+it('confirmed_but_unsynced_result_keeps_read_recovery_then_retains_confirmed_success', async () => {
+  const h = await shellPage(new Response(null, { status: 204 }), Response.json(playerState()), Response.json(playerState()))
+  const intent = h.api.createIntent('PUT', '/api/playback/queue/items/a', { before_queue_item_id: 'b' })
+  let unavailable = true
+  await h.tasks.run(intent, () => undefined, async () => { if (unavailable) throw new Error('resource unavailable') }, '排序 夜航')
+  await flushPromises(); await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.get('.status-toggle').classes()).toContain('warning')
+  expect(h.wrapper.get(`[data-notice="${intent.key}"]`).text()).toContain('读取失败')
+  expect(h.wrapper.find(`[aria-label="重试操作 ${intent.key}"]`).exists()).toBe(false)
+  unavailable = false
+  await h.wrapper.get(`[aria-label="重新读取 ${intent.key}"]`).trigger('click'); await flushPromises()
+  expect(h.wrapper.get(`[data-notice="${intent.key}"]`).attributes('data-status')).toBe('success')
+  expect(h.wrapper.find(`[aria-label="重新读取 ${intent.key}"]`).exists()).toBe(false)
+  expect(h.wrapper.findAll('.notice-entry')).toHaveLength(1)
+  expect(h.network.requests.filter(r => r.init?.method === 'PUT')).toHaveLength(1)
+  h.wrapper.unmount()
+})
+
+it.each([
+  ['INITIAL_SNAPSHOT_TIMEOUT', '初始状态读取超时，正在重连'],
+  ['READ_TIMEOUT', '状态读取超时，请重试'],
+])('top_timeout_%s_keeps_existing_read_recovery', async (code, message) => {
+  const { ApiError } = await import('../../src/services/api')
+  const h = await shellPage(Response.json(playerState()))
+  try {
+    h.store.markDisconnected(new ApiError('network', null, code!, message!))
+    await flushPromises()
+    await h.wrapper.get('.status-toggle').trigger('click')
+    expect(h.wrapper.get('.status-details').text()).toContain(message)
+    expect(h.wrapper.findAll(`[data-notice="${code === 'READ_TIMEOUT' ? 'read' : 'connection'}"]`)).toHaveLength(1)
+    expect(h.wrapper.find('button[aria-label^="重新读取"]').exists()).toBe(true)
+  } finally { h.wrapper.unmount() }
+})

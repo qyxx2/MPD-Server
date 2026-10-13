@@ -63,7 +63,15 @@ export interface RestOutputRequest {
 // The outer REST field remains snake_case; only nested models use aliases.
 export interface RestOutputSnapshot { states: RestOutputState[]; last_request: RestOutputRequest | null }
 export interface Revisions { library: number; playlist: number }
+export interface LibrarySyncState {
+  status: 'IDLE' | 'SYNCING' | 'SYNCED' | 'FAILED'
+  generation: number; activity_id: string | null; trigger: string | null
+  pending_count: number; confirmed_count: number; failed_count: number
+  updated_at: string; error_code: string | null; reason: string | null
+}
 export interface FullStateSnapshot {
+  library_sync: LibrarySyncState
+  explicit_stop_generation: number | null
   epoch: string; sequence: number; captured_at: string; revisions: Revisions
   playback: PlaybackState | null; current_song: Song | null
   queue: { revision: number; items: QueueItem[] }
@@ -71,7 +79,7 @@ export interface FullStateSnapshot {
   output: StateOutputSnapshot; playback_observation: PlaybackObservation; output_observation: Observation
 }
 export interface SnapshotFrame { type: 'snapshot'; protocol_version: 1; epoch: string; sequence: number; state: FullStateSnapshot }
-export type Domain = 'playback' | 'queue' | 'history' | 'library' | 'playlist' | 'output'
+export type Domain = 'playback' | 'queue' | 'history' | 'library' | 'playlist' | 'output' | 'library_sync'
 export interface InvalidateFrame { type: 'invalidate'; protocol_version: 1; epoch: string; sequence: number; domains: Domain[]; revisions: Revisions }
 export type RealtimeFrame = SnapshotFrame | InvalidateFrame
 export interface ApiErrorBody { code: string; message: string; details: unknown }

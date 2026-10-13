@@ -1,9 +1,10 @@
 FROM node:22-alpine AS web-build
 
 WORKDIR /web
-COPY web/package.json ./
-RUN npm install
-COPY web/ ./
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/index.html web/vite.config.ts web/tsconfig.json ./
+COPY web/src/ ./src/
 RUN npm run build
 
 FROM python:3.13-slim
@@ -21,4 +22,4 @@ COPY --from=web-build /web/dist ./web/dist/
 
 EXPOSE 8000
 
-CMD ["uvicorn", "server.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "server.app.main"]

@@ -20,3 +20,6 @@ htmlcov/
 deploy/data/
 deploy/backups/
 deploy/config/
+
+# Locally saved MPD endpoint (B09)
+/mpd-connection.json

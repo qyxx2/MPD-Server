@@ -1,6 +1,7 @@
 import type { createApiClient } from './api'
 import { parseRealtimeFrame, parseSnapshot, WireError } from './wire'
 import type { PlayerStore } from '../stores/player'
+import { ApiError } from '../types/api'
 
 export interface RealtimeSocket {
   addEventListener(type: string, listener: (event: { data?: unknown }) => void): void
@@ -15,6 +16,7 @@ export interface RealtimeClock {
 export function createRealtimeClient(options: {
   api: ReturnType<typeof createApiClient>; store: PlayerStore
   now?: () => number; socketFactory: (url: string) => RealtimeSocket; clock: RealtimeClock
+  initialSnapshotTimeoutMs?: number
 }) {
   const { api, store, clock } = options
   let running = false
@@ -24,12 +26,12 @@ export function createRealtimeClient(options: {
   let readTimer: ReturnType<typeof setTimeout> | null = null
   let reconnectAttempt = 0
   let readAttempt = 0
-  let flight: { id: number; promise: Promise<void> } | null = null
+  let flight: { id: number; promise: Promise<void>; controller: AbortController } | null = null
   const delay = (attempt: number) => Math.min(500 * 2 ** Math.min(attempt, 4), 8000) * (1 + Math.max(0, Math.min(clock.random(), 1)) * 0.2)
   function cancelRead() { if (readTimer !== null) clock.clearTimeout(readTimer); readTimer = null }
   function disconnect(error: unknown = null) {
     ++generation
-    dispose?.(); dispose = null; flight = null; cancelRead()
+    dispose?.(); dispose = null; flight?.controller.abort(); flight = null; cancelRead()
     store.markDisconnected(error)
     if (running && reconnectTimer === null) {
       reconnectTimer = clock.setTimeout(() => { reconnectTimer = null; connect() }, delay(reconnectAttempt++))
@@ -38,9 +40,14 @@ export function createRealtimeClient(options: {
   function connect() {
     const id = ++generation
     store.beginConnection(id)
+    // Start the budget at creation, without waiting for an open event.
+    let initialTimer: ReturnType<typeof setTimeout> | null = clock.setTimeout(() => {
+      if (running && id === generation) disconnect(new ApiError('network', null, 'INITIAL_SNAPSHOT_TIMEOUT', '初始状态读取超时，正在重连'))
+    }, options.initialSnapshotTimeoutMs ?? 10_000)
+    const clearInitial = () => { if (initialTimer !== null) clock.clearTimeout(initialTimer); initialTimer = null }
     let socket: RealtimeSocket
     try { socket = options.socketFactory(api.realtimeUrl) }
-    catch (error) { disconnect(error); return }
+    catch (error) { clearInitial(); disconnect(error); return }
     let initial = false
     const message = (event: { data?: unknown }) => {
       if (!running || id !== generation) return
@@ -48,7 +55,7 @@ export function createRealtimeClient(options: {
         const frame = parseRealtimeFrame(JSON.parse(String(event.data)))
         if (!initial) {
           if (frame.type !== 'snapshot' || !store.acceptInitial(frame.state, id)) throw new WireError('Initial snapshot required at current watermark')
-          initial = true; reconnectAttempt = 0; readAttempt = 0
+          clearInitial(); initial = true; reconnectAttempt = 0; readAttempt = 0
         } else {
           if (frame.type !== 'invalidate' || frame.epoch !== store.marker.epoch) throw new WireError('Invalid live frame or epoch')
           if (store.invalidate(frame, id)) void refresh().catch(() => {})
@@ -59,6 +66,7 @@ export function createRealtimeClient(options: {
     const error = () => { if (running && id === generation) disconnect(new Error('Realtime connection failed')) }
     socket.addEventListener('message', message); socket.addEventListener('close', close); socket.addEventListener('error', error)
     dispose = () => {
+      clearInitial()
       socket.removeEventListener('message', message); socket.removeEventListener('close', close); socket.removeEventListener('error', error)
       socket.close()
     }
@@ -72,6 +80,7 @@ export function createRealtimeClient(options: {
     const id = generation
     if (flight?.id === id) return flight.promise
     cancelRead()
+    const controller = new AbortController()
     // A microtask starts the read only after the flight is installed (including synchronous errors).
     const promise = Promise.resolve().then(async () => {
       while (running && id === generation) {
@@ -79,7 +88,7 @@ export function createRealtimeClient(options: {
         try {
           const now = options.now ?? (() => performance.now())
           const startedAt = now()
-          const snapshot = await api.get('/api/state', parseSnapshot)
+          const snapshot = await api.get('/api/state', parseSnapshot, { signal: controller.signal })
           const receivedAt = now()
           if (!running || id !== generation) return
           const result = store.acceptRefresh(snapshot, id, { receivedAt, roundTripMs: receivedAt - startedAt })
@@ -90,12 +99,17 @@ export function createRealtimeClient(options: {
           retryRead(id); return
         } catch (error) {
           if (!running || id !== generation) return
+          if (error instanceof ApiError && error.code === 'READ_TIMEOUT') {
+            // Revoke the old baseline; only a new socket initial can restore writes.
+            disconnect(error)
+            throw error
+          }
           store.markReadError(error); retryRead(id)
           throw error
         }
       }
     }).finally(() => { if (flight?.id === id) flight = null })
-    flight = { id, promise }
+    flight = { id, promise, controller }
     return promise
   }
   return {
@@ -103,7 +117,7 @@ export function createRealtimeClient(options: {
     stop() {
       running = false; ++generation
       if (reconnectTimer !== null) clock.clearTimeout(reconnectTimer)
-      reconnectTimer = null; cancelRead(); dispose?.(); dispose = null; flight = null
+      reconnectTimer = null; cancelRead(); dispose?.(); dispose = null; flight?.controller.abort(); flight = null
       reconnectAttempt = 0; readAttempt = 0; store.markDisconnected()
     },
     refresh,

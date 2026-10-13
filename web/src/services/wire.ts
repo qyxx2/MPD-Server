@@ -78,7 +78,18 @@ const outputRequest = object<StateOutputRequest>({
   error_code: optionalNullText, error_message: optionalNullText, updated_at: timestamp,
 })
 const output = object<StateOutputSnapshot>({ states: list(outputState), last_request: nullable(outputRequest) })
+const librarySync = object({
+  status: enumeration('IDLE', 'SYNCING', 'SYNCED', 'FAILED'), generation: natural,
+  activity_id: optionalNullText, trigger: optionalNullText,
+  pending_count: natural, confirmed_count: natural, failed_count: natural,
+  updated_at: timestamp, error_code: optionalNullText, reason: optionalNullText,
+})
+const legacySync = { status: 'IDLE', generation: 0, activity_id: null, trigger: null,
+  pending_count: 0, confirmed_count: 0, failed_count: 0,
+  updated_at: '1970-01-01T00:00:00Z', error_code: null, reason: null }
 const snapshot = object<FullStateSnapshot>({
+  library_sync: librarySync,
+  explicit_stop_generation: nullable(natural),
   epoch: nonempty, sequence: natural, captured_at: timestamp, revisions,
   playback: nullable(playback), current_song: nullable(song), queue: object({ revision: natural, items: list(queueItem) }),
   history: object({ has_entries: bool, active_event: nullable(historyEvent), session_id: optionalNullText }),
@@ -94,7 +105,7 @@ export function parseSnapshot(value: unknown): FullStateSnapshot {
   for (const [key, fallback] of Object.entries(defaults)) {
     if (!(key in normalized)) normalized[key] = fallback
   }
-  return snapshot({ ...source, playback_observation: normalized })
+  return snapshot({ ...source, library_sync: source.library_sync === undefined ? legacySync : source.library_sync, explicit_stop_generation: source.explicit_stop_generation === undefined ? null : source.explicit_stop_generation, playback_observation: normalized })
 }
 
 export function parseRealtimeFrame(value: unknown): RealtimeFrame {
@@ -113,7 +124,7 @@ export function parseRealtimeFrame(value: unknown): RealtimeFrame {
   if (frame.type === 'invalidate') {
     return object<InvalidateFrame>({
       type: enumeration('invalidate'), protocol_version: value => value === 1 ? 1 : fail(), epoch: nonempty, sequence: natural,
-      domains: list(enumeration('playback', 'queue', 'history', 'library', 'playlist', 'output')), revisions,
+      domains: list(enumeration('playback', 'queue', 'history', 'library', 'playlist', 'output', 'library_sync')), revisions,
     })(frame)
   }
   throw new WireError('Unknown frame type')
@@ -140,7 +151,11 @@ export function normalizeOutput(value: RestOutputSnapshot): StateOutputSnapshot 
 }
 
 export const parsePlaybackState = playback
+export const parseSong = song
+export const parseQueueItem = queueItem
+export const parseQueueList = object({ items: list(queueItem), count: natural })
 export function parseRestOutput(value: unknown): StateOutputSnapshot {
   // Runtime validation is performed by the explicit alias adapter.
   return normalizeOutput(value as RestOutputSnapshot)
 }
+export const parseArtwork = artwork

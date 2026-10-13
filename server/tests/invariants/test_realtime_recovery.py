@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from copy import deepcopy
 from shutil import copy2
 
@@ -9,7 +10,7 @@ import pytest
 from server.app.main import app
 from server.app.models.output import OutputMode
 from server.app.models.queue import PlaybackContext
-from server.app.services import library_scanner as scanner_module
+from server.app.services import library_scan_prepare as scanner_module
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.playlist_service import PlaylistService
 from server.tests.api.test_realtime_state import state_client
@@ -107,6 +108,8 @@ def test_reconnect_replaces_all_domains_and_epoch(
             raise PermissionError("fixture media unavailable")
 
         with monkeypatch.context() as patch:
+            source_stat = target.stat()
+            os.utime(target, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns + 1))
             patch.setattr(scanner_module, "parse_media_file", unreadable)
             run(scanner.scan_paths([target]))
     if disconnected_port:

@@ -7,6 +7,7 @@ services:
     restart: unless-stopped
     environment:
       APP_ENV: production
+      MPD_MODE: real
       MPD_HOST: ${MPD_HOST:-172.17.0.1}
       MPD_PORT: ${MPD_PORT:-6600}
       MPD_PASSWORD: ${MPD_PASSWORD:-}
@@ -14,6 +15,16 @@ services:
       DATABASE_PATH: /data/music-server.db
       BACKUP_DIR: /backups
       CONFIG_DIR: /config
+      MPD_CONNECTION_PATH: /data/mpd-connection.json
+      MPD_URI_PREFIX: ${MPD_URI_PREFIX:-}
+      MPD_CAPABILITIES_PATH:
+      SCAN_INTERVAL_SECONDS: ${SCAN_INTERVAL_SECONDS:-43200}
+      DEBOUNCE_SECONDS: ${DEBOUNCE_SECONDS:-0.5}
+      OUTPUT_NAME:
+      OUTPUT_PLUGIN: ${OUTPUT_PLUGIN:-alsa}
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: "8000"
+      WORKERS: "1"
     volumes:
       - ${MPD_SERVER_DATA_DIR:-./data}:/data
       - ${MPD_SERVER_BACKUP_DIR:-./backups}:/backups

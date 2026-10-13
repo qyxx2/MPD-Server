@@ -3,20 +3,33 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import Lock
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from server.app.api.history import router as history_router
 from server.app.api.library import router as library_router
 from server.app.api.playback import router as playback_router
 from server.app.api.playlists import router as playlists_router
 from server.app.api.realtime import router as realtime_router
+from server.app.api.system import health_router
 from server.app.api.system import router as system_router
+from server.app.config import load_config
+from server.app.logging_config import (
+    configure_logging,
+    log_context,
+    log_event,
+    request_operation_id,
+)
 from server.app.player.capabilities import MPDCapabilities, VerifiedPlayerPort
+from server.app.player.capability_loader import load_capabilities
+from server.app.player.mock_mpd import MockMPD
 from server.app.player.mpd_adapter import MPDAdapter
+from server.app.player.music_uri import MusicUriMapper
 from server.app.repositories.database import initialize_database
 from server.app.repositories.history_repository import HistoryRepository
 from server.app.repositories.idempotency_repository import IdempotencyRepository
@@ -26,12 +39,19 @@ from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import QueueRepository
 from server.app.services.autoplay import AutoPlay
 from server.app.services.collection_service import CollectionService
+from server.app.services.health_service import HealthService
 from server.app.services.history_service import HistoryService
 from server.app.services.idempotency_service import IdempotencyService
+from server.app.services.library_runtime import LibraryRuntime
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import (
     CollectionSourceNotFoundError,
     LibraryService,
+)
+from server.app.services.library_sync_service import LibrarySyncService
+from server.app.services.mpd_connection_service import (
+    MPDConnectionAddress,
+    MPDConnectionService,
 )
 from server.app.services.mpd_info_service import MPDInfoService
 from server.app.services.output_manager import OutputManager
@@ -50,20 +70,38 @@ _recovery_owner: object | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _recovery_owner
+    configure_logging()
+    config = load_config(os.environ)
+    app.state.config = config
+    connection = MPDConnectionService(
+        config.mpd_connection_path,
+        lambda: MPDConnectionAddress(host=config.mpd_host, port=config.mpd_port),
+    )
+    app.state.mpd_connection_service = connection
     injected_capabilities = getattr(app.state, "mpd_capabilities", None)
-    recovery_enabled = bool(getattr(app.state, "recovery_enabled", False) and injected_capabilities is not None)
+    capabilities = injected_capabilities
+    if capabilities is None:
+        capabilities = (await load_capabilities(
+            config.mpd_capabilities_path, host=connection.active.host, port=connection.active.port,
+        ) if config.mpd_mode == 'real' else MPDCapabilities.from_commands(set()))
+    required = ("read_execution_sample", "queue_entries", "queue_add", "queue_delete", "queue_move")
+    default_recovery = (config.mpd_mode == 'real' and config.mpd_capabilities_path is not None
+                        and all(capabilities.supports_operation(op) for op in required))
+    recovery_enabled = bool(getattr(app.state, "recovery_enabled", default_recovery)
+                            and (injected_capabilities is not None or default_recovery))
     owner = object()
     if recovery_enabled:
         required = ("read_execution_sample", "queue_entries", "queue_add", "queue_delete", "queue_move")
-        if not all(injected_capabilities.supports_operation(operation) for operation in required):
+        if not all(capabilities.supports_operation(operation) for operation in required):
             raise RuntimeError("Playback recovery capabilities are not verified")
         # Process-local exclusion only; deployment must use one control process.
         with _recovery_owner_lock:
             if _recovery_owner is not None:
                 raise RuntimeError("Playback recovery control owner already exists")
             _recovery_owner = owner
+    owned_player = None
     try:
-        database_path = os.environ.get("DATABASE_PATH", "music-server.db")
+        database_path = str(config.database_path)
         await initialize_database(database_path)
 
         library_repository = LibraryRepository(database_path)
@@ -95,13 +133,25 @@ async def lifespan(app: FastAPI):
         )
         player = getattr(app.state, "player", None)
         if player is None:
-            player = MPDAdapter(
-                os.environ.get("MPD_HOST", "127.0.0.1"),
-                port=int(os.environ.get("MPD_PORT", "6600")),
-                password=os.environ.get("MPD_PASSWORD"),
-            )
-        if recovery_enabled:
-            player = VerifiedPlayerPort(player, injected_capabilities)
+            player = (MockMPD() if config.mpd_mode == 'mock' else MPDAdapter(
+                connection.active.host, port=connection.active.port, password=config.mpd_password,
+                uri_mapper=MusicUriMapper(config.music_root, config.mpd_uri_prefix),
+            ))
+            owned_player = player
+            if config.mpd_mode == 'real':
+                player = VerifiedPlayerPort(player, capabilities)
+        if recovery_enabled and not isinstance(player, VerifiedPlayerPort):
+            player = VerifiedPlayerPort(player, capabilities)
+        library_sync = LibrarySyncService(
+            library_scanner, player, config.music_root, event_publisher=coordinator,
+        )
+        library_runtime = LibraryRuntime(
+            library_sync, config.music_root,
+            scan_interval_seconds=config.scan_interval_seconds,
+            debounce_seconds=config.debounce_seconds,
+        )
+        app.state.library_sync_service = library_sync
+        app.state.library_runtime = library_runtime
         playback_service = PlaybackService(
             queue_manager=queue_manager,
             history_service=history_service,
@@ -111,20 +161,22 @@ async def lifespan(app: FastAPI):
             coordinator=coordinator, event_publisher=coordinator,
         )
 
-        # Capability loading belongs to Task 10. Until verification is explicitly
-        # injected, system reads report unavailable facts without running a probe.
-        capabilities = getattr(app.state, "mpd_capabilities", None)
-        if capabilities is None:
-            capabilities = MPDCapabilities.from_commands(set())
+        selector = getattr(app.state, "output_selector", None)
+        if selector is None and config.output_name is not None:
+            def selector(outputs):
+                matches = [output for output in outputs
+                           if output.name == config.output_name and output.plugin == config.output_plugin]
+                return matches[0] if len(matches) == 1 else None
         app.state.output_manager = OutputManager(
             player=player,
             capabilities=capabilities,
             operation_runner=playback_service.run_output_operation,
-            selector=getattr(app.state, "output_selector", None),
+            selector=selector,
             event_publisher=getattr(app.state, 'event_publisher', None) or coordinator,
             coordinator=coordinator,
         )
         app.state.mpd_info_service = MPDInfoService(player=player, capabilities=capabilities)
+        app.state.health_service = HealthService(database_path, player, coordinator.get_library_sync)
 
         app.state.library_service = library_service
         app.state.library_scanner = library_scanner
@@ -153,9 +205,15 @@ async def lifespan(app: FastAPI):
                          if runner is not None else None)
         app.state.playback_recovery_runner = runner
         app.state.playback_recovery_task = recovery_task
+        library_task = asyncio.create_task(library_runtime.run(), name="library-runtime")
+        app.state.library_runtime_task = library_task
+        log_event('application_started')
         try:
             yield
         finally:
+            log_event('application_stopping')
+            await library_runtime.close()
+            await asyncio.gather(library_task, return_exceptions=True)
             if runner is not None:
                 await runner.close()
                 await asyncio.gather(recovery_task, return_exceptions=True)
@@ -163,6 +221,8 @@ async def lifespan(app: FastAPI):
             await asyncio.gather(task, return_exceptions=True)
             coordinator.close()
     finally:
+        if owned_player is not None and hasattr(owned_player, 'close'):
+            await owned_player.close()
         if recovery_enabled:
             with _recovery_owner_lock:
                 if _recovery_owner is owner:
@@ -284,20 +344,84 @@ async def unexpected_exception_handler(
     )
 
 
-@app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+class RequestDiagnosticsMiddleware:
+    """Keep diagnostics in the caller task so cancellation remains observable."""
+
+    def __init__(self, application):
+        self.application = application
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            await self.application(scope, receive, send)
+            return
+        key = Request(scope).headers.get('Idempotency-Key')
+        operation_id = request_operation_id(key) if key else uuid4().hex[:16]
+
+        async def observed_send(message):
+            if message['type'] == 'http.response.start' and message['status'] >= 400:
+                log_event('api_failed', level=30, status_code=message['status'])
+            await send(message)
+
+        with log_context(operation_id=operation_id):
+            try:
+                await self.application(scope, receive, observed_send)
+            except Exception:
+                log_event('api_failed', level=40, status_code=500)
+                raise
+
+
+app.add_middleware(RequestDiagnosticsMiddleware)
 
 
 app.include_router(history_router)
 app.include_router(library_router)
 app.include_router(playlists_router)
 app.include_router(playback_router)
+app.include_router(health_router)
 app.include_router(system_router)
 app.include_router(realtime_router)
 
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
 
+
+class SPAStaticFiles(StaticFiles):
+    """Serve client routes while preserving API and missing-asset errors."""
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] == 'websocket':
+            await send({'type': 'websocket.close', 'code': 1000})
+            return
+        await super().__call__(scope, receive, send)
+
+    async def get_response(self, path, scope):
+        if path == 'api' or path.startswith('api/'):
+            raise HTTPException(status_code=404, detail='Not Found')
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if (exc.status_code != 404
+                    or scope['method'] not in {'GET', 'HEAD'}
+                    or path.startswith('assets/') or Path(path).suffix):
+                raise
+            return await super().get_response('index.html', scope)
+
+
+def mount_web(application: FastAPI, directory: Path) -> None:
+    application.mount('/', SPAStaticFiles(directory=directory, html=True), name='web')
+
+
 if WEB_DIST.is_dir():
-    app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="web")
+    mount_web(app, WEB_DIST)
+
+
+def run_server() -> None:
+    import uvicorn
+
+    config = load_config(os.environ)
+    uvicorn.run('server.app.main:app', host=config.http_host, port=config.http_port,
+                workers=config.workers)
+
+
+if __name__ == '__main__':
+    run_server()

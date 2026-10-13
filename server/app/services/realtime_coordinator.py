@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from uuid import uuid4
 
+from server.app.models.library_sync import LibrarySyncState
 from server.app.models.realtime import Invalidation, StateMarker
 from server.app.repositories.database import (
     on_transaction_rollback,
@@ -13,7 +14,12 @@ from server.app.repositories.database import (
     run_transaction,
     transaction_identity,
 )
-from server.app.services.events import DomainEvent, EventPublisher, invalidation_domains
+from server.app.services.events import (
+    DomainEvent,
+    EventPublisher,
+    LibrarySyncChangedEvent,
+    invalidation_domains,
+)
 
 
 @dataclass(eq=False)
@@ -50,6 +56,24 @@ class RealtimeCoordinator:
         self._staged: dict[object, dict[str, tuple[object, object]]] = {}
         self._observations: dict[str, object] = {}
         self._event_publisher = event_publisher
+        self._library_sync = LibrarySyncState()
+
+    def get_library_sync(self) -> LibrarySyncState:
+        return self._library_sync.model_copy(deep=True)
+
+    def stage_library_sync(self, state: LibrarySyncState) -> None:
+        """Accept ordered owner facts inside the same committed visibility cut."""
+        before = self._library_sync
+        if state.generation < before.generation:
+            return
+        if state.generation == before.generation and state.updated_at <= before.updated_at:
+            return
+        if before.model_dump(exclude={'updated_at'}) == state.model_dump(exclude={'updated_at'}):
+            return
+        self.stage_change(frozenset({'library_sync'}), before, state)
+        on_transaction_visible(
+            self.path, lambda: setattr(self, '_library_sync', state.model_copy(deep=True)),
+        )
 
     def stage_observation(self, domain: str, content: object) -> None:
         """Compare accepted runtime facts with the last visible committed content."""
@@ -115,6 +139,8 @@ class RealtimeCoordinator:
             staged[domain] = first, deepcopy(after)
 
     async def publish(self, event: DomainEvent) -> None:
+        if isinstance(event, LibrarySyncChangedEvent):
+            await run_transaction(self.path, lambda _: self.stage_library_sync(event.state))
         domains = invalidation_domains(event)
         if domains:
             def register(_):

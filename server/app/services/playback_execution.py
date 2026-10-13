@@ -62,8 +62,12 @@ class ExecutionSynchronizer:
         entries = [(e.mpd_song_id, e.song_uri) for e in before.entries]
         status = before.status.model_dump()
         version = before.playlist_version
-        mpd_id = command.mpd_song_id if command.kind == "delete" else self._id(intent, command.item_id)
-        if command.kind == "add":
+        mpd_id = command.mpd_song_id if command.kind in {"delete", "clear"} else self._id(intent, command.item_id)
+        if command.kind == "clear":
+            version += int(bool(entries))
+            entries = []
+            status.update(state=PlayerState.STOPPED, song_id=None, song_uri=None, song_position=None)
+        elif command.kind == "add":
             if receipt.returned_id is None or any(e[0] == receipt.returned_id for e in entries):
                 raise self.journal.conflict("UNKNOWN add response identity")
             entries.append((receipt.returned_id, command.uri))
@@ -83,6 +87,8 @@ class ExecutionSynchronizer:
         elif command.kind == "play":
             status.update(state=PlayerState.PLAYING, song_id=mpd_id,
                           song_uri=next(uri for key, uri in entries if key == mpd_id))
+        elif command.kind == "seek":
+            status["elapsed_seconds"] = command.seconds
         else:
             status["state"] = PlayerState.PAUSED
         status["song_position"] = next((i for i, e in enumerate(entries) if e[0] == status["song_id"]), None)
@@ -123,7 +129,9 @@ class ExecutionSynchronizer:
     async def _send(self, intent, command):
         if command.kind == "add":
             return await self.player.queue_add(command.uri)
-        if command.kind == "delete":
+        if command.kind == "clear":
+            await self.player.queue_clear()
+        elif command.kind == "delete":
             await self.player.queue_delete(command.mpd_song_id)
         elif command.kind == "move":
             await self.player.queue_move(self._id(intent, command.item_id), (command.before_mpd_song_id if command.before_item_id is None else self._id(intent, command.before_item_id)))
@@ -132,6 +140,8 @@ class ExecutionSynchronizer:
                 await self.player.play(command.uri)
             else:
                 await self.player.queue_play(self._id(intent, command.item_id))
+        elif command.kind == "seek":
+            await self.player.seek(command.seconds)
         else:
             await self.player.pause()
         return None
@@ -167,7 +177,7 @@ class ExecutionSynchronizer:
                 command = intent.commands[index]
                 receipt = receipts.get(index)
                 if receipt and receipt.phase in {"sent", "ack"}:
-                    if receipt.phase == "sent" and command.kind in {"add", "play", "pause"}:
+                    if receipt.phase == "sent" and command.kind in {"add", "play", "pause", "seek"}:
                         self.journal.unknown_executions.add(intent.operation_id)
                         # A current fact cannot distinguish an unacknowledged
                         # play from natural advance or another transport owner.
@@ -195,6 +205,10 @@ class ExecutionSynchronizer:
                     actual = await self.player.read_execution_sample()
                     self._verify_fence(intent)
                     self._verify(intent, actual, after, append_only=append_only)
+                if command.kind == "seek" and (actual.status.elapsed_seconds is None
+                        or abs(actual.status.elapsed_seconds - command.seconds) > 2):
+                    self.journal.unknown_executions.add(intent.operation_id)
+                    raise self.journal.conflict("UNKNOWN seek was not confirmed")
                 self.journal.record_command(intent.operation_id, index, CommandReceipt(
                     "confirmed", receipt.returned_id, actual,
                 ))

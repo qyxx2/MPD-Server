@@ -1,0 +1,121 @@
+{
+  "detail": {
+    "playlist_id": "p",
+    "name": "长歌单名称",
+    "created_at": "2026-10-11T00:00:00Z",
+    "updated_at": "2026-10-11T00:00:00Z",
+    "is_system": false,
+    "song_ids": [
+      "b",
+      "c",
+      "a"
+    ]
+  },
+  "songs": {
+    "items": [
+      {
+        "song_id": "b",
+        "title": "长标题 / b",
+        "file_uri": "b.flac",
+        "artists": [
+          "艺术家 / 长名"
+        ],
+        "album_id": null,
+        "album": null,
+        "album_artists": [],
+        "track_number": null,
+        "disc_number": null,
+        "year": null,
+        "date": null,
+        "genres": [],
+        "tag_names": [],
+        "duration": null,
+        "lyrics": null,
+        "lyrics_format": null,
+        "lyrics_source": null,
+        "lyrics_status": "missing",
+        "bit_depth": null,
+        "sample_rate_hz": null,
+        "channel_count": null,
+        "codec": null,
+        "metadata_status": null,
+        "last_scanned_at": "2026-10-11T00:00:00Z",
+        "file_size": null,
+        "file_mtime_ns": null,
+        "content_hash": null,
+        "availability_status": "AVAILABLE",
+        "last_seen_at": "2026-10-11T00:00:00Z",
+        "artwork": null
+      },
+      {
+        "song_id": "c",
+        "title": "长标题 / c",
+        "file_uri": "c.flac",
+        "artists": [
+          "艺术家 / 长名"
+        ],
+        "album_id": null,
+        "album": null,
+        "album_artists": [],
+        "track_number": null,
+        "disc_number": null,
+        "year": null,
+        "date": null,
+        "genres": [],
+        "tag_names": [],
+        "duration": null,
+        "lyrics": null,
+        "lyrics_format": null,
+        "lyrics_source": null,
+        "lyrics_status": "missing",
+        "bit_depth": null,
+        "sample_rate_hz": null,
+        "channel_count": null,
+        "codec": null,
+        "metadata_status": null,
+        "last_scanned_at": "2026-10-11T00:00:00Z",
+        "file_size": null,
+        "file_mtime_ns": null,
+        "content_hash": null,
+        "availability_status": "MISSING",
+        "last_seen_at": "2026-10-11T00:00:00Z",
+        "artwork": null
+      },
+      {
+        "song_id": "a",
+        "title": "长标题 / a",
+        "file_uri": "a.flac",
+        "artists": [
+          "艺术家 / 长名"
+        ],
+        "album_id": null,
+        "album": null,
+        "album_artists": [],
+        "track_number": null,
+        "disc_number": null,
+        "year": null,
+        "date": null,
+        "genres": [],
+        "tag_names": [],
+        "duration": null,
+        "lyrics": null,
+        "lyrics_format": null,
+        "lyrics_source": null,
+        "lyrics_status": "missing",
+        "bit_depth": null,
+        "sample_rate_hz": null,
+        "channel_count": null,
+        "codec": null,
+        "metadata_status": null,
+        "last_scanned_at": "2026-10-11T00:00:00Z",
+        "file_size": null,
+        "file_mtime_ns": null,
+        "content_hash": null,
+        "availability_status": "AVAILABLE",
+        "last_seen_at": "2026-10-11T00:00:00Z",
+        "artwork": null
+      }
+    ],
+    "count": 3
+  }
+}

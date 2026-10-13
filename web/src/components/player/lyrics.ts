@@ -7,7 +7,8 @@ export interface LyricsDocument {
 }
 export function parseLyrics(text: string, format: string | null): LyricsDocument {
   const doc: LyricsDocument = { text, cues: [], notes: [], offsetMs: 0, synchronized: false }
-  if (format?.toLowerCase() !== 'lrc') return doc
+  // Older scans label embedded LRC as text; valid cues still carry their timing.
+  if (!['lrc', 'text'].includes(format?.toLowerCase() || '')) return doc
   for (const line of text.split(/\r?\n/)) {
     for (const offset of line.matchAll(/\[offset:([+-]?\d+)\]/gi)) {
       const value = Number(offset[1])

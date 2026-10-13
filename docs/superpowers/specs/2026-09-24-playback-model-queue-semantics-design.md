@@ -113,13 +113,13 @@ AutoPlay 不属于某个专辑或 Playlist
 -   Genre、年代、文件夹等分类页面；
 -   搜索结果；
 -   Playlist 详情；
--   Queue；
+-   Queue 按 §5 的 occurrence 点击直接播放例外执行，不先弹统一菜单；
 -   播放历史；
 -   收藏及其他歌曲集合。
 
 ### 3.2 必须提供的选项
 
-点击具体歌曲对象时，弹出操作选项框，至少包含：
+除 Queue（§5）外，点击具体歌曲对象时，弹出操作选项框，至少包含：
 
 1.  **Play Now（立即播放）**
 2.  **Play Next（下一首播放）**
@@ -138,11 +138,39 @@ AutoPlay 不属于某个专辑或 Playlist
 -   若该操作来自一个明确的"开始独立单曲播放"入口，且产品交互将其定义为新播放上下文，则按第
     4.1 节的 Start Track 规则替换 Queue。
 
-**Web 合同补充（2026-10-09，产品选择已接受；接口与实现待完成）**：
+**Web 合同补充（2026-10-09，产品选择已接受；后端合同见 §3.3.1）**：
 
 - Library/Search/Playlist 等普通歌曲入口的 Play Now 创建新的 occurrence，保留已有待播 occurrence 及其相对顺序，包括同一 song 的重复项；不隐式选取、移动或去重已有 occurrence。Queue 行的 Play Now 仍精确操作该行的 queue_item_id。
 - 用户明确 Stop 后，从上述普通歌曲入口执行 Play Now 表示开启新的播放会话并重新启用 AutoPlay，同时保留原待播内容；不因此退化为替换 Queue 的 Start Track。开启意图仍受 §8.9 的在线、绑定、候选与确认限制，不承诺异常情况下自动续播。
-- 同一意图的传输重试必须复用既有 Idempotency-Key，不重复创建 occurrence。完整服务端原子入口、Context/History 生命周期与失败确认合同由专项审计补齐；本补充不宣告现有 API 已具备该能力。
+- 同一意图的传输重试必须复用既有 Idempotency-Key，不重复创建 occurrence。完整服务端原子入口、Context/History 生命周期与失败确认合同见 §3.3.1；实现能力与验证结果由 B02 验收记录证明，不以本文替代执行证据。
+
+#### 3.3.1 普通歌曲原子 Play Now — PB-SONG-NOW-001（2026-10-10 已冻结）
+
+用户批准方案并明确授权“冻结相关内容，再直接进行B2”。本节关闭 Task9 G9-01；只定义普通 song-id Play Now，既有 Start Track、集合播放及 queue_item_id Play Now 不变。
+
+- **P / Authority**：PlaybackService 是唯一编排者，在既有同库外层串行事务内先校验 Song 存在且 AVAILABLE，再控制 MPD。未知歌曲及不可用歌曲沿用 404 `PLAYBACK_REQUEST_INVALID`，无 MPD 控制、Queue/History/revision/terminal 变更。Web 沿用 Architecture §4.1–4.2 baseline/writable 与 key 合同。
+- **保留项 availability（同日补充已接受）**：用户明确选择沿用整次拒绝并保留队列。所选 Song 可用但任一原 pending 为 MISSING/UNREADABLE（或其 Song 缺失）时，因现有完整 occurrence↔MPD 映射无法保证，操作在 MPD 控制、token失效及 Queue 修改之前返回既有404 PLAYBACK_REQUEST_INVALID；原 Queue/History/Context/revision/token不变，无成功terminal。不能静默删除、跳过或重新分配保留项；允许跳过的执行映射扩展需另行审核，不属B02。
+- **Occurrence / provenance**：每个新意图创建新的 MANUAL occurrence，即使所选 song 是 current 或已在 pending 中出现多次。position=0，song_id 为目标，playback_context_id 为本次保留/新建 Context。原 position>0 项的 ID/song/source/context 及相对顺序全部保留，只规范化连续正 position；不选择、移动、去重已有同 song 项。AutoPlay 新项追加在原 pending 后。
+- **Context / lifecycle**：会话内 PLAYING/PAUSED 且 PlaybackState 有非空 Context ID 时保留该 ID；现有模型没有独立 Context 表，Service 从权威 Queue 重建候选范围，不能把 MPD 绑定当 Context 是否存在的依据。首次无 Context、Context 缺失时创建 `source_type=TRACK/source_id=song_id/ordered_song_ids=(song_id,)` 单曲 Context。本服务已确认并提交的明确 Stop 后，即使旧 Context ID 尚存，也创建新单曲 Context。任何已确认的开始播放（含既有 Queue/Start Track/集合入口）消费上次 Stop provenance；Stop provenance 使用服务拥有的、随外层事务提交/回滚的运行时标记，不新增 schema；服务重启丢失标记，不能仅凭 STOPPED、AutoPlay=false 或空 session 推断用户 Stop。
+- **Played / old current**：保留 Context 时保留原 Played；旧业务 current 在成功显式切换后成为最近 Played，其余 Played 顺延。创建新 Context 时删除旧 position<=0 展示，保留所有原 pending；不删除永久 History。Played 表示曾成为业务 current 后离开，不证明听完/natural；未知外部停止后的旧 current 不因此获得永久 History 结束原因。
+- **History**：正常已认证 active 切换沿用 session，按 §8.9.4 记录既有 SWITCH_AWAY。旧 active 不可信时丢弃，不补原因，保留已有 session；新 active 在目标完整确认后建立，session 不存在则创建。明确 Stop 已清 session，随后产生新 session。Context 缺失但 session 尚存时创建 Context 而保留 session；服务重启/无 active 不回填历史起点。
+- **STOPPED / unbound**：未知外部 STOPPED、无绑定、外部队列漂移时，本次请求是新的明确播放/接管授权；有 Context 就保留，否则创建，保留已有 session、无 session 则创建。不把该分支归类为用户 Stop，不自动恢复执行。实际身份、PLAYING、完整 occurrence↔MPD 映射及 current position=0 必须确认才能成功。
+- **AutoPlay**：保留 Context 的已有会话保留原 AutoPlay 意图；明确 Stop 后、新 Context 或没有既有 History session 的初始化启用 AutoPlay。沿用 §8.9.5 低水位5/每批最多5、候选/current fallback、模式/绑定限制；不改 MANUAL 顺序或来源。无候选不阻止所选歌曲播放，按已有 NO_CANDIDATES 表达；不扩展候选策略。真实补充独立 Queue revision，整个 endpoint 的净变化仍一次联合对外提交。
+- **API / observable result**：additive `POST /api/playback/songs/{song_id}/play`，无业务请求体，必须有 Idempotency-Key；200 返回已有 QueueItemResponse，包含新 MANUAL current（position=0），不扩展 DTO。错误沿用既有 Playback typed error：404 validation、502 PLAYER_COMMAND_FAILED/PLAYBACK_RECONCILIATION_FAILED、503 PLAYER_UNAVAILABLE；同 key scope/payload 冲突409 IDEMPOTENCY_KEY_CONFLICT。客户端成功后重读 snapshot，不从单项 DTO 拼装 Queue/History/token。
+- **Confirmation / transaction**：复用 §8.9.6 账本与现有 current-target 代次；Queue 切换 revision +1，真实 AutoPlay batch 另按现有规则计数。Queue/Playback/Context ID/History runtime与持久事件、terminal record 及 realtime delta 均在最外层成功提交后可见，事件覆盖实际发生变化的 queue/playback/history，提交前无成功通知。旧 token 在显式控制前失效，新 token 完整确认并提交后可供读取；rollback 不复活因外部连续性丢失而失效的 token。
+- **Failure / retry / replay**：命令/确认、状态写入、History、terminal、materialization、outer commit 或提交前取消失败恢复本地业务与 runtime，无成功回执/通知；SQLite 不撤销 MPD。固定操作分配 occurrence/新 Context，保留逐命令已执行前缀，安全 retry 不重播已确认目标、不重复添加；归属/执行结果不明时 fail closed，不能按 URI 找回未知 addid 或盲目再 add。失败 key 的 runtime 请求身份固定原 operation/base business generation/Queue revision；其他 current/Queue/AutoPlay 变更使基线过期时返回既有502 PLAYBACK_RECONCILIATION_FAILED，不分配新 occurrence 或发送控制；同 key 更换 song/payload 返回409 IDEMPOTENCY_KEY_CONFLICT。成功 HTTP terminal replay 优先返回原 DTO，即使之后 current/availability 改变也不控制、不 refill、不新增 History/revision。不同新 key 是新意图；失败尚未提交的同 key 不得改成另一输入继续旧执行。跨进程不承诺未提交请求 exactly-once，沿用 PB-RECOVERY-RETRY-001。
+- **Proof / downstream**：B02 的真实 SQLite/Services/MockPort API/invariant 测试证明同 song 重复 pending、MANUAL/provenance、Context/session/Stop/unknown/无 Context、token、联合版本/事件，以及全部上述失败与 retry/replay；existing wire Gate兼容。B02无独立 UI，phone N/A；真实 MPD/DAC NOT RUN。B03 Played 展开按 accepted Context ID 变化、已确认用户 Stop 或 epoch 变化复位；会话内普通 Play Now、暂停、采样不复位；2026-10-11 Queue本地展示修订后，每次重新进入Queue复位并定位current（§5.1），不能从 unknown STOPPED 推断复位。
+
+#### 3.3.2 明确 Stop 生命周期传播 — PB-STOP-LIFECYCLE-001（2026-10-10 已冻结）
+
+用户选择补充服务端Stop生命周期信号，并授权补充合同后直接执行B03。本节关闭G9-06的合同缺口，不新增Stop UI，不改变Stop、History、Queue或song Play Now的领域结果。
+
+- **Authority / representation**：PlaybackService拥有进程内非负整数`explicit_stop_generation`，初始0。`FullStateSnapshot`及GET/WS完整snapshot additive字段`explicit_stop_generation`表达同一已提交切面中的计数；有PlaybackService时必须为整数，无该owner的独立聚合允许null。旧服务器缺字段由Web解码为null（未知），不猜成0，不据状态/session推断来源。字段不进入PlaybackState持久schema或mutation receipt。
+- **Delta / confirmation**：每次本服务明确`stop()`完成MPD STOPPED确认并成功提交，计数恰+1，包括已停止时新的明确Stop意图；同key成功terminal replay不执行Service，计数不变。随后确认开始播放只消费原内部Stop provenance，不清除此累计计数。非用户Stop路径（unknown外部停止、current删除无后继、session结束、采样、pause、GET/WS、其它播放动作）不递增。
+- **Transaction / failure**：计数与原Stop的Playback/History/provenance共用最外层串行事务及rollback hooks；命令、确认、terminal写入、outer commit失败或提交前取消不递增可见计数，SQLite不撤销MPD副作用。计数变化登记`playback`域失效，提交前读取不能导出计数；后续普通开始不抹去已提交Stop。重试成功仅计最终成功提交一次，不将外部已执行但本地失败当成功来源。
+- **Epoch / propagation**：计数只在当前服务进程/epoch内比较，不持久化、不跨进程宣称exactly-once；重启的新epoch从0开始。通过Architecture §12的joint snapshot/覆盖水位传播，允许合并重读跳过中间Stop，但最新累计值仍保留已提交Stop事实；invalidate不是Stop回执，也不重放操作。服务owner不能在同epoch重建并使计数回退；正常生命周期以新epoch重建。
+- **B03 consumer**：持久queueUi初始展开0；只观察accepted snapshot，Context ID或epoch变化归零，同epoch已知Stop计数增加归零，重复/旧snapshot和连接状态不归零。首次获得计数（此前null）仅建立基线；同epoch缺字段保持最后已知计数，不能用unknown推断Stop。采样、pause、会话内普通Play Now、session单独变化和unknown STOPPED不复位；2026-10-11本地展示修订：每次进入Queue展开归零并定位current，留页切歌保持滚动及已揭示历史（§5.1）。新epoch总复位，不比较旧计数。字段回退的同epochsnapshot不能被接纳为新canonical事实。
+- **Proof**：真实SQLite/Services/Mock/API证明Stop确认、outer commit屏障、rollback/terminal/replay、Stop→start合并读取及non-Stop不递增；真实后端序列化fixture→shared Web decoder/store→queueUi证明source、ordering和跨route展开，手机H02验收实际显示与Context复位。真实MPD/DAC另行验收。
 
 #### Play Next
 
@@ -212,34 +240,32 @@ Play Now 时，按第 3.3 节的 Queue 内切换语义处理。
 
 ## 5. Queue 的显示与操作
 
-### 5.1 必须展示的区域
+### 5.1 连续歌曲列表 — PB-QUEUE-VIEW-001（2026-10-11 用户授权修订）
 
-Queue 页面至少包含：
+服务端 Played/current/Up Next 分区与完整 occurrence 保留；Web连续列表不显示 Now Playing、Played、Up Next 分组标题，不提供“展开10条”按钮，不读取永久History拼接Played。
 
-1.  **Now Playing**：当前正在播放的歌曲；
-2.  **Played**：当前会话中曾确认成为 current、后来离开该位置的 occurrence；不表示完整播放或自然完成（§8.9.3）；
-3.  **Up Next**：按确定顺序排列的后续歌曲。
-
-Queue 展示已确定的 Up Next 及执行同步状态。§8.9.5 正常条件成立时，AutoPlay 必须在耗尽前补充并同步到 MPD；无候选或同步失败不得虚构下一首。
+- 每次从任意导航页进入Queue，隐藏Played，将position=0的业务current作为首条可见歌曲并定位到它；离页再回来重新隐藏。进入时尚无有效current则等待accepted current后定位，不猜歌曲身份。
+- 用户从current处向下拉动内容才逐步揭示其上方Played，最近项先出现。a,b,c,d播放到c：初始c,d，下拉先露b，再露a；最终顺序a,b,c,d。本地揭示不修改服务端Queue/History。滚动与长按拖动排序须分开，取消不误触播放。
+- 已确认current且fresh匹配绑定、actual playing/paused时，在标题前显示明显播放/暂停图标；其它行无此类图标。unknown/stale/unbound不伪装已确认状态，position0本身不是确认。
+- 没有MANUAL待播、只有current且AutoPlay启用：仅显示最先的一首AUTOPLAY待播候选，即使服务端生成多个。存在MANUAL待播的多曲场景：显示全部MANUAL待播，隐藏全部AUTOPLAY候选；有/无Played均适用。Played不计为待播，候选本身不使单曲场景变成多曲。AutoPlay关闭时不预览候选。
+- 留在Queue期间自动/普通切歌保留用户滚动位置与已揭示历史，不因current变化强制定位或隐藏；重新进入才定位。accepted Context/epoch改变及明确Stop counter递增仍归零，继承§3.3.2，不用unknown STOPPED/session猜Stop。
+- 标题和艺术家各单行省略；点击不展开多行详情。metadata读取失败/不可用仍保留occurrence及身份，按唯一顶部通知合同反馈。
 
 ### 5.2 Queue 操作
 
-用户应能对 Queue 中的内容执行：
-
--   长按拖动排序；
--   插入为下一首；
--   从 Queue 删除指定歌曲；
--   清空待播内容；
--   保存当前 Queue 为自定义 Playlist。
-
-对当前正在播放的歌曲执行删除时，必须定义清楚行为：不得造成客户端和 MPD
-状态不一致。建议将"删除当前歌曲"解释为结束当前曲目并转到下一首；若没有下一首则立即触发
-AutoPlay，除非用户同时明确选择停止。
+- current、已揭示Played、MANUAL待播及可见AutoPlay候选均点击即播放，精确POST `/api/playback/queue/items/{queue_item_id}/play`；不先弹播放菜单、不用普通song Play Now、不选择同song其它occurrence。
+- 仅position>0待播项可以长按拖动排序，current与Played不可排序、不可作为待播区之外的放置目标。按现有PUT item及`before_queue_item_id`提交，保留完整服务端Queue及隐藏候选；隐藏项不因拖动被客户端删除或重建。
+- drag只是本地草稿；已知Queue revision/current/成员、epoch/连接generation变化、断线或离页取消；已发intent留在共享owner。提交后按服务端执行时权威状态裁决，不承诺尚未送达浏览器的并发变化被expected-version守护。
+- 所有mutation继承Architecture §4.1–4.2只读门禁、共享key/原key恢复、HTTP确认后权威重读；不speculative改canonical，不把invalidate当ACK。长按取消/拖动结束不触发点击播放。
+- B04剩余动作由独立入口提供，整行点击合同不变。用户2026-10-11修正Queue快捷语义：仅position>0待播项提供“移为下一首/移到队尾”，以queue_item_id经现有PUT item/before_queue_item_id移动原occurrence至完整UpNext首位/末尾（含隐藏候选）；不调用song-id入队、不新增/去重/重建条目。已在目标首尾位置为本地no-op；current/Played不提供移动入口，整行播放和删除保持。此Queue例外不改变普通Song的Play Next/Add入队合同。删除精确使用queue_item_id，可作用current/Played/待播，沿用服务端后继确认、History及无后继处理；不在浏览器猜造current。
+- 清空入口明确为“清空待播”，经本地确认后DELETE queue；只清Up Next，不清current/Played、不作为Stop。AutoPlay既有补充策略保持，服务端补充的候选可重新出现。
 
 ### 5.3 保存 Queue 为 Playlist
 
 "保存当前 Queue"默认保存尚待播放的内容（Up Next），不包含已经播放的
 Played 历史，也不改变当前播放状态。
+
+Web只提交{name}，不提交song_ids、可见行或expected_revision。服务端事务内读取提交时完整Up Next（包括隐藏AutoPlay），不含current/Played、不自动去重；重复song_id整次400拒绝，写入失败回滚Playlist及成员，不能留下半成品。HTTP确认后权威state及Playlist列表重读；失败保留名称草稿，离页丢弃未发草稿，已发intent跨页由共享owner恢复。
 
 如未来提供"包含已播放歌曲"的保存选项，应作为明确的独立操作，不得作为默认行为。
 
@@ -259,8 +285,7 @@ Played 历史，也不改变当前播放状态。
 AutoPlay 应在 Queue
 即将耗尽前预先生成后续歌曲。当前既有策略冻结为低水位5、每批最多5；§8.9.5规定基于确认剩余量触发，不在本次改为其它阈值。
 
-已生成的 AutoPlay 歌曲必须进入 Queue 的 Up Next
-并可见，不能只在后台保留一个无法预览的随机结果。
+已生成的 AutoPlay 歌曲必须进入服务端完整Queue的Up Next。2026-10-11 Web展示按§5.1：单曲只预览首候选、多曲隐藏候选；这只改变本地可见投影，不改变低水位、补充策略、执行映射或Queue occurrence。
 
 ### 6.3 随机选择与避免重复
 
@@ -391,7 +416,7 @@ status、idle、elapsed≈duration、URI 变化、played URI 日志、未见本�
 
 执行计划删除已确认离开的 A 的 MPD entry，保留目标的 MPD ID，不重播目标、不 seek；必要时把其余 pending 排到目标后。清理/移动会改变 MPD current position：最终确认要求目标 position=0、完整执行映射与业务目标一致。若清理期间 MPD 又前进，放弃本次提交并按已执行命令账本重新核验；不得宣布旧目标成功。MPD 自动前进时 position 可先为1/2，不能因为旧实现只接受0而误认 foreign。
 
-整个业务 current/Played/pending 调整一次 CAS、Queue revision 恰 +1；仅 MPD position 随清理变化、同态采样或 retry/replay 不额外增加 revision。后续独立 AutoPlay batch 的真实 Queue 变更另 +1。pending 手动动作保持原 revision 合同、MANUAL 相对顺序和来源；先处理/拒绝未接纳当前转移，再执行用户队列操作，禁止用旧 position=0 误删实际 current。外部漂移下普通 pending mutation 失败且业务不变；用户显式 Start/Play Now 的重新接管不属于偷偷修复漂移。
+整个业务 current/Played/pending 调整一次 CAS、Queue revision 恰 +1；仅 MPD position 随清理变化、同态采样或 retry/replay 不额外增加 revision。后续独立 AutoPlay batch 的真实 Queue 变更另 +1。pending 手动动作保持原 revision 合同、MANUAL 相对顺序和来源；先处理/拒绝未接纳当前转移，再执行用户队列操作，禁止用旧 position=0 误删实际 current。显式用户 Queue 操作的漂移处理采用下述安全规则；后台恢复与读取不得借此自动接管。
 
 #### 8.9.4 History 决定 — PB-HISTORY-001 / PB-HISTORY-UNCERTIFIED-001
 
@@ -402,6 +427,16 @@ status、idle、elapsed≈duration、URI 变化、played URI 日志、未见本�
 接纳 A→C 的同一事务中，用新内部 `discard_unconfirmed_active()` 清除 A 的 runtime active，不写结束事件、保留 session；C 不凭 observed_at 创建 History active，因为实际起点未知。后续显式操作若无可信 active，操作可成功但无旧歌曲 History。若显式操作建立新 active，仍按既有确认开始时间合同创建；在任何 finalizer 前须核对绑定/当前身份，失配则丢弃未经认证 active 而不写 reason。只读 observer 不执行这些修改。
 
 未知 STOPPED 的 UNKNOWN 结果保留最后业务状态与 runtime active（作为最后业务资料），页面以 reconciliation_required 标明其未获实际确认；后续 Service 显式操作先做上述 active 资格检查。采样 observed_at 只作观察时间，不是 ended_at，也不以 duration 倒推 started_at。永久旧记录不改写、不删除；has_entries 仍只由持久记录决定。
+
+#### Task 9 用户确认的队列安全规则（2026-10-13）
+
+用户明确请求播放单曲/集合、Play Next、加入队尾、排序、清空待播、删除、Next/Previous 时，首条 MPD 控制命令前核对操作前完整 MS 执行队列（position>=0，含 current 和全部 pending）与 MPD 有序队列及实际 current/state。不能用 Web AutoPlay 折叠后的可见列表代替；重复歌曲按 occurrence/MPD ID 区分，Played 不参与核对。无可靠映射（包括重启丢失运行时绑定）视为需要重建，禁止仅凭 URI 接纳旧 MPD ID。
+
+不一致时，先确认 MPD clear，再执行明确用户请求。保留当前项的操作按请求后的完整 MS 队列重建，按 MS 当前项恢复 PLAYING/PAUSED；只有清空前新鲜 MPD actual 确认同一歌曲且有 elapsed 时恢复该进度，否则从头恢复。STOPPED 保持停止。主动选曲操作按本次选择播放，不继承旧歌进度。物理重建不额外修改 Queue revision、用户 Stop 世代、Context 或永久 History。
+
+请求参数、CAS 与歌曲可用性校验仍先于控制副作用。读取失败不能当作“已确认不一致”而盲目清空。重试同一固定操作时，部分执行按已确认的命令前缀核对；不得重新与回滚后的 MS 基线比较而再次清空。响应未知的 add/play/pause/seek 不自动重发；成功终态重放只读。每条后续命令仍遵守 ExecutionSynchronizer 的所有权和结果确认规则。
+
+该授权仅适用于明确用户队列操作；GET、observe、后台恢复/AutoPlay 不自动清空外部队列。模式限制继续遵守 §8.9.5，不偷偷改变 consume/random/repeat/single。
 
 #### 8.9.5 AutoPlay 提前准备与异常终态 — PB-AUTOPLAY-EXEC-001
 

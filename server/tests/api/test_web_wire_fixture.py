@@ -10,10 +10,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from server.app.api.realtime_schemas import FullStateSnapshotResponse
-from server.app.api.schemas import ErrorBody, ErrorResponse, PlaybackStateResponse
+from server.app.api.schemas import (
+    ErrorBody,
+    ErrorResponse,
+    PlaybackStateResponse,
+    PlaylistListResponse,
+    PlaylistResponse,
+    SongListResponse,
+    SongResponse,
+)
 from server.app.api.system_schemas import OutputSnapshotResponse
 from server.app.models.history import HistoryEvent
 from server.app.models.library import Song
+from server.app.models.library_sync import LibrarySyncState
 from server.app.models.output import (
     OutputMode,
     OutputRequestState,
@@ -46,7 +55,8 @@ def build_fixture():
     playback = PlaybackState(song_id="song-a", state="PAUSED", playback_context_id="context-a",
                              position_seconds=37, autoplay_enabled=True, updated_at=NOW)
     state = FullStateSnapshot(
-        epoch="fixture-epoch", sequence=12, captured_at=NOW,
+        library_sync=LibrarySyncState(updated_at=NOW),
+        epoch="fixture-epoch", sequence=12, captured_at=NOW, explicit_stop_generation=2,
         revisions={"library": 3, "playlist": 5}, playback=playback,
         current_song=Song(song_id="song-a", title="长标题 / Song A", file_uri="fixture/a.flac",
                           artists=("Artist",), duration=None, lyrics="[00:01]fixture", lyrics_format="lrc"),
@@ -75,6 +85,10 @@ def build_fixture():
         "provenance": {"source": "Pydantic domain/public model_dump(mode=json, by_alias=True)",
                        "control_target": "actual DTO present; P3 full Gate must be freshly verified in W4"},
         "snapshot": snapshot,
+        "song_resource": SongResponse.model_validate(state.current_song).model_dump(mode="json"),
+        "song_list_resource": SongListResponse(items=[SongResponse.model_validate(state.current_song)], count=1).model_dump(mode="json"),
+        "playlist_resource": PlaylistResponse(playlist_id="playlist-wire", name="手机保存", created_at=NOW, updated_at=NOW, song_ids=["song-b", "hidden-song"]).model_dump(mode="json"),
+        "playlist_list_resource": PlaylistListResponse(items=[PlaylistResponse(playlist_id="playlist-wire", name="手机保存", created_at=NOW, updated_at=NOW, song_ids=["song-b", "hidden-song"])], count=1).model_dump(mode="json"),
         "empty_snapshot": FullStateSnapshotResponse.model_validate(empty.model_dump()).model_dump(mode="json", by_alias=True),
         "snapshot_frame": {"type": "snapshot", "protocol_version": 1,
                            "epoch": state.epoch, "sequence": state.sequence, "state": snapshot},

@@ -20,14 +20,19 @@ export function createPlayerStore() {
     marker: { epoch: null, sequence: 0, revisions: { library: 0, playlist: 0 }, generation: 0, trusted: false } as ResourceMarker,
   })
   let connection: number | null = null
+  let stopGeneration: number | null = null
   function marker(update: Partial<ResourceMarker>) { state.marker = freeze({ ...state.marker, ...update }) }
   function covers(snapshot: FullStateSnapshot) {
     const known = state.marker
     return snapshot.epoch === known.epoch && snapshot.sequence >= known.sequence &&
+      (stopGeneration === null || snapshot.explicit_stop_generation === null || snapshot.explicit_stop_generation >= stopGeneration) &&
+      (snapshot.epoch !== state.snapshot?.epoch || snapshot.library_sync.generation >= state.snapshot.library_sync.generation) &&
       snapshot.revisions.library >= known.revisions.library && snapshot.revisions.playlist >= known.revisions.playlist
   }
   function apply(snapshot: FullStateSnapshot) {
     if (!state.snapshot || snapshot.epoch !== state.snapshot.epoch || snapshot.sequence > state.snapshot.sequence) {
+      if (snapshot.epoch !== state.snapshot?.epoch) stopGeneration = snapshot.explicit_stop_generation
+      else if (snapshot.explicit_stop_generation !== null) stopGeneration = snapshot.explicit_stop_generation
       state.snapshot = freeze(structuredClone(snapshot))
     }
     marker({ epoch: snapshot.epoch, sequence: snapshot.sequence, revisions: { ...snapshot.revisions } })

@@ -9,9 +9,16 @@ services:
       APP_ENV: development
       MPD_MODE: mock
       DATABASE_PATH: /data/music-server-dev.db
+      CONFIG_DIR: /config
+      MPD_CONNECTION_PATH: /config/mpd-connection.json
+      MUSIC_ROOT: /music
+      BACKUP_DIR: /backups
     volumes:
       - ..:/workspace
       - mpd_server_dev_data:/data
+      - mpd_server_dev_config:/config
+      - mpd_server_dev_music:/music:ro
+      - mpd_server_dev_backups:/backups
     ports:
       - "8000:8000"
 
@@ -32,4 +39,7 @@ services:
 
 volumes:
   mpd_server_dev_data:
+  mpd_server_dev_config:
+  mpd_server_dev_music:
+  mpd_server_dev_backups:
   mpd_server_dev_node_modules:

@@ -134,6 +134,15 @@ class QueueManager:
             )
         return item
 
+    async def play_song_now(
+        self, song_id: str, playback_context_id: str, *, reset_played: bool,
+        expected_revision: int | None = None,
+    ) -> QueueItem:
+        return await self.queue_repository.play_song_now(
+            song_id, playback_context_id, reset_played=reset_played,
+            expected_revision=expected_revision,
+        )
+
     async def play_next(
         self,
         song_id: str,

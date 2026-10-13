@@ -62,6 +62,7 @@ def test_snapshot_is_one_committed_cut(real_client, tmp_path, monkeypatch):
     before = server_snapshot(playback)
 
     async def scenario():
+        prepared = await scanner.prepare(root)
         reading, release, attempted = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
         async def held_read():
@@ -82,7 +83,7 @@ def test_snapshot_is_one_committed_cut(real_client, tmp_path, monkeypatch):
             async def joint(_):
                 await playback.next()
                 await playlists.create_playlist('joint')
-                await scanner.scan_full(root)
+                await scanner.commit(prepared)
 
             await run_transaction(repository.path, joint)
 
@@ -126,7 +127,8 @@ def test_snapshot_empty_and_unknown_observations_are_complete(real_client, monke
     async def forbidden(*args, **kwargs):
         raise AssertionError('snapshot performed external I/O or domain reconciliation')
 
-    for method in ('status', 'outputs', 'play', 'stop', 'queue_entries', 'set_output_enabled'):
+    for method in ('status', 'outputs', 'play', 'stop', 'queue_entries', 'set_output_enabled',
+                   'update_database', 'database_update_status', 'has_library_uri'):
         monkeypatch.setattr(player, method, forbidden)
     monkeypatch.setattr(playback, 'reconcile_external_status', forbidden)
     first = run(state.get_full_snapshot())
@@ -135,7 +137,9 @@ def test_snapshot_empty_and_unknown_observations_are_complete(real_client, monke
     assert set(first.model_dump()) == {
         'epoch', 'sequence', 'captured_at', 'revisions', 'playback', 'current_song',
         'queue', 'history', 'output', 'playback_observation', 'output_observation',
+        'explicit_stop_generation', 'library_sync',
     }
+    assert first.explicit_stop_generation is None  # This isolated aggregator has no playback owner.
     assert first.captured_at.tzinfo is not None
     assert first.playback is None and first.current_song is None
     assert first.queue.model_dump() == {'revision': 0, 'items': ()}

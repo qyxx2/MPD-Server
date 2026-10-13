@@ -8,6 +8,10 @@ const acceptanceLabel = import.meta.env.VITE_ACCEPTANCE_LABEL
 if (acceptanceLabel) document.title = `MPD-Server · ${acceptanceLabel}`
 const store = createPlayerStore()
 const api = createApiClient({ origin: window.location.origin, fetch: window.fetch.bind(window) })
-const realtime = createRealtimeClient({ api, store, socketFactory: url => new WebSocket(url), clock: { setTimeout, clearTimeout, random: Math.random } })
+const realtime = createRealtimeClient({ api, store, socketFactory: url => new WebSocket(url), clock: {
+  setTimeout: (callback, ms) => setTimeout(callback, ms),
+  clearTimeout: timer => clearTimeout(timer),
+  random: Math.random,
+} })
 </script>
 <template><AppShell :store="store" :realtime="realtime" :api="api"><RouterView /></AppShell></template>

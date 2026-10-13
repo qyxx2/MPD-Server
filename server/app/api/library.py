@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 
-from server.app.models.library import ScanResult, Song
+from server.app.models.library import Song
 from server.app.services.library_scanner import LibraryScanError
 from server.app.services.library_service import (
     ArtworkNotFoundError,
@@ -18,7 +18,6 @@ from server.app.services.playlist_service import PlaylistNotFoundError
 from .dependencies import (
     get_library_service,
     resolve_collection_service,
-    resolve_library_scanner,
 )
 from .schemas import (
     AlbumListResponse,
@@ -29,8 +28,9 @@ from .schemas import (
     CollectionResponse,
     GenreListResponse,
     GenreSummaryResponse,
+    ScanJobResponse,
     ScanRequest,
-    ScanResultResponse,
+    SearchResultsResponse,
     SongListResponse,
     SongResponse,
     TagListResponse,
@@ -45,7 +45,7 @@ _REQUIRED_SOURCE_ID = {"ALBUM", "ARTIST", "GENRE", "YEAR", "TAG", "PLAYLIST"}
 
 
 def _song_response(song: Song) -> SongResponse:
-    return SongResponse.model_validate(song)
+    return SongResponse.model_validate(song.model_dump())
 
 
 def _collection_response(collection) -> CollectionResponse:
@@ -275,6 +275,14 @@ async def search(
     )
 
 
+@router.get("/search/results", response_model=SearchResultsResponse)
+async def search_results(
+    service: Annotated[LibraryService, Depends(get_library_service)],
+    q: str = Query(),
+) -> SearchResultsResponse:
+    return SearchResultsResponse.model_validate((await service.search_results(q)).model_dump())
+
+
 @router.post("/collections", response_model=CollectionResponse)
 async def create_collection(
     body: CollectionRequest,
@@ -311,21 +319,14 @@ async def create_collection(
     return _collection_response(collection)
 
 
-@router.post("/scan", response_model=ScanResultResponse)
-async def scan_library(
-    body: ScanRequest,
-    request: Request,
-) -> ScanResultResponse:
-    scanner = await resolve_library_scanner(request)
+@router.post("/scan", response_model=ScanJobResponse, status_code=202)
+async def scan_library(body: ScanRequest, request: Request) -> ScanJobResponse:
+    sync = request.app.state.library_sync_service
     try:
-        result: ScanResult = await scanner.scan_full(Path(body.root))
-    except LibraryScanError as exc:
+        activity_id = await sync.request_scan((Path(body.root),), 'manual')
+    except (LibraryScanError, ValueError) as exc:
         raise HTTPException(
             status_code=400,
-            detail={
-                "code": "LIBRARY_SCAN_ERROR",
-                "message": str(exc),
-                "details": None,
-            },
+            detail={"code": "LIBRARY_SCAN_ERROR", "message": str(exc), "details": None},
         ) from exc
-    return ScanResultResponse.model_validate(result.model_dump())
+    return ScanJobResponse(activity_id=activity_id)
