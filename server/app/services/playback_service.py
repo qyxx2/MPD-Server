@@ -1794,8 +1794,6 @@ class PlaybackService:
                                                      before_mpd_song_id=before_id if before_item is None else None))
                     row = simulated.pop(index)
                     simulated.insert(position, row)
-            for mpd_id, _ in reversed(obsolete):
-                commands.append(ExecutionCommand("delete", mpd_song_id=mpd_id))
             target = items[0][0] if items and state is not None and state.state != "STOPPED" else None
             if target is not None and (ids.get(target) != sample.status.song_id
                                        or sample.status.state == PlayerState.STOPPED):
@@ -1804,6 +1802,11 @@ class PlaybackService:
                 commands.append(ExecutionCommand("play", target))
                 if state.state == "PAUSED":
                     commands.append(ExecutionCommand("pause"))
+            # Select the prepared replacement before deleting the old current.
+            # Stock MPD advances immediately when a playing current is deleted;
+            # deleting only non-current entries keeps each receipt deterministic.
+            for mpd_id, _ in reversed(obsolete):
+                commands.append(ExecutionCommand("delete", mpd_song_id=mpd_id))
             target_state = state.state if state else "STOPPED"
             if (explicit and target is not None
                     and ids.get(target) == sample.status.song_id

@@ -289,3 +289,59 @@ def test_playid_failure_does_not_advance_server_queue_playback_or_history(
             assert status.state.value == "playing"
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('initial_count', [0, 1, 2, 8])
+@pytest.mark.parametrize('selected_song', ['a', 'h'])
+@pytest.mark.parametrize('paused', [False, True])
+def test_song_click_confirms_current_when_mpd_advances_on_current_deletion(components, initial_count, selected_song, paused):
+    from server.app.player.music_uri import MusicUriMapper
+
+    async def scenario():
+        async with mpd_runtime(components) as runtime:
+            await seed_songs(runtime['library'], *'abcdefgh')
+            runtime['adapter'].uri_mapper = MusicUriMapper(Path('/music'))
+            for song_id in 'abcdefgh':
+                song = await runtime['library'].get_song(song_id)
+                await runtime['library'].upsert_song(song.model_copy(update={
+                    'file_uri': f'/music/{song_id}.flac',
+                }))
+            fake = runtime['fake']
+            if initial_count:
+                await runtime['service'].play_context(PlaybackContext(
+                    context_id='existing', source_type='ARTIST',
+                    ordered_song_ids=tuple('abcdefgh'[:initial_count]),
+                ))
+                if paused:
+                    await runtime['service'].pause()
+            before = await runtime['queue'].get_snapshot()
+            pending = [(item.queue_item_id, item.song_id) for item in before.items if item.position > 0]
+            fake.received.clear()
+            delete = fake._cmd_deleteid
+
+            def stock_delete(args):
+                index = fake._index_of(int(args[0]))
+                was_current = fake.current_song_id == int(args[0])
+                was_playing = fake.player_state == 'play'
+                result = delete(args)
+                if was_current and was_playing and index < len(fake.queue):
+                    fake.current_song_id = fake.queue[index].mpd_song_id
+                    fake.player_state = 'play'
+                return result
+
+            fake._cmd_deleteid = stock_delete
+            selected = await runtime['service'].play_song_now(selected_song)
+            observation = await runtime['service'].observe()
+            assert observation.sync_status == 'CONFIRMED'
+            assert observation.control_target.queue_item_id == selected.queue_item_id
+            assert fake.current_song_id == fake.queue[0].mpd_song_id
+            assert fake.queue[0].song_uri == f'{selected_song}.flac'
+            assert fake.player_state == 'play'
+            after = await runtime['queue'].get_snapshot()
+            assert [(item.queue_item_id, item.song_id) for item in after.items if item.position > 0][:len(pending)] == pending
+            assert [entry.song_uri for entry in fake.queue] == [
+                f'{item.song_id}.flac' for item in sorted(after.items, key=lambda item: item.position) if item.position >= 0
+            ]
+            assert 'clear' not in fake.received
+
+    asyncio.run(scenario())

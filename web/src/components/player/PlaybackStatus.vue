@@ -19,7 +19,7 @@ const label = (id: string, type: 'retry' | 'read') => id.startsWith('player-oper
   <div class="playback-status" @keydown.esc="close()">
     <span data-testid="operation-status" role="status" aria-live="polite" class="status-description">{{ feedback }}<template v-if="activities.summary.value.hiddenUnresolved"> · 另有{{ activities.summary.value.hiddenUnresolved }}项未完成</template></span>
     <button ref="toggleButton" v-if="busy || feedback" type="button" class="status-toggle" :class="{ warning }" :aria-label="warning ? '查看活动异常' : busy ? '查看正在处理的活动' : '查看最近活动'" :aria-expanded="expanded" aria-controls="playback-status-details" @click="toggle()">
-      <svg v-if="busy && !warning" class="status-spinner" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" opacity=".25" /><path d="M12 4a8 8 0 0 1 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+      <svg v-if="busy" class="status-spinner" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" opacity=".25" /><path d="M12 4a8 8 0 0 1 8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
       <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M12 7v6m0 4h.01" /></svg>
     </button>
     <div ref="details" role="dialog" aria-label="最近活动详情" v-show="expanded" id="playback-status-details" class="status-details" @keydown.esc="close()">
