@@ -52,7 +52,7 @@ Python 为既有 `.venv`：3.14.4 / pytest 9.1.1 / Ruff 0.16.9，未改环境。
 
 ## Contract / Relationship traceability
 
-既有 Contract Matrix REQUIRED；本轮不新增或改变业务合同。共同 11 字段及 WEB-LYRICS/WEB-OUTPUT 行沿用 [Task 8 Contract Audit §8](../../plans/2026-10-09-task-8-contract-audit.md)，owner/test/Gate 由当前计划分配，具体消费链如下：
+既有 Contract Matrix REQUIRED；本轮不新增或改变业务合同。共同 11 字段及 WEB-LYRICS/WEB-OUTPUT 行沿用 [Task 8 Contract Audit §8](../plans/2026-10-09-task-8-contract-audit.md)，owner/test/Gate 由当前计划分配，具体消费链如下：
 
 | Contract / Spec source | 实际 owner 与接线 | proof / 结果 |
 |---|---|---|

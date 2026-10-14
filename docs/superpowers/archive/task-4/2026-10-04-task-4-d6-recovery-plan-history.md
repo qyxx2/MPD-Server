@@ -1,6 +1,6 @@
 # Task4 D6 corrective plan 历史与调查归档
 
-> 本文件仅为过往记录，不是 active plan、Spec 或验收通过证明。2026-10-04 从唯一 [active plan P](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md) 汇总迁入旧 consumer Step2.1–Step3、旧 S0/S1、已废止的剩余步骤，以及合同迁移时的详细能力调查。当前执行仅以 P 的新 S0–S12 和 F §8.9 为准。
+> 本文件仅为过往记录，不是 active plan、Spec 或验收通过证明。2026-10-04 从唯一 [active plan P](../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md) 汇总迁入旧 consumer Step2.1–Step3、旧 S0/S1、已废止的剩余步骤，以及合同迁移时的详细能力调查。当前执行仅以 P 的新 S0–S12 和 F §8.9 为准。
 >
 > 下文旧记录中的“当前”“下一步”“需要后端扩展”和白名单均只描述当时合同；不授权执行。旧记录内部的 P §8.9 指 Playback Spec（当前简称 F），不是当前 active plan P。保留原文以维护调查过程；旧 SOURCE BLOCKED 和历史 GREEN 均不代表当前门禁。
 

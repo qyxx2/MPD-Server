@@ -126,7 +126,7 @@ D6未完成，因此“D6完成后”才执行的最终门禁未进入：全部r
 
 ### Spec → Contract → Step → executable proof 审查
 
-唯一长期新增语义：[Playback Spec §8.9](../../specs/2026-09-24-playback-model-queue-semantics-design.md)。唯一执行分解：[D6 corrective plan](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。该计划提供5个新增稳定consumer rows、PB-HISTORY扩展、共同12字段、白名单、内部接口、Step2.1–2.7精确TO CREATE selectors及literal assertions、confirmation/rollback/retry和Step3/3-SOURCE/4验收顺序。主Plan与active Task6、Architecture §12.3仅同步authority/能力门禁引用，不复制第二份产品语义。
+唯一长期新增语义：[Playback Spec §8.9](../../specs/2026-09-24-playback-model-queue-semantics-design.md)。唯一执行分解：[D6 corrective plan](../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。该计划提供5个新增稳定consumer rows、PB-HISTORY扩展、共同12字段、白名单、内部接口、Step2.1–2.7精确TO CREATE selectors及literal assertions、confirmation/rollback/retry和Step3/3-SOURCE/4验收顺序。主Plan与active Task6、Architecture §12.3仅同步authority/能力门禁引用，不复制第二份产品语义。
 
 审查发现并显式安排三个旧proof迁移（本窗口均未改）：Service外部b只凭URI推进、API corrective unknown stop/foreign→History、realtime unknown stop→成功History通知。下一窗口仅这些冲突selectors按新Spec改写，保留有业务delta分支的outer rollback、retry及提交传播断言。专项RED原样保留；通用invariant helper的STOPPED/session假设需要区分显式Stop与自然empty，不删除session断言。
 
@@ -287,7 +287,7 @@ branch=`feature/task-6-realtime-state`，HEAD=`651aade83d0df52601f4555e0a682c9f1
 
 本轮取得 [2026-09-26 原始JSON](/home/Gold/Downloads/mpd-0.23.5-probe-2026-09-26-091948.json)，SHA-256=`6c4036572314b38d822481c28fa25652bab29a26ab8ec6e74a076cbe815d0d40`。commands=105，C旧摘录漏unmount；status_fields=17；outputs/stats/update/errors核对一致；没有verified_operations字段。只最小纠正C并补来源。第二轮JSON未取得，九项transport仍是历史摘录，未重跑实机probe。上文“当时未取得”是当时事实，不抹去。
 
-重新读取官方固定v0.23.5的protocol、PlayerCommands、Idle、Playlist/PlaylistControl、player Thread、IdTable；索引和逐条限制在[P的S0审计表](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。静态结论：可读当前entry/完整执行队列，不能认证上一项自然原因、准确ended_at或遗漏项播放；既有SOURCE调查的不可行结论对旧严格合同仍成立。没有认证NAS build/hash或新运行时组合。
+重新读取官方固定v0.23.5的protocol、PlayerCommands、Idle、Playlist/PlaylistControl、player Thread、IdTable；索引和逐条限制在[P的S0审计表](../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。静态结论：可读当前entry/完整执行队列，不能认证上一项自然原因、准确ended_at或遗漏项播放；既有SOURCE调查的不可行结论对旧严格合同仍成立。没有认证NAS build/hash或新运行时组合。
 
 ### 决定与门禁替换
 

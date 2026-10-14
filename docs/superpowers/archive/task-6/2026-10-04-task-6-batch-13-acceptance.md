@@ -116,7 +116,7 @@ Declined项目逐一裁定：
 
 实际起始/结束HEAD为 `82391fcf6bb02a8bb480e99ea5be4a93ec43746b`，branch `feature/task-6-realtime-state`；起始clean。上文三份Batch13修改已经在该提交，两个Python proof本次未修改。上文命令与“没有新的Contract Gap”保留为历史记录，不作为本次D6结论。
 
-唯一D6专项记录：[Task4 D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)；active执行计划：[D6 corrective plan](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。专项真实SQLite/Services/MockPort测试 `server/tests/invariants/test_d6_recovery.py::test_unclassified_external_stop_does_not_fabricate_history` **1 failed**：无用户Stop请求，仅外部STOPPED，仍新增STOP History、清active/session并禁用AutoPlay。重复运行相同RED；没有fixture/environment失败。
+唯一D6专项记录：[Task4 D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)；active执行计划：[D6 corrective plan](../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)。专项真实SQLite/Services/MockPort测试 `server/tests/invariants/test_d6_recovery.py::test_unclassified_external_stop_does_not_fabricate_history` **1 failed**：无用户Stop请求，仅外部STOPPED，仍新增STOP History、清active/session并禁用AutoPlay。重复运行相同RED；没有fixture/environment失败。
 
 本次发现Task4 D6领域Contract Gap：自然完成可信识别、外部漂移分类/确认/History reason、自然完成无可用歌曲终态、恢复retry转移身份及未知原因正向处理策略缺少权威定义。P §7/§8.8禁止错误归因，§10仍将精确Queue映射/故障恢复协议列为未决；不得从现有Next/delete/Mock事件或方法名补语义。Task6 G6-01–05已冻结的观察/传播协议不重开。本次按用户停止条件停止production implementation，未启用恢复loop。
 
@@ -127,7 +127,7 @@ Declined项目逐一裁定：
 
 ## D6 Contract Gap Resolution / 人工 A（2026-10-04，最新 blocker）
 
-用户明确选择A，唯一领域authority新增于Playback Spec §7/§8.9；[D6 corrective plan](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)已分解保守consumer合同、逐行为selectors及rollback/retry。当前完整事实只在[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)，本节不复制领域定义或第二份实施计划。
+用户明确选择A，唯一领域authority新增于Playback Spec §7/§8.9；[D6 corrective plan](../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)已分解保守consumer合同、逐行为selectors及rollback/retry。当前完整事实只在[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)，本节不复制领域定义或第二份实施计划。
 
 consumer合同已闭合但未实施；自然完成生产因果证据来源仍缺机制/验证，D6-SOURCE BLOCKED。专项unknown STOPPED selector本窗口重复 **1 failed**；Stop/observation/History/playback基线 **57 passed**，仅基线，旧reconciliation成功断言需后续按新Spec迁移。未修改两个Batch13 Python proof，未运行本批最终sequence；历史GREEN不能解除当前RED/来源能力门禁。
 
@@ -157,7 +157,7 @@ consumer Step2.1–Step3 已实施/验收，P 的旧时态/checklist 已同步�
 
 用户授权由严格自然SOURCE迁移为[F §8.9](../../specs/2026-09-24-playback-model-queue-semantics-design.md)的原版MPD合同，补充[A §12.3.1](../../specs/2026-09-25-system-and-development-architecture-design.md)实际identity/未绑定表示。SOURCE是SUPERSEDED而非PASSED；原strict natural/empty proof仅历史consumer。原有11 RT rows的切面、只读、epoch/sequence、完整首帧和迟到响应拒绝继续保留，新增RT-ACTUAL以及D6 binding/current/提前执行/History真实性/部分执行/runner验收。
 
-唯一实施计划[P S0–S12](../../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据[E最新节](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。S2–S9未实施，S10新本地联合proof未创建/执行，S11目标运行时未执行，S12本批最终序列未执行。正常刷新/换浏览器取得真实完整状态；服务/MPD重启后actual可重新采样，业务binding不得按URI认回，不能把旧current_song显示为已确认实际歌曲。
+唯一实施计划[P S0–S12](../plans/2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据[E最新节](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。S2–S9未实施，S10新本地联合proof未创建/执行，S11目标运行时未执行，S12本批最终序列未执行。正常刷新/换浏览器取得真实完整状态；服务/MPD重启后actual可重新采样，业务binding不得按URI认回，不能把旧current_song显示为已确认实际歌曲。
 
 **Relationship Gate REQUIRED / BLOCKED；Contract Matrix新合同DEFINED / acceptance BLOCKED；D6、Batch13、Task6 final仍BLOCKED。** 不具备以Task6完成为前提进入Task8的验收条件。没有新实现完成、目标能力通过或新pytest GREEN声明；未commit/push/PR。
 
