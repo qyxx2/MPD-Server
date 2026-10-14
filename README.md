@@ -2,12 +2,12 @@
 
 面向局域网和 NAS 的自托管音乐服务器。通过手机或桌面浏览器访问 Web 界面，由服务端连接 [Music Player Daemon (MPD)](https://www.musicpd.org/) 控制播放；音乐音频由 MPD 输出，而不是由浏览器解码播放。
 
-**当前版本：v0.1 — 首个基本可用版本。** 已实现基本播放、曲库浏览与搜索、播放队列、播放列表、收藏、设置与 MPD 连接配置，可用于 NAS + 真实 MPD 的基本使用。v0.1 是初始可用版本，不表示所有原始 Task 8–12 长期需求及全部真实设备验收都已完成。
+**发布状态：v0.1 为首个基本可用版本；v0.2 是当前增量维护分支。** 原主 Task 路线图及未来 Task 10–12 已退役；以现有代码为基线，按实际需求进行小范围迭代。
 
 ## 功能
 
 - **播放器**：显示实际播放/暂停、当前曲目及进度；提供基本播放控制和歌词/音频信息展示。
-- **队列**：浏览当前队列、下一首插入、排序与基本管理；部分队列执行语义仍在后续重构范围内。
+- **队列**：浏览当前队列、下一首插入、排序与基本管理；Queue、Played 与执行身份以现有规格和实现为准，长队列性能问题另有专项指导。
 - **资料库与搜索**：浏览歌曲/专辑/艺术家及搜索，后端只读访问现有音乐文件；自动曲库同步和状态通知。
 - **播放列表与收藏**：建立和管理播放列表、歌曲收藏。
 - **设置与连接**：保存 MPD 连接目标，通过重启服务应用保存的地址；查看连接、输出及基本健康状态。
@@ -73,16 +73,14 @@ make build
 - 局域网自用为主要场景；目前未提供对公网暴露所需的完整身份认证和安全边界，**不要直接暴露到公网**。
 - 音乐根目录按只读方式挂载，业务数据和持久化配置另存。
 - MPD 是实际播放状态的来源，应用编排队列和业务状态；连接断开、控制目标丢失等异常会限制部分操作。
-- PWA 离线能力、复杂运维/备份恢复自动化、完整实机 DAC 验收与队列执行重构均不属于本次 v0.1 基本可用范围。
+- 离线 PWA、客户端串流、原 Task 10–12 等不再作为自动推进的既定路线图；只有新需求明确授权才单独评估。
 - Task 9 的历史自动及人工 Gate 与未关闭项见 [Task 9 final acceptance](docs/superpowers/archive/task-9/2026-10-11-task-9-final-acceptance.md)。后续修复证据在 `docs/superpowers/archive/task-9/`；不要将自动测试结果误写为实机验收通过。
 
 ## 文档与源码
 
-- `server/`：服务端 API、服务、MPD Adapter、SQLite
-- `web/`：Web UI
-- `deploy/`：Docker / Compose / 配置
-- `docs/superpowers/specs/`：长期合同
-- `docs/superpowers/plans/`：计划和未关闭 Gate
-- `docs/superpowers/archive/`：已完成批次的验收记录
+- `server/`：后端 API、业务服务、MPD Adapter、SQLite；`web/`：Web UI；`deploy/`：部署与配置。
+- [现行文档索引](docs/superpowers/README.md)：保留必要架构、领域规格、视觉合同与环境证据。
+- [v0.2 切歌与 Queue 性能优化指导](docs/performance/2026-10-14-v0.2-playback-latency-optimization-guide.md)：真实测量、局部优化批次、风险和验收方法；**指导计划不代表优化已实施**。
+- [历史归档](docs/superpowers/archive/README.md)：旧 Task 主 Plan、验收、历史研究与退役路线图，保留用于追溯，不再是开发待办。
 
-开发与后续工作入口：[文档索引](docs/superpowers/README.md) · [主实施计划](docs/superpowers/plans/2026-09-25-mpd-server-v0-1-implementation-plan.md) · [Task 9 批次计划](docs/superpowers/plans/2026-10-10-task-9-web-batch-plan.md)。
+今后的迭代从真实 `v0.2` 代码、测试、部署镜像及本次需求重新立项，不自动执行旧 Task 或未关闭 Gate。
