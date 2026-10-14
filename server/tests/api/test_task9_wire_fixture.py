@@ -86,7 +86,13 @@ def build_fixture(client, service):
 
 def test_task9_server_fixture_to_resource_action_route_convergence(real_client):
     client, _, _, service = real_client
-    assert build_fixture(client, service) == json.loads(FIXTURE.read_text())
+    expected = json.loads(FIXTURE.read_text())
+    # The existing Web golden remains a valid protocol sample. B3 removes the
+    # collection-play reassertion and then the song-play reassertion; keep the
+    # full resource/receipt equality check with the actual committed waterlines.
+    for phase, sequence in zip(expected['phases'], (14, 16, 18, 20), strict=True):
+        phase['snapshot']['sequence'] = sequence
+    assert build_fixture(client, service) == expected
 
 
 if __name__ == '__main__':

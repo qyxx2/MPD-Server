@@ -441,13 +441,20 @@ class PlaybackService:
             delta = [before, after]
             self._transport_changes[owner] = delta
 
-            async def committed():
+            def event():
                 first, last = delta
                 domains = frozenset(domain for domain in first if first[domain] != last[domain])
-                if domains:
-                    await self._event_publisher.publish(PlaybackChangedEvent(domains=domains))
+                return PlaybackChangedEvent(domains=domains) if domains else None
 
-            on_transaction_commit(path, committed)
+            if self._coordinator is not None and self._event_publisher is self._coordinator:
+                self._coordinator.stage_registered_playback(event)
+            else:
+                async def committed():
+                    notification = event()
+                    if notification is not None:
+                        await self._event_publisher.publish(notification)
+
+                on_transaction_commit(path, committed)
             on_transaction_visible(path, lambda: self._transport_changes.pop(owner, None))
             on_transaction_rollback(path, lambda: self._transport_changes.pop(owner, None))
         for domain, content in before.items():
