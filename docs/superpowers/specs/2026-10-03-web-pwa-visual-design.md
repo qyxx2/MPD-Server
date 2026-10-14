@@ -1,5 +1,8 @@
 # Web/PWA 全局 UI 合同
 
+> **v0.2 文档状态（2026-10-14）**：本文保留当前仍适用的架构/领域/UI 行为合同；旧 Task/Batch、NOT STARTED/BLOCKED、未来阶段和待验收描述属于当时的历史进度，**不构成现行路线图或当前测试结论**。如有冲突，以 `v0.2` 实际代码、测试和新核验为准。工作入口：[现行文档索引](../README.md)；旧计划见 [历史归档](../archive/README.md)。
+
+
 修订日期：2026-10-10。状态：用户已确认本轮六项方向及集中细节方案；**本次仅修订文档，未实施新合同、未重新验收页面**。
 
 ## 1. 权威、范围与继承
@@ -146,7 +149,7 @@ NAS_DAC enable/disable 的 UI 入口归设置，复用既有 Output API/事实�
 | NOTIFY | 各页 loading/stale/未知/失败只进顶部；一个入口/浮层，无第二处提示文字；并发错误不吞掉；原key重试/read-only门禁/HTTP确认后只重读保持 |
 | 稳定性 | 同视口状态更新、字段缺失→长文本、封面↔歌词、通知开关无结构位移；中文/特殊字符/放大字体/极短屏、键盘/浏览器工具栏、reduced-motion/no blur可用 |
 
-真人方法以 [手机 Web 真人验收方法](../plans/2026-10-09-mobile-web-manual-acceptance.md) 为准，Batch Plan 选择具体必验卡。前置阶段必须在实际手机复验 Player 比例与歌词、四项导航稳定性、背景连续性和顶部异常详情；桌面辅助截图/测试不能抵扣。Implementation、automated、native/LAN、phone HUMAN、真实MPD/NAS及PWA分别记录。
+真人方法以 [手机 Web 真人验收方法](../archive/plans/2026-10-09-mobile-web-manual-acceptance.md) 为准，Batch Plan 选择具体必验卡。前置阶段必须在实际手机复验 Player 比例与歌词、四项导航稳定性、背景连续性和顶部异常详情；桌面辅助截图/测试不能抵扣。Implementation、automated、native/LAN、phone HUMAN、真实MPD/NAS及PWA分别记录。
 
 ## 10. 活动文档同步与上下文交接
 

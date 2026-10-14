@@ -1,5 +1,8 @@
 # 第一章：Playback Model & Queue Semantics
 
+> **v0.2 文档状态（2026-10-14）**：本文保留当前仍适用的架构/领域/UI 行为合同；旧 Task/Batch、NOT STARTED/BLOCKED、未来阶段和待验收描述属于当时的历史进度，**不构成现行路线图或当前测试结论**。如有冲突，以 `v0.2` 实际代码、测试和新核验为准。工作入口：[现行文档索引](../README.md)；旧计划见 [历史归档](../archive/README.md)。
+
+
 > 项目：基于 MPD 0.23.5 的自建音乐播放器前端与服务层\
 > 文档状态：设计规格（第一章）\
 > 目标：定义播放会话、Queue、播放历史、临时播放集合、用户自定义 Playlist
@@ -384,7 +387,7 @@ Web 的 pending/同步/未知/错误及恢复操作入口只遵守 [全局 UI �
 
 ### 8.9 原版 MPD 当前状态接纳与连续执行合同（2026-10-04 修订）
 
-本节是唯一领域 authority，替换此前人工 A 的严格自然完成 SOURCE 路线。用户选择保留原版 MPD 0.23.5、不采用后端扩展，授权收窄原因、实际结束时间和遗漏历史；Queue、AutoPlay、页面真实性、事务和只读边界不收窄。历史 consumer Step2.1–Step3 的定义和验收保存在 [计划历史归档](../archive/task-4/2026-10-04-task-4-d6-recovery-plan-history.md) 与专项 acceptance，不能据此声称本节已实现。合同已定义，R1重启接管体验已由用户接受（§8.9.2）；新实现、新自动测试、目标运行时验证均未完成，D6/Batch13/Task6 final **BLOCKED**。
+本节是唯一领域 authority，替换此前人工 A 的严格自然完成 SOURCE 路线。用户选择保留原版 MPD 0.23.5、不采用后端扩展，授权收窄原因、实际结束时间和遗漏历史；Queue、AutoPlay、页面真实性、事务和只读边界不收窄。历史 consumer Step2.1–Step3 的定义和验收保存在 [计划历史归档](../archive/task-4/2026-10-04-task-4-d6-recovery-plan-history.md) 与专项 acceptance，不能据此声称本节已实现。合同已定义，R1重启接管体验已由用户接受（§8.9.2）；（以上是原 D6/Batch13 阶段的历史 Gate 状态，不代表当前版本未实现或当前仍 BLOCKED；实际完成度须核对现行代码/测试。）
 
 #### 8.9.1 事实词汇与能力边界 — PB-CURRENT-001
 
