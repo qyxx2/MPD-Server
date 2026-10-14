@@ -2,13 +2,13 @@
 
 > 2026-10-11后续范围：当前Task9旧Gate/验收保留；后续最小NAS交付改走[Final Batch Plan](2026-10-11-v0-1-nas-final-batch-plan.md)。旧A05成功通知撤下属于历史已验行为，新活动增量归Visual §6、Final B04；本计划不重新实施该增量，也不把新范围标为已通过。
 
-当前进度（2026-10-11 B10交付）：B01–B09 **CLOSED / HUMAN PASSED**；B10综合proof、自动Gate与production/LAN预检完成，**OPEN / HUMAN PENDING**；用户新增实机各功能Gate因当前endpoint/音乐映射待提供及历史NAS TCP超时，**BLOCKED / NOT RUN**。Task9整体未完成。当前范围/矩阵/证据/最少手机及实机步骤见[单份final acceptance](../archive/task-9/2026-10-11-task-9-final-acceptance.md)。历史OPEN/PENDING不重开已关闭前置。
+当前进度（2026-10-11 B10交付）：B01–B09 **CLOSED / HUMAN PASSED**；B10综合proof、自动Gate与production/LAN预检完成，**OPEN / HUMAN PENDING**；用户新增实机各功能Gate因当前endpoint/音乐映射待提供及历史NAS TCP超时，**BLOCKED / NOT RUN**。Task9整体未完成。当前范围/矩阵/证据/最少手机及实机步骤见[单份final acceptance](../task-9/2026-10-11-task-9-final-acceptance.md)。历史OPEN/PENDING不重开已关闭前置。
 
 ## 2026-10-11 B03历史Gate：用户验收通过
 
 用户明确“可以了。验收通过”，当前B03展示/交互及已实施B04 occurrence点击/待播拖动子集、A04播放/手感及A05临时通知修正验收通过。**B03 CLOSED；B04已实施子集 CLOSED；完整B04剩余Next/Add、删除/清空/保存 NOT STARTED。** B01/B02保持CLOSED。此前OPEN/PENDING段落保留为历史，不再作为当前前置阻塞。
 
-关闭依据与限制见同一[B03 acceptance最终关闭记录](../archive/task-9/2026-10-10-task-9-b03-acceptance.md)。本轮仅更新验收状态和提供后续提示词，不开始B04剩余工作；不重做已接受行为，不扩大未来Batch，不commit/push/PR/merge，保留dirty checkout。真实MPD/NAS/DAC仍NOT RUN，PWA DEFERRED，ArtworkRef单Song500仍为批次外未修复项。
+关闭依据与限制见同一[B03 acceptance最终关闭记录](../task-9/2026-10-10-task-9-b03-acceptance.md)。本轮仅更新验收状态和提供后续提示词，不开始B04剩余工作；不重做已接受行为，不扩大未来Batch，不commit/push/PR/merge，保留dirty checkout。真实MPD/NAS/DAC仍NOT RUN，PWA DEFERRED，ArtworkRef单Song500仍为批次外未修复项。
 
 
 ## A05 通知限定修正（2026-10-11）
@@ -49,7 +49,7 @@
 
 **Tech Stack:** 既有Vue3、Vue Router、TypeScript、Vitest/Vue Test Utils；Python/FastAPI、SQLite、PlayerPort及pytest。使用现有Node依赖和`.venv`。
 
-**Spec:** [主 Plan Task9](2026-09-25-mpd-server-v0-1-implementation-plan.md#task-9web-queuelibraryplaylistsearchfavoritessettings)、[Visual Spec WEB-UI-*](../specs/2026-10-03-web-pwa-visual-design.md)、[Architecture §4.1–4.3/§12/§19.5](../specs/2026-09-25-system-and-development-architecture-design.md)、[Playback](../specs/2026-09-24-playback-model-queue-semantics-design.md)、[Library](../specs/2026-09-24-library-playlist-tag-search-design-2-1.md)。输入：[Task9 Contract Audit](2026-10-10-task-9-contract-audit.md)。本计划不取代唯一长期Specs。
+**Spec:** [主 Plan Task9](2026-09-25-mpd-server-v0-1-implementation-plan.md#task-9web-queuelibraryplaylistsearchfavoritessettings)、[Visual Spec WEB-UI-*](../../specs/2026-10-03-web-pwa-visual-design.md)、[Architecture §4.1–4.3/§12/§19.5](../../specs/2026-09-25-system-and-development-architecture-design.md)、[Playback](../../specs/2026-09-24-playback-model-queue-semantics-design.md)、[Library](../../specs/2026-09-24-library-playlist-tag-search-design-2-1.md)。输入：[Task9 Contract Audit](2026-10-10-task-9-contract-audit.md)。本计划不取代唯一长期Specs。
 
 ## Global Constraints
 
@@ -171,7 +171,7 @@
 
 ### B05：Library及统一SongRow
 
-2026-10-11 A02：用户认可功能后授权直接修改六处界面。分类图标导航/顺序/单行、独立返回、专辑左图右文/占位、居中播放按钮和窄菜单已实施；该轮Web255/typecheck/build通过，320/390px浏览器验证及独立复核完成。用户随后明确“可以了。通过验收”，完整B05 **CLOSED / HUMAN PASSED**；本次仅更新文档，不重复测试。证据见[B05 acceptance最终关闭记录](../archive/task-9/2026-10-11-task-9-b05-acceptance.md)。B06未启动。
+2026-10-11 A02：用户认可功能后授权直接修改六处界面。分类图标导航/顺序/单行、独立返回、专辑左图右文/占位、居中播放按钮和窄菜单已实施；该轮Web255/typecheck/build通过，320/390px浏览器验证及独立复核完成。用户随后明确“可以了。通过验收”，完整B05 **CLOSED / HUMAN PASSED**；本次仅更新文档，不重复测试。证据见[B05 acceptance最终关闭记录](../task-9/2026-10-11-task-9-b05-acceptance.md)。B06未启动。
 
 **Files/Interfaces:** §2 SongRow/SongActionMenu/songActions/LibraryView/CollectionView，resourceWire分类DTO；消费B02入口与既有CollectionRequest，产出所有普通歌曲共享菜单。
 
@@ -208,7 +208,7 @@
 - [x] 手机H06从空表创建→输入长名→加歌/重复拒绝→拖动→移除→改名→删除，页面结果与回页一致；H04点行不默认播放，H10已发操作跨页/断网仅原key恢复；M01/02/03/05通过。
 
 
-最终状态：用户对T9-B07-A01整体验收通过，B07 CLOSED / HUMAN PASSED；必要手机Gate关闭，证据见[B07最终关闭记录](../archive/task-9/2026-10-11-task-9-b07-acceptance.md)。本轮不额外测试，不推进B08。
+最终状态：用户对T9-B07-A01整体验收通过，B07 CLOSED / HUMAN PASSED；必要手机Gate关闭，证据见[B07最终关闭记录](../task-9/2026-10-11-task-9-b07-acceptance.md)。本轮不额外测试，不推进B08。
 
 ### B08：Favorites与独立爱心（2026-10-11用户补充优先）
 
@@ -246,7 +246,7 @@
 - [ ] 用户必要项通过后按主Plan关闭Task9 Steps，单份final acceptance区分implementation/automated/Contract/Relationship/LAN/phone HUMAN/真实MPD NOT RUN/PWA DEFERRED，更新根README/文档地图的Task9状态。
 - [ ] 如用户另行请求commit，完成检查后提交并核实`git log/show/status`；本计划不授权push/PR/merge。当前制定计划阶段不执行主Plan Step14。
 
-当前B10自动/关系Gate完成：Web定向114/完整287，后端定向1114/完整1468，typecheck/build/Ruff/diff、独立审阅及LAN同源REST/WS通过。手机H01/H10综合PENDING；新实机范围BLOCKED/NOT RUN，详见[final acceptance](../archive/task-9/2026-10-11-task-9-final-acceptance.md)。未关闭Task9 Steps；不commit/push/PR/merge。
+当前B10自动/关系Gate完成：Web定向114/完整287，后端定向1114/完整1468，typecheck/build/Ruff/diff、独立审阅及LAN同源REST/WS通过。手机H01/H10综合PENDING；新实机范围BLOCKED/NOT RUN，详见[final acceptance](../task-9/2026-10-11-task-9-final-acceptance.md)。未关闭Task9 Steps；不commit/push/PR/merge。
 
 ## 5. 自审与交接状态
 
@@ -260,7 +260,7 @@
 
 ## B01执行状态（2026-10-10）
 
-B01实现、自动/关系Gate及手机H01/H10和适用M项已通过；用户A02后确认“测试都可以通过”，B01当前范围已关闭。播放控件响应慢依用户意见暂缓，未修复。详见[单份验收报告](../archive/task-9/2026-10-10-task-9-b01-acceptance.md)。B02–B10未启动，G9-01仍DRAFT；未执行commit/push/PR/merge。
+B01实现、自动/关系Gate及手机H01/H10和适用M项已通过；用户A02后确认“测试都可以通过”，B01当前范围已关闭。播放控件响应慢依用户意见暂缓，未修复。详见[单份验收报告](../task-9/2026-10-10-task-9-b01-acceptance.md)。B02–B10未启动，G9-01仍DRAFT；未执行commit/push/PR/merge。
 
 ## B02实施补充（2026-10-10，用户授权冻结并直接执行）
 
@@ -275,13 +275,13 @@ PB-SONG-NOW-001 是当前唯一合同，覆盖上文 G9-01 DRAFT/候选接口的
 
 ## B02关闭记录（2026-10-10）
 
-G9-01 / PB-SONG-NOW-001 已冻结，B02实现、自动及关系Gate CLOSED。最终代码新API/invariants36项、指定回归209项、完整后端1434项、后端wire3项/Web wire23项、typecheck及定向Ruff通过；git diff --check通过。独立审阅3个Important均已修复并精确RED→GREEN，无未关闭Critical/Important或deferred Minor。完整范围、裁决及proof见[单份B02验收报告](../archive/task-9/2026-10-10-task-9-b02-acceptance.md)。B02无独立UI，phone N/A；真实MPD/NAS/DAC NOT RUN，PWA DEFERRED。B03–B10 NOT STARTED；原审计/ B01段落中DRAFT和未启动措辞为历史状态。本轮没有commit/push/PR/merge。
+G9-01 / PB-SONG-NOW-001 已冻结，B02实现、自动及关系Gate CLOSED。最终代码新API/invariants36项、指定回归209项、完整后端1434项、后端wire3项/Web wire23项、typecheck及定向Ruff通过；git diff --check通过。独立审阅3个Important均已修复并精确RED→GREEN，无未关闭Critical/Important或deferred Minor。完整范围、裁决及proof见[单份B02验收报告](../task-9/2026-10-10-task-9-b02-acceptance.md)。B02无独立UI，phone N/A；真实MPD/NAS/DAC NOT RUN，PWA DEFERRED。B03–B10 NOT STARTED；原审计/ B01段落中DRAFT和未启动措辞为历史状态。本轮没有commit/push/PR/merge。
 
 ## B03前置检查状态（2026-10-10）
 
 用户授权B03，本轮已核对Specs、Git、实际owners及B01/B02前置，执行fresh前置复验。B01/B02仍CLOSED；B03产品实现NOT STARTED、Contract/传播前置BLOCKED：audit **G9-06**记录明确用户Stop的复位要求在现行Web快照中缺少可认证来源，不能从STOPPED、AutoPlay=false或空/变化session补定。等待用户选择单独冻结生命周期传播合同或修改唯一Playback Spec的复位要求；未自行扩展DTO、后端范围或复位语义。
 
-当前B03表示/展开新proof、生产构建/LAN及手机H02/M01/M02/M04仍NOT RUN，Batch未关闭。仅有前置自动复验通过，不勾选B03实施清单，不进入B04。证据、命令及缺口见[单份B03报告](../archive/task-9/2026-10-10-task-9-b03-acceptance.md)。没有commit/push/PR/merge。
+当前B03表示/展开新proof、生产构建/LAN及手机H02/M01/M02/M04仍NOT RUN，Batch未关闭。仅有前置自动复验通过，不勾选B03实施清单，不进入B04。证据、命令及缺口见[单份B03报告](../task-9/2026-10-10-task-9-b03-acceptance.md)。没有commit/push/PR/merge。
 
 ## B03继续执行补充（2026-10-10）
 
@@ -298,14 +298,14 @@ G9-01 / PB-SONG-NOW-001 已冻结，B02实现、自动及关系Gate CLOSED。最
 
 G9-06 / PB-STOP-LIFECYCLE-001 FROZEN/CLOSED；B03只读Queue/Played及必要Stop传播实现完成，精确RED→GREEN、定向后端153/Web83、完整后端1443/Web194、Ruff/typecheck/production build通过。独立审阅无未关闭Critical/Important，1项current详情展开沿用的Minor延期；实际窄屏发现并修复Grid列最小宽度，独立聚焦复核无新问题。当前LAN `http://192.168.3.18:5175/queue`（T9-B03-A02）已核验产物字节一致、同源API/WS，phone HUMAN PENDING，B03未关闭。继续执行补充最后一项待真人反馈后勾选；只读阶段无Stop/Context UI，由agent在自有Mock验收场景分阶段切换，等待用户观察反馈。
 
-另行记录已有Song REST带ArtworkRef时DTO序列化500，未修改批次外接口；B03保留occurrence并顶部反馈，手机场景使用无封面metadata。详见[单份B03报告](../archive/task-9/2026-10-10-task-9-b03-acceptance.md)。B04以后未推进，没有commit/push/PR/merge。
+另行记录已有Song REST带ArtworkRef时DTO序列化500，未修改批次外接口；B03保留occurrence并顶部反馈，手机场景使用无封面metadata。详见[单份B03报告](../task-9/2026-10-10-task-9-b03-acceptance.md)。B04以后未推进，没有commit/push/PR/merge。
 
 
 ## 2026-10-11 T9-QUEUE-A03当前交付状态
 
 PB-QUEUE-VIEW-001按用户确认冻结；B03连续列表/进入定位/下拉揭示/候选投影及必要B04 occurrence点击/待播拖动子集实现、自动Gate完成。fresh Queue25、完整Web214、指定后端135、完整后端1443通过；typecheck/build/定向Ruff及diff check通过。独立审阅两项Important已RED→GREEN并回归，排序触摸/揭示隔离proof亦通过。当前新LAN http://192.168.3.18:5176/queue（T9-QUEUE-A03）构建字节、同源API/WS及窄屏/三场景浏览器核验通过。
 
-B03与本轮B04子集仍OPEN / HUMAN PENDING，完整B04未完成；用户第一阶段反馈后再由agent切其它必要观察场景，不提前关闭Gate。B01/B02保持CLOSED；PB-SONG-NOW-001/PB-STOP-LIFECYCLE-001服务端冻结不变。删除/清空/保存/Next/Add及其它Batch未实施；未commit/push/PR/merge。详见[同一B03 acceptance的T9-QUEUE-A03记录](../archive/task-9/2026-10-10-task-9-b03-acceptance.md)。ArtworkRef单Song500仍为批次外未修复项。
+B03与本轮B04子集仍OPEN / HUMAN PENDING，完整B04未完成；用户第一阶段反馈后再由agent切其它必要观察场景，不提前关闭Gate。B01/B02保持CLOSED；PB-SONG-NOW-001/PB-STOP-LIFECYCLE-001服务端冻结不变。删除/清空/保存/Next/Add及其它Batch未实施；未commit/push/PR/merge。详见[同一B03 acceptance的T9-QUEUE-A03记录](../task-9/2026-10-10-task-9-b03-acceptance.md)。ArtworkRef单Song500仍为批次外未修复项。
 
 ## 2026-10-11 B04剩余续作：合同裁决与最小计划
 
@@ -329,11 +329,11 @@ G9-02未送达并发窗口保留，无expected_revision或新公开字段。Artw
 
 ## 2026-10-11 B04剩余实现/自动完成，等待真人Gate
 
-Next/Add独立入口、精确delete、仅待播clear及服务端完整UpNext save已实施；此前B01–03/已接受子集不变。本轮fresh完整Web237、指定后端关系157、新save/wire6、完整后端1446、typecheck/build/定向Ruff通过；独立审阅4个边界精确RED→GREEN并最终回归。完整B04 OPEN / HUMAN PENDING，手机URL http://192.168.3.18:5177/queue，T9-B04-A01。唯一证据及最少手机步骤见[本轮B04 acceptance](../archive/task-9/2026-10-11-task-9-b04-acceptance.md)。G9-02保留、PB-SONG-NOW/STOP及冻结展示不改，ArtworkRef批次外；真实设备NOT RUN，PWA DEFERRED，无Git整合，不推进B05。
+Next/Add独立入口、精确delete、仅待播clear及服务端完整UpNext save已实施；此前B01–03/已接受子集不变。本轮fresh完整Web237、指定后端关系157、新save/wire6、完整后端1446、typecheck/build/定向Ruff通过；独立审阅4个边界精确RED→GREEN并最终回归。完整B04 OPEN / HUMAN PENDING，手机URL http://192.168.3.18:5177/queue，T9-B04-A01。唯一证据及最少手机步骤见[本轮B04 acceptance](../task-9/2026-10-11-task-9-b04-acceptance.md)。G9-02保留、PB-SONG-NOW/STOP及冻结展示不改，ArtworkRef批次外；真实设备NOT RUN，PWA DEFERRED，无Git整合，不推进B05。
 
 ## 2026-10-11 A01用户纠正：Queue Next/Add是移动原条目
 
-用户接受其它B04交付，仅Next/Add新建重复项未通过。Queue快捷入口改按queue_item_id移动，完整UpNext首位/末尾含隐藏候选，不能用song-id复制；普通Song动作保持原入队语义。现有reorder只支持pending；current/Played入口边界询问中，不擅改冻结生命周期。完整B04仍OPEN，新语义须fresh测试与手机复测。实现/自动/手机记录继续追加同一[B04 acceptance](../archive/task-9/2026-10-11-task-9-b04-acceptance.md)。
+用户接受其它B04交付，仅Next/Add新建重复项未通过。Queue快捷入口改按queue_item_id移动，完整UpNext首位/末尾含隐藏候选，不能用song-id复制；普通Song动作保持原入队语义。现有reorder只支持pending；current/Played入口边界询问中，不擅改冻结生命周期。完整B04仍OPEN，新语义须fresh测试与手机复测。实现/自动/手机记录继续追加同一[B04 acceptance](../task-9/2026-10-11-task-9-b04-acceptance.md)。
 
 ### A02移动边界已确认
 
@@ -347,19 +347,19 @@ Next/Add独立入口、精确delete、仅待播clear及服务端完整UpNext sav
 
 用户明确“验收通过，记录一下。不需要额外的复测”。A02仅待播原occurrence移动获真人接受，结合此前其它B04范围已接受，完整B04 **CLOSED / HUMAN PASSED**；B01–03及既有子集保持CLOSED。最终Queue快捷操作是移动queue_item_id，不是song-id复制；current/Played不提供移动入口。此前OPEN/PENDING及A01复制方案保留为历史。
 
-关闭依据见[B04 acceptance最终关闭记录](../archive/task-9/2026-10-11-task-9-b04-acceptance.md)。本轮仅同步记录，不跑额外测试、不改产品/环境/依赖/Mock场景，不编造新自动或逐场景真人证据。A02 Web242/后端关系104及A01完整后端1446均属于各自实施轮次。feature/task-9-web / HEAD14c6239重新核验，dirty保留，无commit/push/PR/merge。G9-02保留，真实设备NOT RUN、PWA DEFERRED、ArtworkRef单Song500批次外未修复；B05及其它Batch未启动，Task9整体未完成。
+关闭依据见[B04 acceptance最终关闭记录](../task-9/2026-10-11-task-9-b04-acceptance.md)。本轮仅同步记录，不跑额外测试、不改产品/环境/依赖/Mock场景，不编造新自动或逐场景真人证据。A02 Web242/后端关系104及A01完整后端1446均属于各自实施轮次。feature/task-9-web / HEAD14c6239重新核验，dirty保留，无commit/push/PR/merge。G9-02保留，真实设备NOT RUN、PWA DEFERRED、ArtworkRef单Song500批次外未修复；B05及其它Batch未启动，Task9整体未完成。
 
 ## 2026-10-11 B05实施/自动交付，等待手机Gate
 
 用户授权本批次，核对当前feature/task-9-web / HEAD14c6239及dirty成果、最新B04用户关闭、唯一Specs和实际接口后执行。Library分类/详情/全歌曲、普通SongRow三个动作、服务端PlayAll/Shuffle、统一Library cache和顶部通知已接入；Queue原occurrence点击/快捷移动不改，真实Favorites及其它未来Batch未实施。fresh B05 Web11、指定关系108/完整253、后端指定86/完整1448，typecheck/build/定向Ruff通过；独立审阅唯一Important菜单遮挡顶部已浏览器RED→GREEN修正，无遗留Critical/Important。
 
-当前实际URL http://10.104.60.177:5179/library（T9-B05-A01），空集合 http://10.104.60.177:5179/library/years/unknown；LAN产物字节/同源REST/WS及窄屏验证通过。B05 **OPEN / HUMAN PENDING**，必要H04/H05/H10/M01/M02/M04/M05待用户反馈，不推进B06。矩阵T9-SONG-001/T9-LIB-001的owner/proof/fresh结果、最少手机卡及限制见[单份B05 acceptance](../archive/task-9/2026-10-11-task-9-b05-acceptance.md)。真实设备NOT RUN，PWA DEFERRED，既有ArtworkRef REST500批次外保持；没有commit/push/PR/merge。
+当前实际URL http://10.104.60.177:5179/library（T9-B05-A01），空集合 http://10.104.60.177:5179/library/years/unknown；LAN产物字节/同源REST/WS及窄屏验证通过。B05 **OPEN / HUMAN PENDING**，必要H04/H05/H10/M01/M02/M04/M05待用户反馈，不推进B06。矩阵T9-SONG-001/T9-LIB-001的owner/proof/fresh结果、最少手机卡及限制见[单份B05 acceptance](../task-9/2026-10-11-task-9-b05-acceptance.md)。真实设备NOT RUN，PWA DEFERRED，既有ArtworkRef REST500批次外保持；没有commit/push/PR/merge。
 
 ## 2026-10-11 B06 Search实施与交付
 
 已核对B05最新用户关闭、feature/task-9-web / HEAD14c6239及实际前置代码；本批次查询生命周期按现行T9-SEARCH-001实施，无新业务合同决策或未关闭前置。Library入口/Search route q、空白/快速改词/清空、返回与刷新重读、Collection→有序Song、epoch/revision迟到拒绝、顶部读取恢复及共享SongRow动作完成。新proof先RED→GREEN；fresh Web4/指定关系44/完整259，后端精确search11/指定API-service+fixture36，typecheck/build/定向Ruff通过。独立审阅无Critical/Important，LAN同源REST/WS及320px窄屏预检通过。
 
-当前手机URL http://10.104.60.177:5180/library/search（T9-B06-A01），必要H08/H04及M01/M02/M03/M04待用户反馈，**B06 OPEN / HUMAN PENDING**。最少三项手机卡、合同追溯及限制见[单份B06 acceptance](../archive/task-9/2026-10-11-task-9-b06-acceptance.md)。B01–05保持CLOSED，B07–10不推进；真实MPD/NAS/DAC NOT RUN、PWA DEFERRED，G9-02/ArtworkRef批次外限制保持。未commit/push/PR/merge，既有dirty成果保留。
+当前手机URL http://10.104.60.177:5180/library/search（T9-B06-A01），必要H08/H04及M01/M02/M03/M04待用户反馈，**B06 OPEN / HUMAN PENDING**。最少三项手机卡、合同追溯及限制见[单份B06 acceptance](../task-9/2026-10-11-task-9-b06-acceptance.md)。B01–05保持CLOSED，B07–10不推进；真实MPD/NAS/DAC NOT RUN、PWA DEFERRED，G9-02/ArtworkRef批次外限制保持。未commit/push/PR/merge，既有dirty成果保留。
 
 ### B06 A02当前交付
 
@@ -393,12 +393,12 @@ B01–B06 CLOSED，B07–B10未启动，Task9整体未完成。自动证据沿�
 
 Fresh Playlist9、指定Web36/完整Web270、后端精确golden1/指定关系25、typecheck/build/定向Ruff/diff通过；独立审阅唯一Important回原行松手仍提交旧目标已RED→GREEN修正并回归，无遗留Critical/Important或deferred Minor。实际LAN http://10.104.60.177:5184/library/playlists（T9-B07-A01），产物字节/同源REST/WS及320px辅助验证通过。
 
-B07 **OPEN / HUMAN PENDING**，必要H06/H04/H10及M01/M02/M03/M05等待反馈；B01–06保持CLOSED，B08–10不推进。范围/合同追溯、命令及最少四项手机卡见[单份B07 acceptance](../archive/task-9/2026-10-11-task-9-b07-acceptance.md)。现有.venv未改，无依赖/DB schema/生产后端改动，无commit/push/PR/merge。真实MPD/NAS/DAC NOT RUN，PWA DEFERRED；ArtworkRef单Song500批次外保持。
+B07 **OPEN / HUMAN PENDING**，必要H06/H04/H10及M01/M02/M03/M05等待反馈；B01–06保持CLOSED，B08–10不推进。范围/合同追溯、命令及最少四项手机卡见[单份B07 acceptance](../task-9/2026-10-11-task-9-b07-acceptance.md)。现有.venv未改，无依赖/DB schema/生产后端改动，无commit/push/PR/merge。真实MPD/NAS/DAC NOT RUN，PWA DEFERRED；ArtworkRef单Song500批次外保持。
 
 
 ## 2026-10-11 B07最终关闭：用户验收通过
 
-用户在T9-B07-A01交付后明确“验收通过。更正相关文档。不需要额外测试。”；B07 **CLOSED / HUMAN PASSED**，必要H06/H04/H10及M01/M02/M03/M05手机Gate按本次整体认可关闭，不编造逐项操作日志。B01–B07保持CLOSED，B08–B10未启动，Task9整体未完成。关闭依据见[单份B07 acceptance最终关闭记录](../archive/task-9/2026-10-11-task-9-b07-acceptance.md)。
+用户在T9-B07-A01交付后明确“验收通过。更正相关文档。不需要额外测试。”；B07 **CLOSED / HUMAN PASSED**，必要H06/H04/H10及M01/M02/M03/M05手机Gate按本次整体认可关闭，不编造逐项操作日志。B01–B07保持CLOSED，B08–B10未启动，Task9整体未完成。关闭依据见[单份B07 acceptance最终关闭记录](../task-9/2026-10-11-task-9-b07-acceptance.md)。
 
 本轮只更新必要验收状态/入口并检查文档差异及diff check；没有重跑测试、构建、环境或LAN验证。B07 Playlist9/指定Web36/完整Web270、指定后端25及独立审阅/LAN证据保留实施轮次归属。feature/task-9-web / HEAD14c6239重新核对，原dirty保留；产品/测试/依赖/Mock及运行文件不改，无commit/push/PR/merge。G9-02、真实MPD/NAS/DAC NOT RUN、PWA DEFERRED及ArtworkRef批次外限制保持。
 
@@ -407,7 +407,7 @@ B07 **OPEN / HUMAN PENDING**，必要H06/H04/H10及M01/M02/M03/M05等待反馈�
 
 LIB-FAV-UI-001（用户爱心设计）/LIB-FAV-MEMBERS-001（获准最小只读完整成员接口）冻结并实施；复用同一cache/TaskActions/通知，完整不可用成员、服务端顺序、全位置爱心和单曲菜单接线完成。Fresh Favorites9、指定Web124/完整279，最后低影响占位显示补充定向26；后端指定23、typecheck/build/Ruff/diff通过。独立审阅/自查问题均精确RED→GREEN修复，无遗留finding。LAN http://10.104.60.177:5185/（T9-B08-A01）最终产物字节/同源REST/WS及窄屏预检通过。
 
-B08 **OPEN / HUMAN PENDING**，仅等H07/H04/H10、M01/02/05手机反馈；B09/B10不推进。各轮结果、最少操作及限制见[B08 acceptance](../archive/task-9/2026-10-11-task-9-b08-acceptance.md)。现有dirty和.venv保留，无commit/push/PR/merge，无依赖/DB模型变更；真实设备NOT RUN、PWA DEFERRED、ArtworkRef REST500批次外保持。
+B08 **OPEN / HUMAN PENDING**，仅等H07/H04/H10、M01/02/05手机反馈；B09/B10不推进。各轮结果、最少操作及限制见[B08 acceptance](../task-9/2026-10-11-task-9-b08-acceptance.md)。现有dirty和.venv保留，无commit/push/PR/merge，无依赖/DB模型变更；真实设备NOT RUN、PWA DEFERRED、ArtworkRef REST500批次外保持。
 
 
 ### 2026-10-11 B08 A02展示修正（用户反馈优先）
@@ -423,7 +423,7 @@ A02最终fresh定向4文件58通过、typecheck/build、LAN产物字节/REST/WS�
 
 自动证据沿用所属轮次：A01指定Web124/完整279、后端指定23；A02展示整改定向58、typecheck/build、产物字节/REST/WS与辅助DOM核对。此次仅更新必要文档并检查文档差异及diff check，未重跑测试、构建或运行环境验证，不宣称新增自动证据。
 
-B01–B08 CLOSED，B09/B10未启动，Task9整体未完成。真实MPD/NAS/DAC NOT RUN、PWA DEFERRED、G9-02及既有ArtworkRef REST500批次外限制保持。原dirty成果保留，无commit/push/PR/merge。关闭依据见[B08 acceptance最终关闭记录](../archive/task-9/2026-10-11-task-9-b08-acceptance.md)。此前OPEN/PENDING保留历史。
+B01–B08 CLOSED，B09/B10未启动，Task9整体未完成。真实MPD/NAS/DAC NOT RUN、PWA DEFERRED、G9-02及既有ArtworkRef REST500批次外限制保持。原dirty成果保留，无commit/push/PR/merge。关闭依据见[B08 acceptance最终关闭记录](../task-9/2026-10-11-task-9-b08-acceptance.md)。此前OPEN/PENDING保留历史。
 
 ## 2026-10-11 B09执行输入与有限扩展
 
@@ -446,7 +446,7 @@ B01–B08最新用户Gate已关闭；feature/task-9-web / HEAD14c6239及dirty实
 
 Settings About/NAS_DAC及持久顶部恢复、音乐库播放列表/收藏唯一标签入口、用户选择的MPD地址保存后重启生效完成。SYS-MPD-CONNECTION-001已冻结，最小文件/API例外不授权其它Task10功能。fresh指定Web103/完整284、指定后端57/完整1466，新配置文件13（最终排版后）、typecheck/build/定向Ruff/diff通过；独立审阅两项Important已RED→GREEN，当前无遗留finding。
 
-新LAN http://10.104.60.177:5186/settings（T9-B09-A01），同源产物字节/REST/WS及320px预检通过。B09 **OPEN / HUMAN PENDING**，H09/H10、新增入口及M01/02/03/04/05待用户反馈；B01–B08保持CLOSED，B10不推进。完整范围/合同追溯/最少手机步骤见[B09 acceptance](../archive/task-9/2026-10-11-task-9-b09-acceptance.md)。真实设备NOT RUN、PWA DEFERRED、G9-02/ArtworkRef批次外限制保持，原dirty/.venv保留，无commit/push/PR/merge。
+新LAN http://10.104.60.177:5186/settings（T9-B09-A01），同源产物字节/REST/WS及320px预检通过。B09 **OPEN / HUMAN PENDING**，H09/H10、新增入口及M01/02/03/04/05待用户反馈；B01–B08保持CLOSED，B10不推进。完整范围/合同追溯/最少手机步骤见[B09 acceptance](../task-9/2026-10-11-task-9-b09-acceptance.md)。真实设备NOT RUN、PWA DEFERRED、G9-02/ArtworkRef批次外限制保持，原dirty/.venv保留，无commit/push/PR/merge。
 
 
 ### 2026-10-11 B09 A02用户反馈输入
@@ -467,7 +467,7 @@ Fresh设置/输出16、指定Web105/完整286、IPv6 API精确1/配置文件14�
 
 用户最终反馈：“验收通过。无需重复测试。记录更正需要的文档。”结合此前“A01测试项没问题”，接受B09原功能及A02标签顺序、DAC同行开关、同行地址输入与IPv6组合表示。H09/H10、M01/M02/M03/M04/M05及A02局部手机Gate按用户整体验收关闭，不编造逐项操作日志。
 
-自动验证及LAN证据沿用[B09验收记录](../archive/task-9/2026-10-11-task-9-b09-acceptance.md)的A01、A02所属轮次；本次仅更新必要文档并检查文档差异，未重复测试、构建、环境或网络验证，不新增自动证据。B01–B09 **CLOSED / HUMAN PASSED**；B10未启动，Task9整体未完成。此前OPEN/PENDING为历史状态，以本次最终关闭为准。
+自动验证及LAN证据沿用[B09验收记录](../task-9/2026-10-11-task-9-b09-acceptance.md)的A01、A02所属轮次；本次仅更新必要文档并检查文档差异，未重复测试、构建、环境或网络验证，不新增自动证据。B01–B09 **CLOSED / HUMAN PASSED**；B10未启动，Task9整体未完成。此前OPEN/PENDING为历史状态，以本次最终关闭为准。
 
 真实MPD/NAS/DAC及IPv6网络连通仍NOT RUN，PWA DEFERRED；设置页真实立即重启入口及监管后端仍为Task11待办，G9-02与既有ArtworkRef单Song REST500批次外限制保持。未改产品代码，无commit/push/PR/merge。
 
@@ -476,11 +476,11 @@ Fresh设置/输出16、指定Web105/完整286、IPv6 API精确1/配置文件14�
 
 本批次只增加真实SQLite/Services/MockPort四阶段golden及跨route action/cache/ACK-read综合proof，未改产品功能或合同。负向校验能捕获缺少snapshot refresh，原文件按字节恢复后GREEN。fresh Web新1/指定114/完整287、后端新1/指定1114/完整1468、typecheck/build/Ruff/diff及独立审阅通过。非空ArtworkRef后端综合链未证明，既有单Song500继续单列，不吞作通过。
 
-本机production产物字节及两个origin REST/WS核验通过：Mock综合http://10.104.60.177:5187/；真实MPDAdapter地址入口http://10.104.60.177:5188/settings，无Mock/虚构能力、独立DB。历史NAS192.168.3.94:6600本轮TCP超时；等待用户保存当前实机地址及提供只读音乐根/URI映射。保存仅下次启动生效，由agent重启自有live服务；不实现Task11按钮或Task10通用配置。完整矩阵、独立审阅Minor边界、各轮命令及手机/实机方案见[单份final acceptance](../archive/task-9/2026-10-11-task-9-final-acceptance.md)。
+本机production产物字节及两个origin REST/WS核验通过：Mock综合http://10.104.60.177:5187/；真实MPDAdapter地址入口http://10.104.60.177:5188/settings，无Mock/虚构能力、独立DB。历史NAS192.168.3.94:6600本轮TCP超时；等待用户保存当前实机地址及提供只读音乐根/URI映射。保存仅下次启动生效，由agent重启自有live服务；不实现Task11按钮或Task10通用配置。完整矩阵、独立审阅Minor边界、各轮命令及手机/实机方案见[单份final acceptance](../task-9/2026-10-11-task-9-final-acceptance.md)。
 
 B01–09保持CLOSED；B10 OPEN/HUMAN PENDING，实机功能Gate BLOCKED/NOT RUN，Task9整体未完成。PWA DEFERRED、G9-02限制保留；现有dirty/.venv/DB保留，无Git整合。此前B10未启动段落保留为历史，不作为当前状态。
 
 
 ### B10 A02：用户独立IPv6实机验收
 
-用户只能在启用IPv6后访问MPD，届时Codex不可用；agent事先准备/启动，用户独立测试后恢复网络反馈，不能要求agent实时设备验证。远程NAS音乐仅MPD可读尚不足以建立本机Web音乐库；当前LibraryScanner需后端可读文件根，MPDAdapter不提供曲库导入/根映射。等待IPv6 endpoint及NAS部署/只读挂载/有限连接先行的选择，不扩展合同。LIVE入口5188已独立启动、配置GET200，仍未配置实机，不记设备通过。详情见[同一final acceptance A02](../archive/task-9/2026-10-11-task-9-final-acceptance.md)。本轮仅启动核验/文档同步，无重复suite或Git整合。
+用户只能在启用IPv6后访问MPD，届时Codex不可用；agent事先准备/启动，用户独立测试后恢复网络反馈，不能要求agent实时设备验证。远程NAS音乐仅MPD可读尚不足以建立本机Web音乐库；当前LibraryScanner需后端可读文件根，MPDAdapter不提供曲库导入/根映射。等待IPv6 endpoint及NAS部署/只读挂载/有限连接先行的选择，不扩展合同。LIVE入口5188已独立启动、配置GET200，仍未配置实机，不记设备通过。详情见[同一final acceptance A02](../task-9/2026-10-11-task-9-final-acceptance.md)。本轮仅启动核验/文档同步，无重复suite或Git整合。

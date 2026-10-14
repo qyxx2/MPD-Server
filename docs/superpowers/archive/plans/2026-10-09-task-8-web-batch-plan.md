@@ -10,11 +10,11 @@
 
 **Spec:** Architecture §4.1–4.3、§12；Playback §7–8.9；Library §3.1；Output §6–8；Web/PWA Visual Spec；主 Implementation Plan。
 
-**Status:** W1/W2 当前范围已通过自动/关系 Gate，真人 N/A（无产品 UI）；证据见 [W1 acceptance](../archive/task-8/2026-10-09-task-8-web-w1-acceptance.md) 与 [W2 acceptance](../archive/task-8/2026-10-09-task-8-web-w2-acceptance.md)。W3 implementation/automated/Contract/Relationship Gate 已通过，手机W3-H01/H02 HUMAN PASSED，W3已关闭；见 [W3 acceptance](../archive/task-8/2026-10-09-task-8-web-w3-acceptance.md)。W4 implementation/automated/Contract/Relationship/LAN与W4-H01/H02/H03手机验收通过，**HUMAN PASSED，W4已关闭**；见 [W4 acceptance](../archive/task-8/2026-10-09-task-8-web-w4-acceptance.md)。W5 implementation/automated/Contract/Relationship Gate 已通过，W5-A06 LAN已交付，**HUMAN PASSED，W5已关闭**；见 [W5 acceptance](../archive/task-8/2026-10-10-task-8-web-w5-acceptance.md)。W6-A02 automated/Contract/Relationship Gate已通过，本次实际构建LAN READY；**W6-H01 HUMAN PASSED，W6已关闭**，见 [W6 acceptance](../archive/task-8/2026-10-10-task-8-web-w6-acceptance.md)。不自动推进；原 Task 8 Steps 未整体勾选，PWA DEFERRED。
+**Status:** W1/W2 当前范围已通过自动/关系 Gate，真人 N/A（无产品 UI）；证据见 [W1 acceptance](../task-8/2026-10-09-task-8-web-w1-acceptance.md) 与 [W2 acceptance](../task-8/2026-10-09-task-8-web-w2-acceptance.md)。W3 implementation/automated/Contract/Relationship Gate 已通过，手机W3-H01/H02 HUMAN PASSED，W3已关闭；见 [W3 acceptance](../task-8/2026-10-09-task-8-web-w3-acceptance.md)。W4 implementation/automated/Contract/Relationship/LAN与W4-H01/H02/H03手机验收通过，**HUMAN PASSED，W4已关闭**；见 [W4 acceptance](../task-8/2026-10-09-task-8-web-w4-acceptance.md)。W5 implementation/automated/Contract/Relationship Gate 已通过，W5-A06 LAN已交付，**HUMAN PASSED，W5已关闭**；见 [W5 acceptance](../task-8/2026-10-10-task-8-web-w5-acceptance.md)。W6-A02 automated/Contract/Relationship Gate已通过，本次实际构建LAN READY；**W6-H01 HUMAN PASSED，W6已关闭**，见 [W6 acceptance](../task-8/2026-10-10-task-8-web-w6-acceptance.md)。不自动推进；原 Task 8 Steps 未整体勾选，PWA DEFERRED。
 
 ## Global Constraints
 
-2026-10-10 文档合同同步：UI 长期规则仅引用 [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md) 的 WEB-UI-*。保护当前 Player A04歌词/A05比例/A06顶部操作反馈；当前仍有未统一的说明文字，不能称新合同已全部实现。本计划继续完成 W5现有适用反馈及W6，新的全局背景/持久app bar/四项导航和其余通知归一在Task9最先接入，不追加W6功能。后续接入触及已确认页面时必须最小修改并按 Visual Spec §9 回归；不改变本计划原Gate状态。
+2026-10-10 文档合同同步：UI 长期规则仅引用 [全局 UI 合同](../../specs/2026-10-03-web-pwa-visual-design.md) 的 WEB-UI-*。保护当前 Player A04歌词/A05比例/A06顶部操作反馈；当前仍有未统一的说明文字，不能称新合同已全部实现。本计划继续完成 W5现有适用反馈及W6，新的全局背景/持久app bar/四项导航和其余通知归一在Task9最先接入，不追加W6功能。后续接入触及已确认页面时必须最小修改并按 Visual Spec §9 回归；不改变本计划原Gate状态。
 
 - 同源 REST/WS；不直接访问 MPD、不认证、不新增浏览器音频播放。
 - canonical state 仅完整 snapshot，资源需 epoch/revision/generation 保护；所有 mutation 使用共同幂等机制。
@@ -143,7 +143,7 @@ W1–W5 已勾选步骤是历史交付记录；具体产品接线已被后续用
 - [x] 更新同一 LAN 页面，交付 W4-H01/H02/H03 手机触摸验收卡；必要时间推进仅放在最小验收夹具，失败后按本 Batch 反馈复验闭环处理。
 
 
-**当前 Gate：** implementation/automated/Contract/Relationship PASSED，P3 + 实际 DTO 已核验；W4-A10最终构建LAN与手机交付通过（Stop UI移除，后端不改）。W4-H01/H02（含unknown）/H03 **HUMAN PASSED**，W4已关闭，W5前置满足但尚未实施、不自动推进；唯一记录见 [W4 acceptance](../archive/task-8/2026-10-09-task-8-web-w4-acceptance.md)。真实 MPD/NAS NOT RUN，PWA DEFERRED。
+**当前 Gate：** implementation/automated/Contract/Relationship PASSED，P3 + 实际 DTO 已核验；W4-A10最终构建LAN与手机交付通过（Stop UI移除，后端不改）。W4-H01/H02（含unknown）/H03 **HUMAN PASSED**，W4已关闭，W5前置满足但尚未实施、不自动推进；唯一记录见 [W4 acceptance](../task-8/2026-10-09-task-8-web-w4-acceptance.md)。真实 MPD/NAS NOT RUN，PWA DEFERRED。
 
 ## Batch W5 — 同步歌词与 Output
 
@@ -156,7 +156,7 @@ W1–W5 已勾选步骤是历史交付记录；具体产品接线已被后续用
 - [x] 跑两个 invariant、lyrics unit、player-clock/wire invariants；typecheck/build；验证歌词可选择、按钮可访问名称及键盘焦点。
 - [x] 交付W5-H01；歌词按A04已确认行为保留。A05后W5-H02页面启停项N/A，不能宣称手机Output操作通过；独立Output自动proof保留。A06比例/顶部反馈、Output卡片移除及DAC摘要已由用户“以上通过”确认HUMAN PASSED，见当前Gate。
 
-**当前 Gate：** implementation/automated/Contract/Relationship PASSED，W5-A06最终构建LAN READY；A04歌词与A06必要手机项 **HUMAN PASSED**，原Output启停H02 N/A；W5已关闭，W6真人前置已满足，但按用户要求W6 NOT STARTED。单份证据见 [W5 acceptance](../archive/task-8/2026-10-10-task-8-web-w5-acceptance.md)。真实 MPD/NAS NOT RUN，PWA DEFERRED；不自动推进。
+**当前 Gate：** implementation/automated/Contract/Relationship PASSED，W5-A06最终构建LAN READY；A04歌词与A06必要手机项 **HUMAN PASSED**，原Output启停H02 N/A；W5已关闭，W6真人前置已满足，但按用户要求W6 NOT STARTED。单份证据见 [W5 acceptance](../task-8/2026-10-10-task-8-web-w5-acceptance.md)。真实 MPD/NAS NOT RUN，PWA DEFERRED；不自动推进。
 
 ## Batch W6 — 手机 Web 综合与 Task-level acceptance
 
@@ -167,7 +167,7 @@ W1–W5 已勾选步骤是历史交付记录；具体产品接线已被后续用
 - [x] 手机执行 W6-H01：复验 W3–W5 关键流及 M01–M06 适用项；必要真人项通过且本 Task 范围 blocker 清零，才报告手机 Web acceptance PASSED。真实 MPD/NAS 结果仍单列；未运行不能宣称完整真实运行时验收。
 - [x] 按手机验收方法归档结果及 Task 9 实际接口交接；明确 PWA 为 DEFERRED，不把延期原始 Step 勾选完成。
 
-**当前 Gate：** W6-A02 implementation/automated/Contract/Relationship PASSED；实际构建及同源API/WS本机LAN READY，手机本轮可达及W6-H01 **HUMAN PASSED**（用户确认“可以通过”）。无剩余W6 blocker；W6已关闭，当前手机Web范围Task9前置已满足，不自动进入下一Task。结果/实际接口交接仅归 [W6 acceptance](../archive/task-8/2026-10-10-task-8-web-w6-acceptance.md)，不宣称Task8整体完成。真实MPD/NAS NOT RUN，PWA DEFERRED。
+**当前 Gate：** W6-A02 implementation/automated/Contract/Relationship PASSED；实际构建及同源API/WS本机LAN READY，手机本轮可达及W6-H01 **HUMAN PASSED**（用户确认“可以通过”）。无剩余W6 blocker；W6已关闭，当前手机Web范围Task9前置已满足，不自动进入下一Task。结果/实际接口交接仅归 [W6 acceptance](../task-8/2026-10-10-task-8-web-w6-acceptance.md)，不宣称Task8整体完成。真实MPD/NAS NOT RUN，PWA DEFERRED。
 
 ### PWA 延期范围（非 W6 阻塞 Gate）
 
