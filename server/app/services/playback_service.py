@@ -589,9 +589,16 @@ class PlaybackService:
     ) -> QueueItem:
         await self._require_available_song(song_id)
         snapshot = await self.queue_manager.get_snapshot()
+        pending_songs = await self.library_repository.get_playback_songs(
+            item.song_id for item in snapshot.items if item.position > 0
+        )
         for pending in snapshot.items:
             if pending.position > 0:
-                await self._require_available_song(pending.song_id)
+                song = pending_songs.get(pending.song_id)
+                if song is None:
+                    raise PlaybackSongNotFoundError(f"song not found: {pending.song_id}")
+                if song.availability_status != "AVAILABLE":
+                    raise PlaybackSongUnavailableError(f"song is not available: {pending.song_id}")
         if request_id is not None:
             self._song_requests.setdefault(request_id, (
                 song_id, request_payload, self._recovery.business_generation,
@@ -880,10 +887,13 @@ class PlaybackService:
 
     async def _next_available_pending(self) -> QueueItem | None:
         target = None
-        for item in await self.queue_manager.list_items():
-            if item.position <= 0:
-                continue
-            song = await self.library_repository.get_song(item.song_id)
+        pending = [item for item in await self.queue_manager.list_items() if item.position > 0]
+        songs = await self.library_repository.get_playback_songs(item.song_id for item in pending)
+        # Classify without yielding. Queue deletions below cannot change Library;
+        # discard this projection before refill, preparation or synchronization.
+        unavailable = []
+        for item in pending:
+            song = songs.get(item.song_id)
             if song is not None and song.availability_status == "AVAILABLE":
                 if target is None:
                     target = item
@@ -893,6 +903,8 @@ class PlaybackService:
                 "Skipping unavailable Queue item %s (song %s): %s",
                 item.queue_item_id, item.song_id, reason,
             )
+            unavailable.append(item)
+        for item in unavailable:
             await self.queue_manager.delete(item.queue_item_id, persist_state=False)
         return target
 
@@ -1511,9 +1523,10 @@ class PlaybackService:
         if intent is None:
             sample = await self._read_execution_sample()
             execution = sorted((item for item in snapshot.items if item.position >= 0), key=lambda item: item.position)
+            songs = await self.library_repository.get_playback_songs(item.song_id for item in execution)
             items = []
             for item in execution:
-                song = await self.library_repository.get_song(item.song_id)
+                song = songs.get(item.song_id)
                 known = next((uri for key, _, uri in journal.synced_entries or () if key == item.queue_item_id), None)
                 items.append((item.queue_item_id, song.file_uri if song is not None else known))
             items = tuple(items)
@@ -1884,16 +1897,18 @@ class PlaybackService:
             ),
             key=lambda item: item.position,
         )
+        # Phase-local only: no reuse across preflight/MPD/refill or another call,
+        # even when multiple calls share the same outer transaction and owner.
+        songs = await self.library_repository.get_playback_songs(item.song_id for item in ordered)
         uris: list[str] = []
         for item in ordered:
-            if item.position == 0:
-                # Catalog availability may change while this occurrence still plays.
-                # Retain it until a successor is confirmed; never start it anew here.
-                song = await self.library_repository.get_song(item.song_id)
-                if song is None:
-                    raise PlaybackSongNotFoundError(f"song not found: {item.song_id}")
-            else:
-                song = await self._require_available_song(item.song_id)
+            song = songs.get(item.song_id)
+            if song is None:
+                raise PlaybackSongNotFoundError(f"song not found: {item.song_id}")
+            # Catalog availability may change while current still plays. Retain
+            # that occurrence until a successor is confirmed; never restart it here.
+            if item.position > 0 and song.availability_status != "AVAILABLE":
+                raise PlaybackSongUnavailableError(f"song is not available: {item.song_id}")
             uris.append(song.file_uri)
         return uris
 

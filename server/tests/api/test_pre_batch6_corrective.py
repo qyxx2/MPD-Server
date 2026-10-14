@@ -876,13 +876,20 @@ def test_next_skips_absent_pending_identity(real_client, monkeypatch, caplog):
     client, _, player, service = real_client
     start(client)
     actual_get = service.library_repository.get_song
+    actual_batch = service.library_repository.get_playback_songs
 
     async def absent_b(song_id):
         return None if song_id == "b" else await actual_get(song_id)
 
+    async def absent_b_batch(song_ids):
+        songs = await actual_batch(song_ids)
+        songs.pop("b", None)
+        return songs
+
     # Persisted Queue foreign keys prohibit deleting a referenced Song. Simulate
     # the repository's absent lookup boundary without disabling DB constraints.
     monkeypatch.setattr(service.library_repository, "get_song", absent_b)
+    monkeypatch.setattr(service.library_repository, "get_playback_songs", absent_b_batch)
     response = mutate(client, "POST", "/api/playback/next", key="absent-pending")
     assert response.status_code == 200, response.text
     assert response.json()["song_id"] == "c"
