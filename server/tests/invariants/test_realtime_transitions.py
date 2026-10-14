@@ -6,6 +6,7 @@ import pytest
 
 from server.app.main import app
 from server.app.models.queue import PlaybackContext
+from server.app.player.ports import PlayerCommandError
 from server.app.repositories.database import run_transaction, transaction_identity
 from server.app.services.playback_service import PlaybackService
 from server.app.services.realtime_coordinator import RealtimeCoordinator
@@ -216,8 +217,23 @@ def test_failed_transition_does_not_publish_and_can_retry(real_client, monkeypat
     monkeypatch.setattr(app.state, "playback_service", service)
     if failure == "disconnected":
         player.disconnect()
+    elif failure == "command":
+        # Occurrence-selected duplicates use queue_play; reject the first actual
+        # playback transport regardless of which safe selection path is needed.
+        rejected = False
+        for name in ("play", "queue_play"):
+            original = getattr(player, name)
+
+            async def reject_once(*args, _original=original, **kwargs):
+                nonlocal rejected
+                if not rejected:
+                    rejected = True
+                    raise PlayerCommandError("playid", "injected playback failure")
+                return await _original(*args, **kwargs)
+
+            monkeypatch.setattr(player, name, reject_once)
     else:
-        player.fail_next("play" if failure == "command" else "status")
+        player.fail_next("status")
     response = mutate(client, method, endpoint, body, key="failed-transition")
     assert response.status_code == (503 if failure == "disconnected" else 502), response.text
     assert server_snapshot(service) == before

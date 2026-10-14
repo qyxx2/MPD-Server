@@ -147,7 +147,7 @@ def test_play_now_failure_does_not_record_switch_or_advance_state(components):
 
     before = run(components["state"].get_state())
     assert before is not None
-    player.fail_next("play", "injected play failure")
+    player.fail_next("queue_play", "injected play failure")
 
     with pytest.raises(PlayerCommandError, match="injected play failure"):
         run(service.play_now(item_b.queue_item_id))

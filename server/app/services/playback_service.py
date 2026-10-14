@@ -533,7 +533,7 @@ class PlaybackService:
         song = await self._require_available_song(item.song_id)
         await self._desired_song_uris()
         await self._discard_unconfirmed_history_active()
-        await self._prepare_play(song)
+        await self._prepare_play(song, queue_item_id=queue_item_id)
 
         current_state = await self.queue_manager.get_playback_state()
         selected = await self.queue_manager.play_now(
@@ -860,7 +860,7 @@ class PlaybackService:
             return state
 
         song = await self._require_available_song(target.song_id)
-        await self._prepare_play(song)
+        await self._prepare_play(song, queue_item_id=target.queue_item_id)
         selected = await self.queue_manager.play_now(
             target.queue_item_id,
             persist_state=False,
@@ -920,7 +920,7 @@ class PlaybackService:
         target = played[0]
         song = await self._require_available_song(target.song_id)
         await self._desired_song_uris()
-        await self._prepare_play(song)
+        await self._prepare_play(song, queue_item_id=target.queue_item_id)
         selected = await self.queue_manager.play_now(
             target.queue_item_id,
             persist_state=False,
@@ -1634,7 +1634,9 @@ class PlaybackService:
         journal.commit_execution(operation_id, RecoveryResult('APPLIED', None, operation_id))
         return status
 
-    async def _prepare_play(self, song: Song) -> PlayerStatus:
+    async def _prepare_play(
+        self, song: Song, *, queue_item_id: str | None = None,
+    ) -> PlayerStatus:
         await self._verify_user_queue_baseline(selecting=True)
         self._control_targets.invalidate()
         journal = self._recovery
@@ -1684,18 +1686,37 @@ class PlaybackService:
                     intent = None
             if intent is None:
                 baseline = baseline or await self._read_execution_sample()
-                # An explicit request may select an existing execution entry.
-                # This temporary control identity never binds a business occurrence.
+                # Legacy song selection uses temporary identities. Occurrence
+                # selection below retains only a fully verified business binding.
                 mapping = tuple((f"prepare:{entry.mpd_song_id}", entry.mpd_song_id, entry.song_uri)
                                 for entry in baseline.entries)
-                target = next((item_id for item_id, _, uri in mapping if uri == song.file_uri), None)
+                if queue_item_id is not None:
+                    selected = await self.queue_manager.get_item(queue_item_id)
+                    if selected is None or selected.song_id != song.song_id:
+                        raise PlaybackReconciliationError("Execution occurrence identity conflict")
+                    if journal.binding is not None:
+                        if not journal.accepts(baseline):
+                            raise PlaybackReconciliationError("UNKNOWN preparation baseline changed")
+                        mapping = journal.binding.entries
+                    # A Played occurrence is absent from MPD. Even an identical
+                    # URI in Pending belongs to a different business occurrence.
+                    target = next((key for key, _, uri in mapping
+                                   if key == queue_item_id and uri == song.file_uri), None)
+                else:
+                    target = next((item_id for item_id, _, uri in mapping if uri == song.file_uri), None)
                 items = tuple((item_id, uri) for item_id, _, uri in mapping)
                 commands = []
                 if target is None:
-                    target = "prepare:new"
+                    target = queue_item_id or "prepare:new"
                     items += ((target, song.file_uri),)
                     commands.append(ExecutionCommand("add", target, uri=song.file_uri))
-                commands.append(ExecutionCommand("play", target, uri=song.file_uri))
+                # Only ambiguous URI selection needs the existing ID command.
+                # In either path the executor confirms the selected occurrence's
+                # exact MPD ID; ordinary unique-URI transport stays unchanged.
+                play_uri = song.file_uri
+                if queue_item_id is not None and sum(uri == song.file_uri for _, uri in items) > 1:
+                    play_uri = None
+                commands.append(ExecutionCommand("play", target, uri=play_uri))
                 intent = ExecutionIntent(
                     journal.service_epoch, journal.binding.binding_generation if journal.binding else journal._binding_generation,
                     prepare_id, (await self.queue_manager.get_snapshot()).revision,
@@ -1742,6 +1763,25 @@ class PlaybackService:
                 and (getattr(self, "_binding_origin_id", None) is None
                      or (bool(execution) and execution[0].queue_item_id != self._binding_origin_id))
             )
+            attempt_id = journal.execution_attempts.get(allocation_id, allocation_id)
+            prepare_id = journal.execution_preparations.get(attempt_id)
+            preparation = journal.execution_intents.get(prepare_id)
+            if (preparation is not None and execution
+                    and preparation.target_item_id == execution[0].queue_item_id):
+                # Transfer only this fixed owner's explicitly selected occurrence.
+                # Keep the fresh full read and all original executor fences: an
+                # external edit/current transition cannot borrow the old mapping.
+                prepared = journal.execution_samples.get(prepare_id)
+                receipts = journal.command_receipts[prepare_id]
+                if (prepared is None or prepare_id in journal.unknown_executions
+                        or len(receipts) != len(preparation.commands)
+                        or any(receipt.phase != "confirmed" for receipt in receipts.values())):
+                    raise PlaybackReconciliationError("UNKNOWN unconfirmed preparation handoff")
+                executor._verify_fence(preparation)
+                executor._verify(preparation, sample, prepared)
+                journal.preserve_binding()
+                journal.binding = binding = None
+                journal.synced_entries, journal.sync_sample = executor.mapping(preparation), prepared
             if binding is not None and not journal.accepts(sample):
                 if not explicit:
                     raise PlaybackReconciliationError("MPD execution binding lost before queue sync")
