@@ -9,9 +9,9 @@
 **Tech Stack:** 既有Python/.venv、FastAPI/Pydantic/SQLite、pytest/Ruff、Vue/TypeScript/Vite/Vitest、NAS Docker Compose及独立MPD；本轮未批准新依赖。
 
 **Spec:**
-- [Architecture §22](../specs/2026-09-25-system-and-development-architecture-design.md)：MIN-DELIVERY/CONFIG/URI/HEALTH/LOG-001。
-- [Library §7.2](../specs/2026-09-24-library-playlist-tag-search-design-2-1.md)：LIB-MPD-SYNC-001。
-- [Visual §6](../specs/2026-10-03-web-pwa-visual-design.md)：WEB-UI-NOTIFY-001唯一视觉权威。
+- [Architecture §22](../../specs/2026-09-25-system-and-development-architecture-design.md)：MIN-DELIVERY/CONFIG/URI/HEALTH/LOG-001。
+- [Library §7.2](../../specs/2026-09-24-library-playlist-tag-search-design-2-1.md)：LIB-MPD-SYNC-001。
+- [Visual §6](../../specs/2026-10-03-web-pwa-visual-design.md)：WEB-UI-NOTIFY-001唯一视觉权威。
 - 既有Playback/Output Specs、Architecture §4/§12/§19.5与SYS-MPD-CONNECTION-001继续适用。
 
 **Status:** 2026-10-11本轮核查并关闭B01 Gate；B00 CLOSED / BASELINE PASSED；B00C CLOSED / AUTOMATED PASSED；B01 CLOSED / AUTOMATED PASSED，前置已闭合并完成fresh重验。B02 CLOSED / AUTOMATED PASSED；B03 IMPLEMENTED / AUTOMATED PASSED，NAS规模及时性HUMAN PENDING；B04 CLOSED / AUTOMATED PASSED / MOBILE VISUAL USER ACCEPTED（2026-10-12）；B05 CLOSED / AUTOMATED PASSED（2026-10-12）；B06 CLOSED / AUTOMATED PASSED（2026-10-12）；B07 READY FOR NAS / LOCAL AUTOMATED PASSED（2026-10-12），NAS部署及重启持久化HUMAN PENDING；B08–B09 NOT STARTED。不声明构建、Docker或实机通过；未授权Git整合。本文是新的唯一最终交付执行入口；旧Task9计划只继续管理其未关闭历史Gate，旧Task10–12步骤按主Plan增量映射，不照原清单恢复延期功能。
@@ -261,7 +261,7 @@ Interfaces：HealthService.read()->HealthResponse(status,ms,mpd,library_sync)；
 Gate：**CLOSED / AUTOMATED PASSED，2026-10-12**。三项独立健康读取、关联安全日志及指定关系回归已fresh验证；本批无手机/NAS人工Gate，不抵扣B03/B08实机验收。
 
 必要范围补充：repositories/database.py增加只读SQLite探测；library_sync_service.py/mpd_adapter.py接日志，不改控制/同步算法。conftest先取消observer避免启动抢跑；相关system读取测试显式注入Mock，两份后端golden builder显式只读采样以保留原golden与断言，Web源码/fixture未修改。
-简要证据：两个指定节点RED→GREEN；B06 Gate三文件 **9 passed**，system/架构方向 **21 passed**，必要历史关系 **88 passed**；B04 diagnostics精确节点 **3 passed**、完整文件 **8 passed**；scoped Ruff与diff检查通过。前置、精确命令、边界修复及保留范围见[B06验收记录](../../acceptance/2026-10-12-v0-1-nas-b06-health-logging.md)。未运行全量、build/typecheck、Docker、NAS或手机；未推进B07。
+简要证据：两个指定节点RED→GREEN；B06 Gate三文件 **9 passed**，system/架构方向 **21 passed**，必要历史关系 **88 passed**；B04 diagnostics精确节点 **3 passed**、完整文件 **8 passed**；scoped Ruff与diff检查通过。前置、精确命令、边界修复及保留范围见[B06验收记录](../acceptance/2026-10-12-v0-1-nas-b06-health-logging.md)。未运行全量、build/typecheck、Docker、NAS或手机；未推进B07。
 
 ### B07：真实生产构建与NAS部署准备
 
@@ -275,7 +275,7 @@ Interfaces：生产同源REST/WS；不存在/api路径不得fallback为HTML；�
 - [ ] 用户手动重启容器，确认saved地址生效及持久数据未丢；提供最短操作与日志查看卡。update.sh/restart按钮延期。
 Gate：**READY FOR NAS / LOCAL AUTOMATED PASSED，2026-10-12**；NAS构建/容器部署/手动重启持久化 **HUMAN PENDING / NOT RUN**，整体不CLOSED。
 
-简要证据（FINAL-DEPLOY-001→Architecture §22/§9–11）：部署结构、SPA深链接和HTTP启动配置RED→GREEN；指定精确节点 **3 passed**、两份Gate文件 **7 passed**；必要健康/配置/observer/output关系 **34 passed**。Web typecheck、临时目录生产build、fresh产物HTML/JS/CSS/404检查及广域Ruff通过。Docker COPY产物位置原本正确，仅补防本机node_modules覆盖镜像依赖的RED→GREEN。环境、前置、精确命令及剩余项见[B07验收记录](../../acceptance/2026-10-12-v0-1-nas-b07-deploy.md)；最短实机步骤与反馈见[部署卡](../../../deploy/README.md)。实际NAS架构/根目录/endpoint待用户确认，不采用历史值或示例冒充本轮事实；未运行Docker/live MPD/手机，不推进B08。
+简要证据（FINAL-DEPLOY-001→Architecture §22/§9–11）：部署结构、SPA深链接和HTTP启动配置RED→GREEN；指定精确节点 **3 passed**、两份Gate文件 **7 passed**；必要健康/配置/observer/output关系 **34 passed**。Web typecheck、临时目录生产build、fresh产物HTML/JS/CSS/404检查及广域Ruff通过。Docker COPY产物位置原本正确，仅补防本机node_modules覆盖镜像依赖的RED→GREEN。环境、前置、精确命令及剩余项见[B07验收记录](../acceptance/2026-10-12-v0-1-nas-b07-deploy.md)；最短实机步骤与反馈见[部署卡](../../../../deploy/README.md)。实际NAS架构/根目录/endpoint待用户确认，不采用历史值或示例冒充本轮事实；未运行Docker/live MPD/手机，不推进B08。
 
 ### B08：真实功能联合验收
 
