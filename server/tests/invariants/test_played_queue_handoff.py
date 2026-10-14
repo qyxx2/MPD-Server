@@ -11,7 +11,7 @@ from server.tests.support.d6_stock import stock_joint
 
 
 async def seed(j, size, *, duplicate=False):
-    # After next there are exactly size MPD entries and one Played occurrence.
+    # After next there are exactly size MPD entries and a recent Played a.
     pending = ('a',) * (size - 1) if duplicate else ('c',) * (size - 1)
     await j.service.play_context(PlaybackContext(
         context_id='batch-1', source_type='SONGS',
