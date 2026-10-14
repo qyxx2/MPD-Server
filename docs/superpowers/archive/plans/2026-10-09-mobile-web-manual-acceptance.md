@@ -6,7 +6,7 @@
 
 手机浏览器是主要使用和真人验收环境。Ubuntu 的 Firefox、Chromium 用于 AI 预检、定位和必要兼容检查，不要求开发桌面专用布局或逐 Batch 做双桌面浏览器全量验收。PWA 安装、独立窗口、Service Worker、冷离线壳及更新验收延期，不阻塞 Task 8 手机 Web 交付或 Task 9 启动；以后有需要再实施和验收，不标记已完成。
 
-产品行为仍以现有 business/architecture Specs 为准；视觉、通知、背景、共享壳及导航仅以 [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md) WEB-UI-* 为准，本文只规定操作方法，不复制尺寸/颜色合同。本文件只拥有真人验收操作、交付格式和反馈流程。Task 8 必验场景由其 Batch Plan 指定；Task 9 以后在自己的 Contract Audit/Batch Plan 中选择适用场景，不在这里预拆 Batch 或确定尚未冻结的业务语义。
+产品行为仍以现有 business/architecture Specs 为准；视觉、通知、背景、共享壳及导航仅以 [全局 UI 合同](../../specs/2026-10-03-web-pwa-visual-design.md) WEB-UI-* 为准，本文只规定操作方法，不复制尺寸/颜色合同。本文件只拥有真人验收操作、交付格式和反馈流程。Task 8 必验场景由其 Batch Plan 指定；Task 9 以后在自己的 Contract Audit/Batch Plan 中选择适用场景，不在这里预拆 Batch 或确定尚未冻结的业务语义。
 
 ## 2. 最小准备与局域网交付
 

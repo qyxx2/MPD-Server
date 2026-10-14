@@ -1,6 +1,6 @@
 # MPD-Server Task 6 Contract Audit / Batch Execution Plan
 
-**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
+**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
 
 > **2026-10-03原计划记录 / For agentic workers:** 后续执行使用 `superpowers:executing-plans`；原计划记录保留；最新状态见下方2026-10-04修订。当前仅文档，旧Batch实现/proof不等于新D6验收。没有 commit/push/PR 授权；不得因下列实施白名单而在本轮修改 production code。
 
@@ -96,7 +96,7 @@ T1/1R verified capability record 只证明已验证命令，不证明外部自�
 
 D6-RECOVERY 当前验收义务：按P §8.9证明绑定current接纳、完整execution确认、提前AutoPlay、未知原因不写永久History、本服务明确操作保留原reason/确认、失败恢复persisted/runtime及安全retry/replay；新增A §12.3.1实际identity表示与独立runner proof。验收记录必须给出实际 test 路径/函数、命令和 fresh GREEN；方法存在、历史全套 GREEN 或新计划本身不算通过。
 
-2026-10-04 人工决策 A 的新增领域 authority 仅为 P §8.9。唯一执行入口：[D6 corrective plan](2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据：[D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。该人工A属于旧合同历史；最新原版MPD修订见P §8.9及本文件当前依赖节。旧consumer Fake GREEN不能解除新D6/Batch13 gate；G6-01–05已实现只读基础保持，新增RT-ACTUAL窄表示义务，不在Task6 observer接恢复。
+2026-10-04 人工决策 A 的新增领域 authority 仅为 P §8.9。唯一执行入口：[D6 corrective plan](2026-10-04-task-4-d6-recovery-corrective-plan.md)；唯一证据：[D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)。该人工A属于旧合同历史；最新原版MPD修订见P §8.9及本文件当前依赖节。旧consumer Fake GREEN不能解除新D6/Batch13 gate；G6-01–05已实现只读基础保持，新增RT-ACTUAL窄表示义务，不在Task6 observer接恢复。
 
 ## 4. 冻结 Contract Matrix
 
