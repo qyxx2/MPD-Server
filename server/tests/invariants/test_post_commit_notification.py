@@ -130,7 +130,7 @@ def test_registered_playback_finishes_while_recovery_holds_mutex(tmp_path, monke
                                                   'playlist': before.playlist_revision}
                 assert counts['get_song'] == counts['full_song'] == 2
                 assert counts['batch'] == 3
-                assert counts['sample'] == (11 if operation == 'played' else 9)
+                assert counts['sample'] == (10 if operation == 'played' else 8)
                 assert [c.split()[0] for c in j.fake.received[cutoff:]].count('playid') == 1
             finally:
                 release.set()

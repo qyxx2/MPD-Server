@@ -1507,7 +1507,7 @@ class PlaybackService:
         journal.commit(identity, result)
         return result
 
-    async def _verify_user_queue_baseline(self, *, selecting: bool = False) -> None:
+    async def _verify_user_queue_baseline(self, *, selecting: bool = False) -> ExecutionSample | None:
         """Repair only a fresh user operation, before its first MPD command."""
         baseline = getattr(self, "_queue_preflight", None)
         if baseline is None:
@@ -1556,7 +1556,7 @@ class PlaybackService:
             )
             if (identity_matches and current_matches) or (not items and not sample.entries and state is None):
                 self._queue_preflight = None
-                return
+                return sample
             selecting = selecting or operation == "play_song_now"
             if operation == "delete":
                 staged = await self.queue_manager.get_snapshot()
@@ -1657,7 +1657,7 @@ class PlaybackService:
     async def _prepare_play(
         self, song: Song, *, queue_item_id: str | None = None,
     ) -> PlayerStatus:
-        await self._verify_user_queue_baseline(selecting=True)
+        planning_sample = await self._verify_user_queue_baseline(selecting=True)
         self._control_targets.invalidate()
         journal = self._recovery
         operation_id = self._execution_owner[1]
@@ -1705,7 +1705,11 @@ class PlaybackService:
                     prepare_id = operation_id + "/prepare/" + baseline.connection_epoch
                     intent = None
             if intent is None:
-                baseline = baseline or await self._read_execution_sample()
+                # The clean preflight is only a planning input. execute() still
+                # obtains and verifies a fresh full sample before sending; any
+                # intervening external drift must fail closed there. Never reuse
+                # this local candidate to validate a retry's owned prefix.
+                baseline = baseline or planning_sample or await self._read_execution_sample()
                 # Legacy song selection uses temporary identities. Occurrence
                 # selection below retains only a fully verified business binding.
                 mapping = tuple((f"prepare:{entry.mpd_song_id}", entry.mpd_song_id, entry.song_uri)
@@ -1761,7 +1765,7 @@ class PlaybackService:
     async def _sync_player_queue(
         self, *, previous_items: Sequence[QueueItem] | None = None,
     ) -> None:
-        await self._verify_user_queue_baseline()
+        planning_sample = await self._verify_user_queue_baseline()
         desired = await self._desired_song_uris()
         queue = await self.queue_manager.get_snapshot()
         execution = sorted((item for item in queue.items if item.position >= 0), key=lambda item: item.position)
@@ -1775,7 +1779,9 @@ class PlaybackService:
             if intent.items != items or intent.queue_revision != queue.revision:
                 raise PlaybackReconciliationError("Execution identity conflict: fixed Queue changed")
         else:
-            sample = await self._read_execution_sample()
+            # As in preparation, this only supplies the fixed plan's baseline;
+            # executor.execute retains its full pre-command external check.
+            sample = planning_sample or await self._read_execution_sample()
             binding = journal.binding
             state = await self.queue_manager.get_playback_state()
             explicit = getattr(self, "_queue_preflight_repaired", False) or (

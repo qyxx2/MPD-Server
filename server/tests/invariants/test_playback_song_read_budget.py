@@ -134,7 +134,7 @@ def test_bound_queue_read_budget_and_execution_identity(tmp_path, monkeypatch, s
             assert measured.get('projection_select', 0) <= 3 * ceil((unique + 1) / variable_limit)
             assert measured.get('relationship_select', 0) <= 12
             assert measured.get('batch', 0) <= 3
-            assert measured['sample'] == 9
+            assert measured['sample'] == 8
     asyncio.run(scenario())
 
 
@@ -321,7 +321,7 @@ def test_occurrence_navigation_keeps_b1_ids_and_bounded_full_reads(tmp_path, mon
             assert new.entries[1:] == unaffected
             assert measured['get_song'] <= 2 and measured['full_song'] <= 2
             assert measured['batch'] <= 3 and measured['library_select'] <= 17
-            assert measured['sample'] == (11 if operation != 'occurrence' else 10)
+            assert measured['sample'] == (10 if operation != 'occurrence' else 9)
             controls = Counter(c.split()[0] for c in j.controls(cutoff))
             assert controls == ({'addid': 1, 'playid': 1, 'moveid': 1, 'deleteid': 1}
                                 if operation != 'occurrence' else {'playid': 1, 'moveid': 1, 'deleteid': 1})
