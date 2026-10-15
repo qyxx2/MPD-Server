@@ -83,6 +83,9 @@ def _atomic_history_transition(
     async def wrapped(self: PlaybackService, *args: P.args, **kwargs: P.kwargs) -> T:
         async def transition(_connection):
             nonlocal args
+            # Background checks must also reject an operation whose business
+            # projection rolls back after MPD has already changed.
+            self._maintenance_fence += 1
             self.history_service.preserve_active_on_rollback()
             if operation.__name__ == "play_context" and kwargs.get("request_id") is not None:
                 args = (self._recovery.prepare_context(kwargs["request_id"], kwargs["request_payload"], args[0]), *args[1:])
@@ -252,6 +255,7 @@ class PlaybackService:
         self._transport_changes: dict[object, list[dict[str, object]]] = {}
         self._explicit_stop = False
         self._explicit_stop_generation = 0
+        self._maintenance_fence = 0
         self._song_requests: dict[str, tuple[str, str | None, int, int, str]] = {}
         self._request_observation: Callable[[], None] | None = None
         self._observation_request_owners: set[object] = set()
@@ -1227,6 +1231,84 @@ class PlaybackService:
         )
         return RecoveryResult("APPLIED", confirmed)
 
+    async def _check_background_maintenance(self, diagnostic_number: int) -> RecoveryResult | None:
+        """Prove a stable, sufficiently stocked queue without holding DB over I/O.
+
+        This sample may only authorize doing nothing. Every other case enters the
+        original protected maintenance flow with independent reads and fences.
+        An existing outer owner must keep its original rollback/replay semantics.
+        """
+        path = self.queue_manager.queue_repository.path
+        try:
+            transaction_identity(path)
+        except RuntimeError:
+            pass
+        else:
+            return None
+
+        async def capture(_):
+            journal = self._recovery
+            binding = await self.get_execution_binding()
+            queue = await self.queue_manager.get_snapshot()
+            state = await self.queue_manager.get_playback_state()
+            unfinished = any(
+                journal.execution_receipts.get(key) is None
+                and journal.execution_fences[key] == (journal._invalidation, journal.business_generation)
+                and binding is not None and intent.binding_generation == binding.binding_generation
+                for key, intent in journal.execution_intents.items()
+            )
+            if (journal.quarantined or unfinished
+                    or binding is None or not binding.entries or state is None
+                    or state.state not in {"PLAYING", "PAUSED"}
+                    or sum(item.position > 0 for item in queue.items) < self.autoplay.LOW_WATERMARK):
+                return None
+            # JSON captures immutable values, including revision, occurrence order,
+            # transport and updated_at. Runtime generations fence ABA and rollback.
+            identity = (
+                self.player, queue.model_dump_json(), state.model_dump_json(), binding,
+                journal.service_epoch, journal.business_generation, journal._invalidation,
+                self._observations.generation, self._explicit_stop_generation, self._maintenance_fence,
+                await self._recovery_current_identity(),
+            )
+            return identity, state, binding
+
+        before = await run_transaction(path, capture)
+        if before is None:
+            return None
+        player = before[0][0]
+        try:
+            sample = await player.read_execution_sample()
+        except BaseException:
+            async def invalidate(_):
+                # A transport-only mutation may preserve this mapping despite
+                # changing the business capture. Failure still retires continuity;
+                # a later independently confirmed rebind must remain untouched.
+                if self.player is player and self._recovery.binding == before[2]:
+                    self._recovery.invalidate_binding()
+
+            await run_transaction(path, invalidate)
+            raise
+
+        async def accept(_):
+            if before != await capture(None):
+                # Do not diagnose, invalidate a newer binding, or start a new plan
+                # using a result from the old business window.
+                return RecoveryResult("UNCHANGED", await self.queue_manager.get_playback_state())
+            _, state, binding = before
+            if (not self._recovery.accepts(sample)
+                    or sample.status.state.value != state.state.lower()
+                    or sample.status.song_position != 0
+                    or sample.status.song_id != binding.entries[0][1]
+                    or sample.status.song_uri != binding.entries[0][2]
+                    or (sample.single, sample.consume, sample.status.random, sample.status.repeat)
+                    != ("0", False, False, False)
+                    or sample.error is not None):
+                return None
+            await self._observations.diagnose(None, self._recovery.business_generation, diagnostic_number)
+            return RecoveryResult("UNCHANGED", state)
+
+        return await run_transaction(path, accept)
+
     async def maintain_execution(self, *, read_timeout: float | None = None) -> RecoveryResult:
         """Confirm current and append a fixed refill within one rollback boundary."""
         diagnostic_number = self._observations.begin_diagnostic()
@@ -1388,6 +1470,9 @@ class PlaybackService:
 
         async with asyncio.timeout(read_timeout):
             try:
+                checked = await self._check_background_maintenance(diagnostic_number)
+                if checked is not None:
+                    return checked
                 return await maintain(self)
             except PlaybackReconciliationError as error:
                 if not str(error).startswith("UNKNOWN"):
