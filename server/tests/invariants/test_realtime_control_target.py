@@ -72,9 +72,11 @@ def test_target_invalidation_waits_for_outer_visibility(state_client):
         assert subscriber.pending is not None and 'playback' in subscriber.pending.domains
         snapshot = await asyncio.wait_for(reader, 1)
         assert snapshot.sequence == coordinator.marker().sequence
-        assert snapshot.playback_observation.control_target is None
+        handed_off = snapshot.playback_observation.control_target
+        assert handed_off is not None and handed_off != target
+        assert snapshot.playback_observation.covered_playback_updated_at == snapshot.playback.updated_at
         fresh = await playback.observe()
-        assert fresh.control_target is not None and fresh.control_target != target
+        assert fresh.control_target == handed_off
         coordinator.unsubscribe(subscriber)
 
     run(scenario())

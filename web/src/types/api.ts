@@ -33,6 +33,7 @@ export interface Observation {
   observed_at: string | null; freshness: Freshness; error_code: string | null; error_message: string | null
 }
 export interface PlaybackObservation extends Observation {
+  covered_playback_updated_at: string | null
   actual_state: 'playing' | 'paused' | 'stopped' | null
   actual_current: { entry_id: number | null; uri: string | null; position: number | null } | null
   actual_freshness: Freshness; bound_queue_item_id: string | null; control_target: PlaybackControlTarget | null

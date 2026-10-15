@@ -4,7 +4,7 @@
       "snapshot": {
         "epoch": "epoch-1",
         "explicit_stop_generation": 0,
-        "sequence": 15,
+        "sequence": 13,
         "captured_at": "2026-10-11T00:00:00Z",
         "revisions": {
           "library": 0,
@@ -145,6 +145,7 @@
           "matches_current": true,
           "position_seconds": 0.0,
           "duration_seconds": 300.0,
+          "covered_playback_updated_at": "2026-10-11T00:00:00Z",
           "observed_at": "2026-10-11T00:00:00Z",
           "freshness": "fresh",
           "reconciliation_required": false,
@@ -476,7 +477,7 @@
       "snapshot": {
         "epoch": "epoch-1",
         "explicit_stop_generation": 0,
-        "sequence": 17,
+        "sequence": 15,
         "captured_at": "2026-10-11T00:00:00Z",
         "revisions": {
           "library": 0,
@@ -617,6 +618,7 @@
           "matches_current": true,
           "position_seconds": 0.0,
           "duration_seconds": 300.0,
+          "covered_playback_updated_at": "2026-10-11T00:00:00Z",
           "observed_at": "2026-10-11T00:00:00Z",
           "freshness": "fresh",
           "reconciliation_required": false,
@@ -947,7 +949,7 @@
       "snapshot": {
         "epoch": "epoch-1",
         "explicit_stop_generation": 0,
-        "sequence": 19,
+        "sequence": 17,
         "captured_at": "2026-10-11T00:00:00Z",
         "revisions": {
           "library": 0,
@@ -1088,6 +1090,7 @@
           "matches_current": true,
           "position_seconds": 0.0,
           "duration_seconds": 300.0,
+          "covered_playback_updated_at": "2026-10-11T00:00:00Z",
           "observed_at": "2026-10-11T00:00:00Z",
           "freshness": "fresh",
           "reconciliation_required": false,
@@ -1452,7 +1455,7 @@
       "snapshot": {
         "epoch": "epoch-1",
         "explicit_stop_generation": 0,
-        "sequence": 22,
+        "sequence": 18,
         "captured_at": "2026-10-11T00:00:00Z",
         "revisions": {
           "library": 0,
@@ -1600,6 +1603,7 @@
           "matches_current": true,
           "position_seconds": 0.0,
           "duration_seconds": 300.0,
+          "covered_playback_updated_at": "2026-10-11T00:00:00Z",
           "observed_at": "2026-10-11T00:00:00Z",
           "freshness": "fresh",
           "reconciliation_required": false,

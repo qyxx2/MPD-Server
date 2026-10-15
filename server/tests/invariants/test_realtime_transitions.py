@@ -178,7 +178,7 @@ def test_explicit_reconciliation_propagates_only_committed_existing_delta(real_c
 
 
 def test_empty_context_and_no_successor_have_no_phantom_transition(real_client):
-    """Read-like early returns must not fabricate History or bump sequence."""
+    """Read-like early returns may confirm actual state but cannot fabricate History."""
     client, library, player, playback = real_client
     start(client)
     run(playback.queue_manager.clear())
@@ -191,10 +191,16 @@ def test_empty_context_and_no_successor_have_no_phantom_transition(real_client):
     subscriber = coordinator.subscribe()
     service = wire(playback, None, coordinator)
     run(service.play_context(PlaybackContext(context_id="empty", source_type="SONGS", ordered_song_ids=())))
+    assert coordinator.marker().sequence == 0 and subscriber.pending is None
     run(service.next())
     run(service.previous())
     assert server_snapshot(service) == before
-    assert coordinator.marker().sequence == 0 and subscriber.pending is None
+    # Read-like selection creates no business transition, but final complete
+    # samples now publish actual confirmation and the rebound control lifetime.
+    assert subscriber.pending.domains == frozenset({'playback'})
+    observed = run(service.get_observation())
+    assert observed.sync_status == 'CONFIRMED'
+    assert observed.covered_playback_updated_at == before[1].updated_at
     assert run(player.status()).song_uri == "a.flac"
 
 
@@ -338,10 +344,11 @@ def test_successor_selection_preserves_history_and_joint_domains(real_client, mo
                       f"/api/playback/queue/items/{current['queue_item_id']}", key="successor")
     assert response.status_code == (200 if operation == "next" else 204), response.text
     final = server_snapshot(service)
-    domains = frozenset({"queue"} if candidate == "none" and operation == "next"
+    domains = frozenset({"queue", "playback"} if candidate == "none" and operation == "next"
                         else {"queue", "playback", "history"})
     assert subscriber.pending.domains == domains
-    assert [e.domains for e in events] == [domains] and coordinator.marker().sequence == 1
+    business_domains = frozenset({'queue'}) if candidate == 'none' and operation == 'next' else domains
+    assert [e.domains for e in events] == [business_domains] and coordinator.marker().sequence == 1
     if candidate == "none" and operation == "next":
         assert final[1:] == before[1:]
         assert run(player.status()).song_uri == "a.flac"

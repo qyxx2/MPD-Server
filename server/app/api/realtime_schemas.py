@@ -53,6 +53,7 @@ class PlaybackObservationResponse(BaseModel):
     matches_current: bool | None
     position_seconds: float | None = Field(ge=0)
     duration_seconds: float | None = Field(ge=0)
+    covered_playback_updated_at: datetime | None = None
     observed_at: datetime | None
     freshness: Literal["fresh", "stale", "unknown"]
     reconciliation_required: bool

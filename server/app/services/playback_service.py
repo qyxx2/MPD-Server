@@ -115,13 +115,19 @@ def _atomic_history_transition(
                 } else None
             else:
                 operation_id = prior[1]
+            prior_candidate = self._observation_candidate
+            self._observation_candidate = None
             observation_before = (self._observations.generation, self._recovery.binding)
             try:
                 if prior is None or prior[0] is not owner:
                     with (self.queue_manager.queue_repository.fixed_allocation(operation_id),
                           self.autoplay.fixed_random(operation_id)):
-                        return await operation(self, *args, **kwargs)
-                return await operation(self, *args, **kwargs)
+                        result = await operation(self, *args, **kwargs)
+                else:
+                    result = await operation(self, *args, **kwargs)
+                if self._observation_candidate is not None:
+                    await self._observations.handoff(*self._observation_candidate)
+                return result
             except (PlayerUnavailable, PlayerCommandError, TimeoutError) as error:
                 if (isinstance(error, (PlayerUnavailable, TimeoutError))
                         or error.command in {"status", "queue_entries", "read_execution_sample", "playlistinfo", "currentsong"}):
@@ -136,6 +142,7 @@ def _atomic_history_transition(
             finally:
                 if observation_before != (self._observations.generation, self._recovery.binding):
                     self._stage_observation_request()
+                self._observation_candidate = prior_candidate
                 self._execution_owner = prior
                 self._queue_preflight = prior_preflight
                 self._queue_preflight_repaired = prior_repaired
@@ -259,6 +266,7 @@ class PlaybackService:
         self._song_requests: dict[str, tuple[str, str | None, int, int, str]] = {}
         self._request_observation: Callable[[], None] | None = None
         self._observation_request_owners: set[object] = set()
+        self._observation_candidate: tuple[ExecutionSample, datetime, PlayerPort] | None = None
 
     def set_observation_request(self, callback: Callable[[], None] | None) -> None:
         """Wire the process-owned observer without coupling commands to its task."""
@@ -276,7 +284,7 @@ class PlaybackService:
 
         def committed() -> None:
             self._observation_request_owners.discard(owner)
-            if self._request_observation is not None:
+            if self._request_observation is not None and not self._observations.handoff_is_current():
                 self._request_observation()
 
         # Synchronous post-COMMIT hook: no I/O, no wait for domain delivery.
@@ -850,6 +858,8 @@ class PlaybackService:
             await self._observations.confirmed(status)
 
     async def _confirm_current_occurrence(self, status: PlayerStatus) -> None:
+        observed_at = self._observations.clock()
+        observed_player = self.player
         sample = await self._read_execution_sample()
         mapping = self._recovery.synced_entries
         controlled_sample = self._recovery.sync_sample
@@ -875,6 +885,7 @@ class PlaybackService:
             self._recovery.invalidate_binding()
             raise PlaybackReconciliationError("MPD current occurrence differs from Server Queue")
         self._recovery.bind(sample, item_ids=ids, queue_revision=queue.revision)
+        self._observation_candidate = (sample, observed_at, observed_player)
 
     async def _refill_empty_pending(self) -> None:
         state = await self.queue_manager.get_playback_state()
@@ -1008,6 +1019,8 @@ class PlaybackService:
         self, target: PlaybackControlTarget, *, expected_state: PlayerState,
         position: float | None, started: float,
     ) -> PlayerStatus:
+        observed_at = self._observations.clock()
+        observed_player = self.player
         try:
             sample = await self._require_control_target(target)
         except PlaybackTargetConflictError as error:
@@ -1019,6 +1032,7 @@ class PlaybackService:
                 elapsed is None or elapsed < position - 0.05 or elapsed > position + allowance))):
             self._control_targets.invalidate()
             raise PlaybackReconciliationError("MPD did not confirm transport state and position")
+        self._observation_candidate = (sample, observed_at, observed_player)
         return status
 
     @_atomic_history_transition

@@ -66,7 +66,7 @@ def build_fixture(client, service):
     identities = {playlist['playlist_id']: 'p'}
     identity_fields = {'epoch', 'queue_item_id', 'playback_context_id', 'session_id', 'token', 'bound_queue_item_id'}
     time_fields = {'captured_at', 'updated_at', 'created_at', 'observed_at', 'started_at', 'ended_at',
-                   'last_scanned_at', 'last_seen_at'}
+                   'last_scanned_at', 'last_seen_at', 'covered_playback_updated_at'}
 
     def normalize(value, field=''):
         if isinstance(value, dict):
@@ -87,11 +87,6 @@ def build_fixture(client, service):
 def test_task9_server_fixture_to_resource_action_route_convergence(real_client):
     client, _, _, service = real_client
     expected = json.loads(FIXTURE.read_text())
-    # The existing Web golden remains a valid protocol sample. B3 removes the
-    # collection-play reassertion and then the song-play reassertion; keep the
-    # full resource/receipt equality check with the actual committed waterlines.
-    for phase, sequence in zip(expected['phases'], (14, 16, 18, 20), strict=True):
-        phase['snapshot']['sequence'] = sequence
     assert build_fixture(client, service) == expected
 
 

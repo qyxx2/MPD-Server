@@ -88,11 +88,12 @@ def test_wakeup_belongs_to_outer_commit(real_client, operation, rollback):
                 await run_transaction(path, outer)
         else:
             await run_transaction(path, outer)
-        assert wakes == ([] if rollback else [True])
+        expected = [] if rollback or operation != 'pause' else [True]
+        assert wakes == expected
         # Read-only sampling and snapshots do not cause a wake feedback loop.
         await playback.observe()
         await playback.get_observation()
-        assert wakes == ([] if rollback else [True])
+        assert wakes == expected
     run(scenario())
 
 
@@ -177,13 +178,16 @@ def test_inflight_old_sample_is_rejected_and_followed_without_polling(real_clien
             assert not first_result
             release.set()
             await asyncio.wait_for(sleeps.get(), 1)
-            assert first_result[0].freshness != 'fresh'
+            if operation == 'pause':
+                assert first_result[0].freshness != 'fresh'
+            else:
+                assert first_result[0] == await playback.get_observation()
             observed = await playback.get_observation()
             assert observed.freshness == observed.actual_freshness == 'fresh'
             assert observed.matches_current is True and observed.sync_status == 'CONFIRMED'
             assert observed.control_target is not None
             assert observed.actual_state.value == ('paused' if operation == 'pause' else 'playing')
-            assert calls == 2
+            assert calls == (2 if operation == 'pause' else 1)
         finally:
             await observer.close()
             await asyncio.gather(task, return_exceptions=True)
@@ -222,7 +226,13 @@ def test_wakeup_reads_are_separate_from_mutation_budget(tmp_path, monkeypatch, s
                 playback=j.service,
                 output=SimpleNamespace(get_state=cached, get_observation=cached), sleep=sleep,
             )
-            j.service.set_observation_request(observer.request_observation)
+            wakes = []
+
+            def request():
+                wakes.append(True)
+                observer.request_observation()
+
+            j.service.set_observation_request(request)
             observer_task = asyncio.create_task(observer.run())
             try:
                 await asyncio.wait_for(sleeps.get(), 5)
@@ -234,8 +244,11 @@ def test_wakeup_reads_are_separate_from_mutation_budget(tmp_path, monkeypatch, s
                     await j.service.add_to_queue('d')
                 else:
                     await j.service.next()
-                await asyncio.wait_for(sleeps.get(), 5)
-                assert counts == {'mutation': budget, 'observer': 1}
+                # The observer remains in its blocked periodic wait: the final
+                # complete mutation sample has already satisfied this demand.
+                assert wakes == []
+                assert sleeps.empty()
+                assert counts == {'mutation': budget}
                 controls = Counter(command.split()[0] for command in j.controls(cutoff))
                 assert controls == {
                     'next': {'playid': 1, 'deleteid': 1},
@@ -245,7 +258,7 @@ def test_wakeup_reads_are_separate_from_mutation_budget(tmp_path, monkeypatch, s
                 snapshot = await j.state.get_full_snapshot()
                 assert snapshot.playback_observation.sync_status == 'CONFIRMED'
                 assert snapshot.playback_observation.matches_current is True
-                print(f'B6-A size={size} operation={operation} samples={dict(counts)} controls={dict(controls)}')
+                print(f'B6-B size={size} operation={operation} samples={dict(counts)} controls={dict(controls)}')
             finally:
                 await observer.close()
                 await asyncio.gather(observer_task, return_exceptions=True)

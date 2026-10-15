@@ -40,7 +40,7 @@ def request(operation, target):
 
 
 @pytest.mark.parametrize("operation", ["play-next", "queue", "reorder", "delete", "clear"])
-def test_queue_only_notification_preserves_current_occurrence_and_history(
+def test_queue_handoff_notification_preserves_current_occurrence_and_history(
     real_client, monkeypatch, operation,
 ):
     """Missing/early queue invalidation must fail despite successful REST mutation."""
@@ -76,8 +76,8 @@ def test_queue_only_notification_preserves_current_occurrence_and_history(
     method, endpoint, body, code = request(operation, duplicate)
     response = mutate(client, method, endpoint, body, key="queue-only")
     assert response.status_code == code, response.text
-    assert subscriber.pending is not None, "committed queue-only delta was never registered"
-    assert subscriber.pending.domains == frozenset({"queue"})
+    assert subscriber.pending is not None, "committed queue and observation delta was never registered"
+    assert subscriber.pending.domains == frozenset({"queue", "playback"})
     assert len(events) == 1 and events[0].event_type == "playback.changed"
     assert events[0].domains == frozenset({"queue"})
     final = server_snapshot(service)
@@ -153,7 +153,7 @@ def test_queue_terminal_failure_rolls_back_then_retry_and_replay(real_client, mo
     monkeypatch.setattr(records, "create", original_create)
     response = mutate(client, method, endpoint, body, key="retry")
     assert response.status_code == code, response.text
-    assert subscriber.pending.domains == frozenset({"queue"})
+    assert subscriber.pending.domains == frozenset({"queue", "playback"})
     assert [e.domains for e in events] == [frozenset({"queue"})]
     final = server_snapshot(service)
     assert final[1:] == before[1:]
@@ -257,7 +257,7 @@ def test_queue_confirmation_and_outer_commit_barriers(real_client, monkeypatch, 
         release.set()
         await asyncio.wait_for(task, 1)
         assert coordinator.marker().sequence == 1
-        assert subscriber.pending.domains == frozenset({"queue"})
+        assert subscriber.pending.domains == frozenset({"queue", "playback"})
         assert [e.domains for e in events] == [frozenset({"queue"})]
 
     run(scenario())
@@ -314,7 +314,7 @@ def test_current_availability_change_does_not_end_session_during_queue_clear(
     subscriber = coordinator.subscribe()
     service = wire(playback, None, coordinator)
     run(service.clear())
-    assert subscriber.pending.domains == frozenset({"queue"})
+    assert subscriber.pending.domains == frozenset({"queue", "playback"})
     assert server_snapshot(service)[1:] == before[1:]
     assert run(player.status()).song_id == current_id
     assert_execution_relationship(service, player, current_id=current.queue_item_id)
@@ -372,7 +372,7 @@ def test_queue_cancellation_preserves_commit_boundary(real_client, after_commit)
     assert server_snapshot(service)[1:] == before[1:]
     if after_commit:
         assert coordinator.marker().sequence == 1
-        assert subscriber.pending.domains == frozenset({"queue"})
+        assert subscriber.pending.domains == frozenset({"queue", "playback"})
         assert len(run(service.queue_manager.list_items())) == len(before[0].items) + 1
         assert_execution_relationship(service, player)
     else:
@@ -414,7 +414,7 @@ def test_publisher_failure_preserves_queue_terminal_and_invalidation(real_client
     response = mutate(client, "POST", "/api/playback/songs/a/queue", key="delivery")
     assert response.status_code == 200, response.text
     assert "queue delivery failed" in caplog.text
-    assert subscriber.pending.domains == frozenset({"queue"})
+    assert subscriber.pending.domains == frozenset({"queue", "playback"})
     assert server_snapshot(service)[1:] == before[1:]
     terminal = run(app.state.idempotency_service._repository.get_by_key("delivery"))
     assert terminal is not None and terminal.response_status == 200

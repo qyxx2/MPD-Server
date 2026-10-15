@@ -61,9 +61,9 @@ def test_state_api_fails_whole_local_snapshot_but_keeps_external_degradation(
     degraded = client.get("/api/state")
     assert degraded.status_code == 200, degraded.text
     body = degraded.json()
-    assert body["playback_observation"]["freshness"] == ("stale" if sampled else "unknown")
+    assert body["playback_observation"]["freshness"] == "stale"  # Context handed off its real sample.
     assert body["playback_observation"]["error_code"] == "PLAYER_UNAVAILABLE"
-    assert body["playback_observation"]["position_seconds"] == (0 if sampled else None)
+    assert body["playback_observation"]["position_seconds"] == 0
     assert body["output_observation"]["freshness"] == ("stale" if sampled else "unknown")
     assert body["output_observation"]["error_code"] == "PLAYER_UNAVAILABLE"
     assert body["queue"] == before[0].model_dump(mode="json")

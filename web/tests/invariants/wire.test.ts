@@ -21,9 +21,9 @@ test('REST and WS decode the actual backend fixture without inventing null value
 
 test('old server missing target and additive actual fields remains unconfirmed', () => {
   const legacy = structuredClone(fixture.snapshot) as Record<string, any>
-  for (const field of ['control_target', 'actual_current', 'actual_freshness', 'bound_queue_item_id', 'sync_status']) delete legacy.playback_observation[field]
+  for (const field of ['control_target', 'actual_current', 'actual_freshness', 'bound_queue_item_id', 'sync_status', 'covered_playback_updated_at']) delete legacy.playback_observation[field]
   const state = parseSnapshot(legacy)
-  expect(state.playback_observation).toMatchObject({ control_target: null, actual_current: null, actual_freshness: 'unknown', bound_queue_item_id: null, sync_status: 'UNBOUND' })
+  expect(state.playback_observation).toMatchObject({ control_target: null, actual_current: null, actual_freshness: 'unknown', bound_queue_item_id: null, sync_status: 'UNBOUND', covered_playback_updated_at: null })
   expect(legacy.playback_observation).not.toHaveProperty('control_target')
 })
 

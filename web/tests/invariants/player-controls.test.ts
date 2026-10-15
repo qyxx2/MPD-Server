@@ -3,6 +3,50 @@ import { expect, it, vi } from 'vitest'
 import { playerPage, playerState, fixture, flushPromises } from '../support/player'
 import { deferred } from '../support/transport'
 import { parseSnapshot } from '../../src/services/wire'
+
+it.each([false, true])('seek converges on a covered commit with the original sample time (WS first: %s)', async wsFirst => {
+  const receipt = deferred<Response>()
+  const after = playerState(); after.sequence++
+  after.playback!.updated_at = '2026-10-15T08:00:02Z'
+  after.playback_observation.observed_at = '2026-10-15T08:00:01Z'
+  after.playback_observation.position_seconds = 12
+  Object.assign(after.playback_observation, { covered_playback_updated_at: after.playback!.updated_at })
+  const h = playerPage(receipt.promise, Response.json(after))
+  const actions = createPlayerActions(h.store, { api: h.api, refresh: h.realtime.refresh })
+  const pending = actions.act('seek', 12)
+  if (wsFirst) h.store.acceptRefresh(parseSnapshot(after), 1)
+  receipt.resolve(Response.json({ ...fixture.playback_receipt, updated_at: after.playback!.updated_at }))
+  await pending; await flushPromises()
+  expect(h.store.snapshot?.playback_observation.observed_at).toBe('2026-10-15T08:00:01Z')
+  expect(actions.ui.syncing).toBe(false)
+  expect(actions.ui.seekPreview).toBeNull()
+  expect(h.network.requests.filter(r => r.init?.method === 'POST')).toHaveLength(1)
+  actions.dispose(); h.wrapper.unmount()
+})
+
+it('an observation covering an older commit cannot finish the current seek', async () => {
+  const after = playerState(); after.sequence++
+  after.playback!.updated_at = '2026-10-15T08:00:02Z'
+  after.playback_observation.observed_at = '2026-10-15T08:00:01Z'
+  Object.assign(after.playback_observation, { covered_playback_updated_at: '2026-10-15T08:00:00Z' })
+  const h = playerPage(Response.json({ ...fixture.playback_receipt, updated_at: after.playback!.updated_at }), Response.json(after))
+  const actions = createPlayerActions(h.store, { api: h.api, refresh: h.realtime.refresh })
+  await actions.act('seek', 12); await flushPromises()
+  expect(actions.ui.syncing).toBe(true)
+  actions.dispose(); h.wrapper.unmount()
+})
+
+it.each(['2026-10-15T08:00:01Z', '2026-10-15T08:00:02.000050Z'])('two commits within one millisecond retain distinct handoff watermarks (sample %s)', async observedAt => {
+  const after = playerState(); after.sequence++
+  after.playback!.updated_at = '2026-10-15T08:00:02.000100Z'
+  after.playback_observation.observed_at = observedAt
+  after.playback_observation.covered_playback_updated_at = after.playback!.updated_at
+  const h = playerPage(Response.json({ ...fixture.playback_receipt, updated_at: '2026-10-15T08:00:02.000900Z' }), Response.json(after))
+  const actions = createPlayerActions(h.store, { api: h.api, refresh: h.realtime.refresh })
+  await actions.act('seek', 12); await flushPromises()
+  expect(actions.ui.syncing).toBe(true)
+  actions.dispose(); h.wrapper.unmount()
+})
 it('resume uses target receipt without changing canonical position or occurrence; pending locks competing controls', async () => {
   const receipt = deferred<Response>()
   const h = playerPage(receipt.promise, Response.json(playerState()))
