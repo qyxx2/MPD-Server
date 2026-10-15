@@ -197,6 +197,7 @@ async def lifespan(app: FastAPI):
         # Complete existing local Queue initialization before read-only tasks run.
         await queue_repository.get_snapshot()
         observer = StateObserver(playback=playback_service, output=app.state.output_manager)
+        playback_service.set_observation_request(observer.request_observation)
         app.state.state_observer = observer
         task = asyncio.create_task(observer.run(), name='state-observer')
         app.state.state_observer_task = task
@@ -217,6 +218,7 @@ async def lifespan(app: FastAPI):
             if runner is not None:
                 await runner.close()
                 await asyncio.gather(recovery_task, return_exceptions=True)
+            playback_service.set_observation_request(None)
             await observer.close()
             await asyncio.gather(task, return_exceptions=True)
             coordinator.close()

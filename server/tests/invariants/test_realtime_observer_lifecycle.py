@@ -177,6 +177,8 @@ def test_composition_root_starts_one_sampler_without_clients_and_awaits_shutdown
             assert application.state.library_scanner.coordinator is coordinator
             assert application.state.playlist_service._coordinator is coordinator
             assert application.state.playback_service._coordinator is coordinator
+            assert (application.state.playback_service._request_observation
+                    == application.state.state_observer.request_observation)
             task = application.state.state_observer_task
             assert not task.done()
             snapshot = await application.state.state_service.get_full_snapshot()
@@ -184,6 +186,7 @@ def test_composition_root_starts_one_sampler_without_clients_and_awaits_shutdown
             assert snapshot.output_observation.freshness == 'fresh'
             assert snapshot.playback is None and not snapshot.history.has_entries
         assert task.done()
+        assert application.state.playback_service._request_observation is None
         assert not subscription.valid and subscription.pending is None
         assert (await player.status()).state.value == 'stopped'
 

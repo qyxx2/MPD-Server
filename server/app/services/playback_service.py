@@ -112,6 +112,7 @@ def _atomic_history_transition(
                 } else None
             else:
                 operation_id = prior[1]
+            observation_before = (self._observations.generation, self._recovery.binding)
             try:
                 if prior is None or prior[0] is not owner:
                     with (self.queue_manager.queue_repository.fixed_allocation(operation_id),
@@ -130,6 +131,8 @@ def _atomic_history_transition(
                                 self._recovery.unknown_executions.add(intent_id)
                 raise
             finally:
+                if observation_before != (self._observations.generation, self._recovery.binding):
+                    self._stage_observation_request()
                 self._execution_owner = prior
                 self._queue_preflight = prior_preflight
                 self._queue_preflight_repaired = prior_repaired
@@ -250,6 +253,31 @@ class PlaybackService:
         self._explicit_stop = False
         self._explicit_stop_generation = 0
         self._song_requests: dict[str, tuple[str, str | None, int, int, str]] = {}
+        self._request_observation: Callable[[], None] | None = None
+        self._observation_request_owners: set[object] = set()
+
+    def set_observation_request(self, callback: Callable[[], None] | None) -> None:
+        """Wire the process-owned observer without coupling commands to its task."""
+        self._request_observation = callback
+
+    def _stage_observation_request(self) -> None:
+        if self._request_observation is None:
+            return
+        path = self.queue_manager.queue_repository.path
+        owner = transaction_identity(path)
+        if owner in self._observation_request_owners:
+            return
+        self._observation_request_owners.add(owner)
+        on_transaction_rollback(path, lambda: self._observation_request_owners.discard(owner))
+
+        def committed() -> None:
+            self._observation_request_owners.discard(owner)
+            if self._request_observation is not None:
+                self._request_observation()
+
+        # Synchronous post-COMMIT hook: no I/O, no wait for domain delivery.
+        # The observer task can only resume after this boundary releases the lock.
+        on_transaction_visible(path, committed)
 
     async def _recovery_current_identity(self):
         state = await self.queue_manager.get_playback_state()
