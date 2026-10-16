@@ -102,6 +102,8 @@ h1 { font-size: 1.25rem; font-weight: 650; margin-top: .25rem; }
 .collection-count { flex: none; font-size: .8rem; color: var(--text-secondary); }
 .collection-actions { display: flex; flex-wrap: nowrap; justify-content: center; gap: .5rem; margin: .75rem 0; }
 .collection-actions button { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; white-space: nowrap; color: var(--accent); background: var(--glass-surface); border: 1px solid var(--subtle-border); }
+.collection-actions .song-sort { min-height: 44px; min-width: 0; max-width: 10rem; flex: 1; padding: .55rem .4rem; color: var(--accent); background: var(--glass-surface); border: 1px solid var(--subtle-border); border-radius: var(--radius-small); }
+.collection-actions .song-sort option { color: var(--text-primary); background: var(--page-background); }
 .library-back { display: inline-flex; gap: .4rem; min-height: 44px; align-items: center; padding: .3rem .65rem .3rem .2rem; margin-bottom: 1rem; font-size: 1.05rem; font-weight: 600; color: var(--text-secondary); text-decoration: none; }
 .collection-title { display: flex; align-items: baseline; gap: .55rem; }
 .album-summary { display: flex; gap: 1rem; align-items: center; margin: 0 0 1rem; min-width: 0; }

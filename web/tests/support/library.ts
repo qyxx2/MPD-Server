@@ -25,7 +25,7 @@ export async function libraryPage(path = '/library', override?: (path: string, i
     if (path.endsWith('/songs') && path !== '/api/library/songs') return Response.json(wire.album_songs)
     if (path.startsWith('/api/library/songs/')) return Response.json({ ...playerState().current_song, song_id: decodeURIComponent(path.split('/').at(-1)!) })
     for (const kind of ['songs', 'albums', 'artists', 'genres', 'years', 'tags'] as const)
-      if (path === `/api/library/${kind}`) return Response.json(wire[kind])
+      if (url.pathname === `/api/library/${kind}`) return Response.json(wire[kind])
     throw new Error(`Unexpected ${init?.method} ${path}`)
   } })
   const realtime = { start: vi.fn(), stop: vi.fn(), refresh: vi.fn(async () => { store.acceptRefresh(await api.get('/api/state', parseSnapshot), store.marker.generation) }) }

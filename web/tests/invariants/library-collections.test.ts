@@ -5,7 +5,7 @@ import { playerState } from '../support/player'
 import { deferred } from '../support/transport'
 
 it('album_header_separates_navigation_and_metadata_with_cover_fallback', async () => {
-  const h = await libraryPage('/library')
+  const h = await libraryPage('/library?kind=albums')
   expect(h.wrapper.findAll('[data-library-kind]')[0]!.attributes('data-library-kind')).toBe('songs')
   await h.wrapper.get('[data-collection-id]').trigger('click'); await flushPromises()
   expect(h.wrapper.get('.library-back').find('svg').exists()).toBe(true)
