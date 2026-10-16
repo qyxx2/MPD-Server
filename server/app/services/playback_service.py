@@ -1861,9 +1861,8 @@ class PlaybackService:
                     target = queue_item_id or "prepare:new"
                     items += ((target, song.file_uri),)
                     commands.append(ExecutionCommand("add", target, uri=song.file_uri))
-                # Only ambiguous URI selection needs the existing ID command.
-                # In either path the executor confirms the selected occurrence's
-                # exact MPD ID; ordinary unique-URI transport stays unchanged.
+                # Preserve the URI hint in fixed plans; the executor always
+                # sends the verified occurrence's ID, including unique URIs.
                 play_uri = song.file_uri
                 if queue_item_id is not None and sum(uri == song.file_uri for _, uri in items) > 1:
                     play_uri = None

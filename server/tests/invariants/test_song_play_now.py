@@ -156,7 +156,7 @@ def test_failures_restore_joint_state_without_success_notification(real_client, 
     records = IdempotencyRepository(library.path)
     connect = database._connect
     if failure == 'command':
-        async def reject(*args):
+        async def reject(*args, **kwargs):
             raise PlayerCommandError('playid', 'song command rejected')
         monkeypatch.setattr(player, 'queue_play', reject)
     elif failure == 'confirmation':

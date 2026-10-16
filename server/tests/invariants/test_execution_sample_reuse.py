@@ -49,8 +49,9 @@ def test_simple_flow_saves_only_the_intermediate_planning_read(tmp_path, monkeyp
                 # full result read, and both execute calls retain fresh entry reads.
                 if operation == operation_to_assert:
                     assert measured['sample'] == expected_samples
-                    # URI play and move each read playlistinfo independently.
-                    assert commands['playlistinfo'] == expected_samples + (2 if operation == 'played' else 1)
+                    # B5 sends the verified ID directly; only move retains an
+                    # independent playlistinfo outside the complete samples.
+                    assert commands['playlistinfo'] == expected_samples + (operation != 'next')
                     assert commands['status'] == {'next': 20, 'song': 19, 'played': 24}[operation]
                     assert commands['currentsong'] == {'next': 4, 'song': 3, 'played': 4}[operation]
     asyncio.run(scenario())

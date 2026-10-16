@@ -121,7 +121,7 @@ def test_start_track_failure_does_not_advance_service_state_or_history(
     before = run(components["state"].get_state())
     assert before is not None
 
-    player.fail_next("play", "injected play failure")
+    player.fail_next("queue_play", "injected play failure")
 
     with pytest.raises(PlayerCommandError, match="injected play failure"):
         run(service.start_track("b"))
@@ -284,7 +284,7 @@ def test_next_failure_does_not_advance_service_state(components):
     before = run(components["state"].get_state())
     assert before is not None
 
-    player.fail_next("play", "injected next failure")
+    player.fail_next("queue_play", "injected next failure")
     with pytest.raises(PlayerCommandError, match="injected next failure"):
         run(service.next())
 
@@ -588,7 +588,7 @@ def test_play_context_does_not_fake_state_or_history_when_play_fails(
     assert before_state is not None
     assert before_history is not None
 
-    player.fail_next("play", "injected collection play failure")
+    player.fail_next("queue_play", "injected collection play failure")
     context = make_playback_context("a", "b", "c")
 
     with pytest.raises(PlayerCommandError, match="injected collection play failure"):

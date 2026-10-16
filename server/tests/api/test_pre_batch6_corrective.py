@@ -161,7 +161,7 @@ def test_playlist_persisted_members_are_resource_members(real_client, read):
     [
         ("reorder", "queue_move"),
         ("delete_pending", "queue_delete"),
-        ("delete_current", "play"),
+        ("delete_current", "queue_play"),
         ("clear", "queue_delete"),
     ],
 )
@@ -782,7 +782,7 @@ def test_next_skip_failure_rolls_back_and_same_key_retries(
     active = service.history_service.active_event
     actual_status = player.status
     if failure == "play":
-        player.fail_next("play")
+        player.fail_next("queue_play")
     elif failure == "disconnected":
         player.disconnect()
     else:

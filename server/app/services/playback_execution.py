@@ -136,10 +136,12 @@ class ExecutionSynchronizer:
         elif command.kind == "move":
             await self.player.queue_move(self._id(intent, command.item_id), (command.before_mpd_song_id if command.before_item_id is None else self._id(intent, command.before_item_id)))
         elif command.kind == "play":
-            if command.uri is not None:
-                await self.player.play(command.uri)
-            else:
-                await self.player.queue_play(self._id(intent, command.item_id))
+            # The fresh full verification authorizes this fixed occurrence's
+            # mapped ID (or confirmed add receipt), never a new URI lookup.
+            await self.player.queue_play(
+                self._id(intent, command.item_id),
+                expected_connection_epoch=intent.baseline.connection_epoch,
+            )
         elif command.kind == "seek":
             await self.player.seek(command.seconds)
         else:
