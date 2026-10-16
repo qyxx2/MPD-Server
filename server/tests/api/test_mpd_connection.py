@@ -181,7 +181,8 @@ def test_saved_endpoint_overrides_invalid_old_environment_and_adapter_uses_it(
     monkeypatch.delattr(app.state, "player", raising=False)
     created = []
 
-    def adapter(host, *, port, password, uri_mapper):
+    def adapter(host, *, port, password, uri_mapper, omit_song_tags):
+        assert omit_song_tags is True
         created.append((host, port, password))
         return MockMPD()
 

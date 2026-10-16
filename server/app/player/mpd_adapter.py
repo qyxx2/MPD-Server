@@ -51,6 +51,7 @@ class MPDAdapter(PlayerPort):
         command_timeout: float = 5.0,
         connection_factory: ConnectionFactory | None = None,
         uri_mapper: MusicUriMapper | None = None,
+        omit_song_tags: bool = False,
     ) -> None:
         self.uri_mapper = uri_mapper
         self.host = host
@@ -62,6 +63,9 @@ class MPDAdapter(PlayerPort):
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._connection_epoch: str | None = None
+        # Opt in only where consumers use file/Id/Pos and status duration.
+        # Capability probes and other general-purpose clients keep full tags.
+        self._omit_song_tags = omit_song_tags
         self._lock = asyncio.Lock()
 
     async def close(self) -> None:
@@ -323,6 +327,27 @@ class MPDAdapter(PlayerPort):
                         error_code=exc.error_code,
                         command_list_index=exc.command_list_index,
                     ) from exc
+            if self._omit_song_tags:
+                try:
+                    await asyncio.wait_for(
+                        self._execute("tagtypes", "clear"), timeout=self.command_timeout,
+                    )
+                    tags = await asyncio.wait_for(
+                        self._execute("tagtypes"), timeout=self.command_timeout,
+                    )
+                    if tags.pairs:
+                        raise MPDProtocolError("MPD song tag filter was not applied")
+                except (TimeoutError, ConnectionError, OSError, EOFError,
+                        UnicodeError, MPDProtocolError):
+                    # No application command has been sent on this connection.
+                    # Discard even a partially configured mask and reconnect with
+                    # the default full response. Do not repeatedly probe a server
+                    # that rejects, ignores or cannot verify this optional setting.
+                    self._omit_song_tags = False
+                    await self.close()
+                    log_event('mpd_song_tag_filter_fallback', level=30)
+                    await self._ensure_connected()
+                    return
             self._connection_epoch = uuid4().hex
             log_event('mpd_connected')
         except PlayerCommandError:

@@ -136,6 +136,7 @@ async def lifespan(app: FastAPI):
             player = (MockMPD() if config.mpd_mode == 'mock' else MPDAdapter(
                 connection.active.host, port=connection.active.port, password=config.mpd_password,
                 uri_mapper=MusicUriMapper(config.music_root, config.mpd_uri_prefix),
+                omit_song_tags=True,
             ))
             owned_player = player
             if config.mpd_mode == 'real':
