@@ -70,14 +70,15 @@ it('decoder_generation_and_disconnect_reject_old_success_until_initial_recovery'
   expect(() => parseSnapshot({ ...golden.phases[1], library_sync: { ...golden.phases[1]!.library_sync, generation: -1 } })).toThrow()
 })
 
-it('keeps_the_appbar_spinner_visible_while_syncing_with_an_unresolved_warning', async () => {
+it('keeps_the_appbar_warning_above_syncing_without_losing_busy_detail', async () => {
   const { createNoticeStore } = await import('../../src/stores/notices')
   const { default: PlaybackStatus } = await import('../../src/components/player/PlaybackStatus.vue')
   const activities = createNoticeStore()
   activities.set({ id: 'previous-failure', scope: 'task', status: 'failed', message: '旧操作失败' })
   activities.set({ id: 'sync', scope: 'library', status: 'syncing', message: '同步中' })
   const wrapper = mount(PlaybackStatus, { props: { activities } })
-  expect(wrapper.find('.status-spinner').exists()).toBe(true)
+  expect(wrapper.find('.status-spinner').exists()).toBe(false)
+  expect(wrapper.find('.status-warning').exists()).toBe(true)
   expect(wrapper.get('.status-toggle').classes()).toContain('warning')
   await wrapper.get('.status-toggle').trigger('click')
   expect(wrapper.get('.status-details').text()).toContain('旧操作失败')

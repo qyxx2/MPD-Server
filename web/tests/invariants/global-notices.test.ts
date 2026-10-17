@@ -191,3 +191,21 @@ it.each([
     expect(h.wrapper.find('button[aria-label^="重新读取"]').exists()).toBe(true)
   } finally { h.wrapper.unmount() }
 })
+
+it('expired successful activity keeps history and never suppresses disconnection recovery', async () => {
+  const { vi } = await import('vitest')
+  const h = await shellPage(new Response(null, { status: 204 }), Response.json(playerState()))
+  vi.useFakeTimers()
+  const intent = h.api.createIntent('DELETE', '/api/playback/queue/items/a', undefined)
+  await h.tasks.run(intent, () => undefined, async () => {}, '删除条目'); await flushPromises()
+  const writes = h.network.requests.filter(r => r.init?.method === 'DELETE').length
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(h.wrapper.find('.status-toggle').exists()).toBe(false)
+  expect(h.wrapper.get(`[data-notice="${intent.key}"]`).attributes('data-status')).toBe('success')
+  h.store.markDisconnected(); await flushPromises()
+  expect(h.wrapper.find('.status-warning').exists()).toBe(true)
+  await h.wrapper.get('.status-toggle').trigger('click')
+  expect(h.wrapper.find('button[aria-label="重新读取状态"]').exists()).toBe(true)
+  expect(h.network.requests.filter(r => r.init?.method === 'DELETE')).toHaveLength(writes)
+  h.wrapper.unmount()
+})

@@ -10,6 +10,8 @@
 - [音频与输出架构](specs/2026-09-24-system-architecture-playback-output-design.md)：MPD→ALSA→USB DAC；未来客户端串流只作历史设计候选。
 - [Library、Playlist、Search 规格](specs/2026-09-24-library-playlist-tag-search-design-2-1.md)：曲库只读、数据与可用性语义。
 - [Web UI 视觉合同](specs/2026-10-03-web-pwa-visual-design.md)：页面视觉/通知/导航合同。
+- [横屏常驻播放器与右侧工作区](specs/2026-10-16-responsive-landscape-player-design.md)：涉及 iPad/手机横屏、桌面双栏、响应式导航或共享AppBar状态消隐时必读；含已确认方向、尺寸算法及验收矩阵。B1–B4 Gate通过；B5自主验证完成，最终实机/PWA待验。
+- [横屏布局 B0–B5 执行计划](plans/2026-10-16-responsive-landscape-player-batch-plan.md)：含逐批实机Gate与验收记录；当前停在B5，见[B5最终验收](acceptance/2026-10-16-responsive-landscape-B5-acceptance.md)。2026-10-17用户授权提交、推送及CI镜像交付，由用户部署后实机测试。
 - [MPD 能力实测记录](../mpd-0.23.5-capabilities.md)及[探针 JSON](../mpd-0.23.5-probe-2026-09-26-091948.json)：历史设备证据，不能代替当前 MPD 能力确认。
 - [部署说明](../../deploy/README.md)和[根 README](../../README.md)。
 

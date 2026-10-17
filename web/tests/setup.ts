@@ -1,6 +1,12 @@
-import { afterEach, vi } from 'vitest'
+import { beforeEach, afterEach, vi } from 'vitest'
 
+// Existing UI contracts describe the protected portrait presentation.
+// Responsive tests explicitly override this baseline before mounting the shell.
+beforeEach(() => {
+  if (typeof window !== 'undefined') { vi.stubGlobal('innerWidth', 390); vi.stubGlobal('innerHeight', 844) }
+})
 afterEach(() => {
+  vi.unstubAllGlobals()
   vi.restoreAllMocks()
   vi.useRealTimers()
 })

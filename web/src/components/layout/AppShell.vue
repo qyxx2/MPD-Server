@@ -15,10 +15,17 @@ import { parsePlaylistResource } from '../../services/resourceWire'
 import { createFavoritesStore, favoritesKey } from '../../stores/favorites'
 import { createOutputActions, outputActionsKey } from '../settings/outputActions'
 import { createMPDConnection, mpdConnectionKey } from '../settings/mpdConnection'
+import PlayerPanel from '../player/PlayerPanel.vue'
+import { createLayoutMode, layoutModeKey } from './layoutMode'
 import AppBar from './AppBar.vue'
 import AppBackground from './AppBackground.vue'
 import BottomNavigation from './BottomNavigation.vue'
 const props = defineProps<{ store: PlayerStore; realtime: { start(): void; stop(): void; refresh?(): Promise<void> }; api?: PlayerRuntime['api'] }>()
+const capacity = ref<HTMLElement | null>(null)
+const layout = createLayoutMode(capacity)
+provide(layoutModeKey, layout)
+const playerInfoHeight = ref(280)
+function measurePlayer(height: number, width: number) { playerInfoHeight.value = height; layout.reportInfoHeight(height, width) }
 provide(playerKey, props.store)
 let tasks: TaskActions | null = null
 const runtime = props.api && props.realtime.refresh ? { api: props.api, refresh: () => props.realtime.refresh!(), mutationLocked: () => Boolean(tasks?.entries.value.some(record => record.state === 'pending' || record.state === 'unknown' || record.busy)) } : null
@@ -96,4 +103,4 @@ watch(() => tasks?.entries.value, (records, old = []) => {
 onMounted(() => props.realtime.start())
 onUnmounted(() => { mpdConnection?.dispose(); output?.dispose(); favorites?.stop(); queueUi.dispose(); library?.resources.stop(); playlists?.stop(); tasks?.dispose(); session.dispose(); artwork.dispose(); props.realtime.stop() })
 </script>
-<template><main class="app-shell"><AppBackground :source="background" /><div class="shell-frame"><AppBar /><div class="shell-content"><slot /></div><BottomNavigation /></div></main></template>
+<template><main class="app-shell" :data-layout="layout.mode.value" :data-player-density="layout.density.value" :data-height-fallback="layout.heightFallback.value" :style="{ '--player-info-height': `${playerInfoHeight}px` }"><span ref="capacity" class="layout-capacity" aria-hidden="true" /><AppBackground :source="background" /><div class="shell-frame"><AppBar /><div class="shell-stage"><PlayerPanel v-if="layout.mode.value === 'landscape'" presentation="landscape" @info-height="measurePlayer" /><div class="shell-content"><slot /></div></div><BottomNavigation /></div></main></template>

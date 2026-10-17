@@ -197,3 +197,35 @@ h1 { font-size: 1.25rem; font-weight: 650; margin-top: .25rem; }
 .settings-form .mpd-host-input { flex: 1 1 0; width: 0; min-width: 0; }
 .settings-form .mpd-port-input { flex: 0 0 calc(4ch + 1rem + 2px); width: calc(4ch + 1rem + 2px); font-variant-numeric: tabular-nums; }
 .mpd-address-separator { flex: none; color: var(--text-primary); }
+
+/* The shell owns one height budget; portrait retains its existing geometry. */
+.shell-stage { display: contents; }
+.app-shell {
+  --dock-bottom: clamp(12px, 1.5vh, 16px);
+  --stage-height: calc(100svh - env(safe-area-inset-top) - 44px - 8px - 60px - var(--dock-bottom) - env(safe-area-inset-bottom) - 12px);
+}
+.layout-capacity { position: fixed; visibility: hidden; pointer-events: none; width: 1rem; height: max(0px, var(--stage-height)); }
+.app-shell[data-layout="landscape"] {
+  --player-width: min(clamp(340px, 36vw, 400px), max(64px, calc(var(--stage-height) - var(--player-info-height))));
+  --workspace-width: clamp(420px, 46vw, 560px);
+  --workspace-gap: clamp(32px, 3.5vw, 48px);
+  padding: env(safe-area-inset-top) max(clamp(28px, 3.2vw, 48px), env(safe-area-inset-right)) 0 max(clamp(28px, 3.2vw, 48px), env(safe-area-inset-left));
+}
+@supports (height: 100dvh) {
+  .app-shell { --stage-height: calc(100dvh - env(safe-area-inset-top) - 44px - 8px - 60px - var(--dock-bottom) - env(safe-area-inset-bottom) - 12px); }
+}
+.app-shell[data-layout="landscape"] .shell-frame { max-width: 90rem; flex: none; height: 100%; }
+.app-shell[data-layout="landscape"] .page-header { height: 44px; }
+.app-shell[data-layout="landscape"] .shell-stage { display: grid; grid-template-columns: var(--player-width) minmax(0, var(--workspace-width)); gap: var(--workspace-gap); justify-content: center; height: var(--stage-height); min-height: 0; margin-top: 8px; }
+.app-shell[data-layout="landscape"] .shell-content { padding-top: 0; height: 100%; min-width: 0; overscroll-behavior-y: contain; }
+.app-shell[data-layout="landscape"] .shell-content > .lyrics-stage,
+.app-shell[data-layout="landscape"] .shell-content > .settings-content { width: min(100%, 480px); flex: none; }
+.app-shell[data-layout="landscape"] .shell-content > .lyrics-stage { height: 100%; }
+.app-shell[data-player-density="compact"] .landscape-player .metadata-row { display: none; }
+.app-shell[data-player-density="compact"] .landscape-player .player-information { gap: 0; }
+.app-shell:is([data-layout="landscape"], [data-height-fallback="true"]) .transport-row button { flex-shrink: 0; white-space: nowrap; }
+.app-shell:is([data-layout="landscape"], [data-height-fallback="true"]) .transport-row .primary { width: max(64px, 4rem); height: max(64px, 4rem); }
+.app-shell[data-layout="landscape"] .bottom-navigation { position: fixed; z-index: 12; left: 50%; transform: translateX(-50%); bottom: calc(var(--dock-bottom) + env(safe-area-inset-bottom)); width: min(320px, calc(100% - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right)))); height: 60px; border-radius: 24px; border: 1px solid var(--subtle-border); background: var(--glass-surface); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 6px 24px #0004; }
+@media (min-width: 900px) and (max-width: 1023px) and (orientation: landscape) {
+  .app-shell[data-layout="landscape"] { --workspace-gap: 24px; --workspace-width: max(320px, calc(100vw - 64px - var(--player-width) - var(--workspace-gap))); padding-inline: max(16px, env(safe-area-inset-left)) max(16px, env(safe-area-inset-right)); }
+}
