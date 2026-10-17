@@ -7,8 +7,10 @@
   --artwork-shade: rgba(8, 13, 24, .8);
   --page-background: #080d18;
   --ambient-background: #142438;
-  --glass-surface: rgba(21, 31, 47, .85);
-  --raised-surface: #26384e;
+  --glass-surface: rgba(255, 255, 255, .06);
+  --raised-surface: rgba(255, 255, 255, .12);
+  --dock-surface: rgba(12, 12, 12, .18);
+  --accent-surface: rgba(130, 213, 248, .14);
   --overlay-surface: #1b293c;
   --subtle-border: rgba(194, 214, 237, .16);
   --text-primary: #f3f7fc;
