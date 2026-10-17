@@ -14,11 +14,14 @@ const route = useRoute()
 const tabs = [{ kind: 'songs', label: '全部歌曲' }, { kind: 'albums', label: '专辑' }, { kind: 'artists', label: '艺术家' }, { kind: 'genres', label: '风格' }, { kind: 'years', label: '年代' }, { kind: 'tags', label: '标签' }] as const
 const kind = computed(() => tabs.find(tab => tab.kind === route.query.kind)?.kind ?? 'songs')
 const label = computed(() => tabs.find(tab => tab.kind === kind.value)!.label)
-const sort = ref('title:asc')
+const sort = ref<`${'title' | 'modified_at'}:${'asc' | 'desc'}`>('title:asc')
+const sorting = computed(() => {
+  const [sort_by, sort_order] = sort.value.split(':') as ['title' | 'modified_at', 'asc' | 'desc']
+  return { sort_by, sort_order }
+})
 const path = computed(() => {
   if (kind.value !== 'songs') return `/api/library/${kind.value}`
-  const [field, order] = sort.value.split(':')
-  return `/api/library/songs?sort_by=${field}&sort_order=${order}`
+  return `/api/library/songs?sort_by=${sorting.value.sort_by}&sort_order=${sorting.value.sort_order}`
 })
 const entry = useLibraryResource(path, label)
 const categories = computed(() => { const data = entry.value?.data; return data && 'kind' in data ? data.items : [] })
@@ -26,7 +29,7 @@ const songs = computed(() => { const data = entry.value?.data; return data && !(
 const playable = computed(() => songs.value.filter(song => song.song_id && song.availability_status === 'AVAILABLE').length)
 const player = inject(playerKey)!, runtime = inject(playerRuntimeKey), tasks = inject(taskActionsKey), session = inject(playerSessionKey)!
 const actions = runtime && tasks ? createSongActions(player, runtime, tasks, () => Boolean(session.actions?.locked)) : null
-function play(randomize: boolean) { if (entry.value?.fresh) void actions?.playCollection({ source_type: 'LIBRARY' }, randomize, playable.value, '全部歌曲') }
+function play(randomize: boolean) { if (entry.value?.fresh) void actions?.playCollection({ source_type: 'LIBRARY', ...(!randomize ? sorting.value : {}) }, randomize, playable.value, '全部歌曲') }
 </script>
 <template>
   <section class="library-content" aria-label="音乐库">

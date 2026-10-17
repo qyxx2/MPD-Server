@@ -63,7 +63,7 @@ it('category_identity_and_server_collection_play', async () => {
   await h.router.push('/library'); await flushPromises(); await h.wrapper.get('[data-library-kind="songs"]').trigger('click'); await flushPromises()
   expect(h.wrapper.findAll('[data-song-id]')).toHaveLength(3)
   await h.wrapper.get('[data-play-all]').trigger('click'); await flushPromises()
-  expect(JSON.parse(String(h.requests.filter(r => r.init?.method === 'POST').at(-1)!.init?.body))).toEqual({ source_type: 'LIBRARY', randomize: false })
+  expect(JSON.parse(String(h.requests.filter(r => r.init?.method === 'POST').at(-1)!.init?.body))).toEqual({ source_type: 'LIBRARY', sort_by: 'title', sort_order: 'asc', randomize: false })
   expect(h.requests.filter(r => r.init?.method === 'POST')).toHaveLength(count + 1)
   h.wrapper.unmount()
 })

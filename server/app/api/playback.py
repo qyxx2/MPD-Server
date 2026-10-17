@@ -359,6 +359,8 @@ async def play_collection(
             song_ids=request.song_ids,
             randomize=request.randomize,
             random_seed=request.random_seed,
+            sort_by=request.sort_by,
+            sort_order=request.sort_order,
         )
         context = collection_service.create_playback_context(collection)
         return _playback_state_response(await playback_service.play_context(

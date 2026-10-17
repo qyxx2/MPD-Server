@@ -62,6 +62,8 @@ class CollectionService:
         randomize: bool = False,
         random_seed: int | None = None,
         playback_context: PlaybackContext | None = None,
+        sort_by: Literal["modified_at", "title"] | None = None,
+        sort_order: Literal["asc", "desc"] = "asc",
     ) -> Collection:
         if playback_context is not None:
             if source_type is None:
@@ -83,6 +85,8 @@ class CollectionService:
             query=query,
             song_ids=song_ids,
             playback_context=playback_context,
+            sort_by=sort_by,
+            sort_order=sort_order,
         )
         base_songs = _deduplicate(base_songs)
 
@@ -130,6 +134,8 @@ class CollectionService:
         query: str | None,
         song_ids: list[str] | tuple[str, ...] | None,
         playback_context: PlaybackContext | None,
+        sort_by: Literal["modified_at", "title"] | None,
+        sort_order: Literal["asc", "desc"],
     ) -> tuple[list[Song], list[str]]:
         if playback_context is not None:
             return await self._resolve_members(playback_context.ordered_song_ids)
@@ -140,6 +146,10 @@ class CollectionService:
             songs = await self._library.category_members(source_type, source_id)
             return _split_availability(songs)
         if source_type == "LIBRARY":
+            if sort_by is not None:
+                return _split_availability(await self._library.list_songs(
+                    sort_by=sort_by, sort_order=sort_order,
+                ))
             return _split_availability(_sort_standard(await self._library.list_songs()))
         if source_type == "SEARCH":
             return await self._library.search_library(query or source_id or ""), []

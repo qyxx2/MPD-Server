@@ -8,7 +8,7 @@ export type CategoryKind = 'albums' | 'artists' | 'genres' | 'years' | 'tags'
 export interface Category { id: string; name: string; song_count: number; album_artists: string[]; year: number | null; artwork: import('./api').Artwork | null }
 export interface CategoryList { kind: CategoryKind; items: Category[]; count: number }
 export type LibraryResource = Song | SongList | CategoryList | Collection | SearchResults
-export type LibrarySource = { source_type: 'LIBRARY' | 'FAVORITES' } | { source_type: 'ALBUM' | 'ARTIST' | 'GENRE' | 'YEAR' | 'TAG'; source_id: string }
+export type LibrarySource = { source_type: 'LIBRARY'; sort_by?: 'modified_at' | 'title'; sort_order?: 'asc' | 'desc' } | { source_type: 'FAVORITES' } | { source_type: 'ALBUM' | 'ARTIST' | 'GENRE' | 'YEAR' | 'TAG'; source_id: string }
 export interface Collection { source_type: string; source_id: string | null; song_ids: string[]; unavailable_song_ids: string[]; random_seed: number | null }
 export interface SearchGroup { kind: CategoryKind; source_id: string; name: string; song_ids: string[] }
 export interface SearchResults { groups: SearchGroup[]; song_ids: string[] }

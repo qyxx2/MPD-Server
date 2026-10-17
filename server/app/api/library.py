@@ -302,6 +302,8 @@ async def create_collection(
             song_ids=body.song_ids,
             randomize=body.randomize,
             random_seed=body.random_seed,
+            sort_by=body.sort_by,
+            sort_order=body.sort_order,
         )
     except PlaylistNotFoundError as exc:
         raise HTTPException(
