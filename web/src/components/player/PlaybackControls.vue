@@ -16,7 +16,7 @@ const label = computed(() => primary.value === 'pause' ? '暂停播放' : '继�
 </template>
 <style scoped>
 .transport-row { display: flex; align-items: center; justify-content: center; gap: .75rem; }
-button { border: 1px solid var(--subtle-border); border-radius: 50%; background: var(--glass-surface, #182638); color: var(--text-primary); padding: .65rem; }
+button { border: 1px solid var(--subtle-border); border-radius: 50%; background: var(--glass-surface); color: var(--text-primary); padding: .65rem; }
 button:disabled { opacity: .4; cursor: default; }
-.primary { width: 64px; height: 64px; color: #071320; background: var(--accent); font-size: 1.5rem; }
+.primary { width: 64px; height: 64px; color: var(--accent); background: var(--accent-surface); border-color: var(--accent); font-size: 1.5rem; }
 </style>

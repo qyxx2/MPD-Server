@@ -231,9 +231,14 @@ class VerifiedPlayerPort(PlayerPort):
         self._require("queue_move")
         await self._delegate.queue_move(mpd_song_id, before_mpd_song_id)
 
-    async def queue_play(self, mpd_song_id: int) -> None:
+    async def queue_play(
+        self, mpd_song_id: int, *, expected_connection_epoch: str | None = None,
+    ) -> None:
         self._require("queue_play")
-        await self._delegate.queue_play(mpd_song_id)
+        if expected_connection_epoch is None:
+            await self._delegate.queue_play(mpd_song_id)
+        else:
+            await self._delegate.queue_play(mpd_song_id, expected_connection_epoch=expected_connection_epoch)
 
     async def set_output_enabled(self, output_id: int, enabled: bool) -> None:
         self._require("set_output_enabled")

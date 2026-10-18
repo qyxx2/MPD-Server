@@ -28,6 +28,28 @@ class StateObserver:
         self._clock = monotonic_clock
         self._task: asyncio.Task | None = None
         self._closed = False
+        self._requested = asyncio.Event()
+        self._request_generation = 0
+
+    def request_observation(self) -> None:
+        """Coalesce committed refreshes without starting another sampler."""
+        if not self._closed:
+            self._request_generation += 1
+            self._requested.set()
+
+    async def _wait(self) -> None:
+        periodic = asyncio.create_task(self._sleep(self._interval))
+        requested = asyncio.create_task(self._requested.wait())
+        try:
+            done, _ = await asyncio.wait(
+                (periodic, requested), return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in done:
+                task.result()
+        finally:
+            for task in (periodic, requested):
+                task.cancel()
+            await asyncio.gather(periodic, requested, return_exceptions=True)
 
     async def run(self) -> None:
         if self._task is not None:
@@ -37,6 +59,7 @@ class StateObserver:
         self._task = asyncio.current_task()
         try:
             while True:
+                generation = self._request_generation
                 started = self._clock()
                 for sample in (self._playback.observe, self._output.get_state):
                     try:
@@ -49,7 +72,12 @@ class StateObserver:
                         await cached()
                     except Exception:
                         logger.exception('State observation cache refresh failed')
-                await self._sleep(self._interval)
+                # A request arriving during this round requires a newer sample.
+                if generation != self._request_generation:
+                    continue
+                # No await between comparison and clear: a later request wakes wait.
+                self._requested.clear()
+                await self._wait()
         finally:
             self._task = None
 

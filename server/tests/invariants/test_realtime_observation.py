@@ -68,11 +68,16 @@ def test_late_sample_never_becomes_new_current_progress(real_client, monkeypatch
             await asyncio.wait_for(playback.seek(7), 1)
         else:
             await asyncio.wait_for(getattr(playback, operation)(), 1)
+        committed = await playback.get_observation()
         marker = coordinator.marker()
         release.set()
         late = await asyncio.wait_for(observation_task, 1)
-        assert late.position_seconds is None, 'late sample became new-generation progress'
-        assert late.freshness != 'fresh'
+        assert late == committed, 'late sample replaced the committed observation'
+        if operation == 'next':
+            assert late.freshness == 'fresh' and late.position_seconds == 0
+            assert late.bound_queue_item_id != initial.bound_queue_item_id
+        else:
+            assert late.position_seconds is None and late.freshness != 'fresh'
         assert coordinator.marker() == marker, 'discarded sample registered an invalidation'
         fresh = await playback.observe()
         assert fresh.matches_current is True and fresh.freshness == 'fresh'
@@ -212,10 +217,10 @@ def test_disconnect_retry_and_restart_never_invent_binding(real_client, prior):
     player.disconnect()
     marker = coordinator.marker()
     failed = run(playback.observe())
-    assert failed.freshness == ('stale' if prior else 'unknown')
-    assert failed.position_seconds == (9 if prior else None)
+    assert failed.freshness == 'stale'  # Context's committed handoff is also real evidence.
+    assert failed.position_seconds == (9 if prior else 0)
     assert failed.error_code == 'PLAYER_UNAVAILABLE'
-    assert failed.observed_at == (clock.now if prior else None)
+    assert failed.observed_at == clock.now
     assert coordinator.marker().sequence == marker.sequence + 1
     player.reconnect()
     clock.advance(1)

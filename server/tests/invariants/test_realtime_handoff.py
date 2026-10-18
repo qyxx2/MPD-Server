@@ -304,7 +304,8 @@ def test_socket_capture_never_reads_player_or_mutates_business(state_client, mon
         try:
             frame = await asyncio.wait_for(socket.frames.get(), 1)
             assert frame["state"]["queue"] == before[0].model_dump(mode="json")
-            assert frame["state"]["playback_observation"]["freshness"] == "unknown"
+            assert frame["state"]["playback_observation"]["freshness"] == "fresh"
+            assert frame["state"]["playback_observation"]["covered_playback_updated_at"] == frame["state"]["playback"]["updated_at"]
             assert frame["state"]["history"]["active_event"] == before[3].model_dump(mode="json")
             assert frame["state"]["output"] == receipt.model_dump(mode="json")
         finally:

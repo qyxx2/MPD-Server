@@ -28,6 +28,19 @@ async function lyrics(song = playerState().current_song, position: number | null
   wrapper = mount(Stage, { props: { song, position, resourceScope: scope } })
   return wrapper
 }
+it('does not render blank cues or interrupt the previous highlight during their timestamps', async () => {
+  const w = await lyrics({ ...playerState().current_song!, lyrics: '[00:37]甲\n[00:38] \n[00:39]乙', lyrics_format: 'lrc' })
+  expect(w.findAll('.lyric-cue').map(e => e.text())).toEqual(['甲', '乙'])
+  await w.setProps({ position: 38 })
+  expect(w.findAll('[aria-current="true"]').map(e => e.text())).toEqual(['甲'])
+  await w.setProps({ position: 39 })
+  expect(w.findAll('[aria-current="true"]').map(e => e.text())).toEqual(['乙'])
+})
+it('renders no timestamp text when every timed line is blank', async () => {
+  const w = await lyrics({ ...playerState().current_song!, lyrics: '[00:37]\n[00:38]   ', lyrics_format: 'lrc' })
+  expect(w.get('.lyrics-content').text()).toBe('')
+  expect(w.find('[aria-current="true"]').exists()).toBe(false)
+})
 it('cached embedded LYRICS tagged as text follows timed cues and scrolls when playback advances', async () => {
   const scroll = vi.fn()
   Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scroll })

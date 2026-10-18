@@ -66,7 +66,7 @@ def build_fixture(client, service):
     identities = {playlist['playlist_id']: 'p'}
     identity_fields = {'epoch', 'queue_item_id', 'playback_context_id', 'session_id', 'token', 'bound_queue_item_id'}
     time_fields = {'captured_at', 'updated_at', 'created_at', 'observed_at', 'started_at', 'ended_at',
-                   'last_scanned_at', 'last_seen_at'}
+                   'last_scanned_at', 'last_seen_at', 'covered_playback_updated_at'}
 
     def normalize(value, field=''):
         if isinstance(value, dict):
@@ -86,7 +86,8 @@ def build_fixture(client, service):
 
 def test_task9_server_fixture_to_resource_action_route_convergence(real_client):
     client, _, _, service = real_client
-    assert build_fixture(client, service) == json.loads(FIXTURE.read_text())
+    expected = json.loads(FIXTURE.read_text())
+    assert build_fixture(client, service) == expected
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -74,8 +74,13 @@ async def _songs_from_collection(
 @router.get("/songs", response_model=SongListResponse)
 async def list_songs(
     service: Annotated[LibraryService, Depends(get_library_service)],
+    sort_by: Literal["modified_at", "title"] | None = None,
+    sort_order: Literal["asc", "desc"] = "asc",
 ) -> SongListResponse:
-    items = [_song_response(song) for song in await service.list_songs()]
+    songs = await service.list_songs() if sort_by is None else await service.list_songs(
+        sort_by=sort_by, sort_order=sort_order,
+    )
+    items = [_song_response(song) for song in songs]
     return SongListResponse(items=items, count=len(items))
 
 
@@ -297,6 +302,8 @@ async def create_collection(
             song_ids=body.song_ids,
             randomize=body.randomize,
             random_seed=body.random_seed,
+            sort_by=body.sort_by,
+            sort_order=body.sort_order,
         )
     except PlaylistNotFoundError as exc:
         raise HTTPException(

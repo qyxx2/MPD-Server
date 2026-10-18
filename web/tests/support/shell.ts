@@ -9,6 +9,7 @@ import AppShell from '../../src/components/layout/AppShell.vue'
 import { createApiClient } from '../../src/services/api'
 import { createPlayerStore } from '../../src/stores/player'
 import { parseSnapshot } from '../../src/services/wire'
+import { playerSessionKey, type PlayerSession } from '../../src/runtime/playerSession'
 import { playerState } from './player'
 import { transport } from './transport'
 export async function shellPage(...responses: Parameters<typeof transport>) {
@@ -48,8 +49,15 @@ async function createShellPage(songReads: boolean, ...responses: Parameters<type
     store.acceptRefresh(await api.get('/api/state', parseSnapshot), store.marker.generation)
   }) }
   let tasks!: TaskActions
-  const Probe = defineComponent({ setup() { tasks = inject(taskActionsKey)!; return () => null } })
+  let session!: PlayerSession
+  const Probe = defineComponent({ setup() { tasks = inject(taskActionsKey)!; session = inject(playerSessionKey)!; return () => null } })
   const wrapper = mount(defineComponent({ render: () => h(AppShell, { store, realtime, api }, { default: () => [h(Probe), h(RouterView)] }) }), { global: { plugins: [router] } })
   await flushPromises()
-  return { wrapper, store, api, network, router, realtime, tasks, songRequests, libraryRequests }
+  return { wrapper, store, api, network, router, realtime, tasks, session, songRequests, libraryRequests }
+}
+
+// A browser resize changes the single shell mode without reconstructing routes.
+export function setViewport(width: number, height: number) {
+  vi.stubGlobal('innerWidth', width); vi.stubGlobal('innerHeight', height)
+  window.dispatchEvent(new Event('resize'))
 }

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import uuid
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 from server.app.models.library import (
     ArtworkRef,
+    AvailabilityStatus,
     ScanBatch,
     ScanResult,
     SidecarSignature,
@@ -25,6 +29,15 @@ SELECT song_id, title, file_uri, identity_key, album_id, track_number,
        file_size, file_mtime_ns, content_hash, availability_status, last_seen_at
 FROM songs
 """
+
+
+@dataclass(frozen=True)
+class PlaybackSong:
+    """Internal playback projection; no metadata or relationship construction."""
+
+    song_id: str
+    file_uri: str
+    availability_status: AvailabilityStatus
 
 
 def _now() -> str:
@@ -388,6 +401,33 @@ class LibraryRepository:
                 f"{SONGS_SELECT} WHERE song_id = ?", (song_id,)
             ).fetchone()
             return self._song_from_row(connection, row) if row else None
+
+        return await run_transaction(self.path, operation)
+
+    async def get_playback_songs(
+        self, song_ids: Iterable[str],
+    ) -> dict[str, PlaybackSong]:
+        """Read fresh minimal fields, keyed by identity, omitting absent Songs.
+
+        Each invocation reads again, even inside the same root transaction.
+        Only input IDs are deduplicated; Queue occurrences remain independent.
+        """
+        ids = tuple(dict.fromkeys(song_ids))
+        if not ids:
+            return {}
+
+        async def operation(connection):
+            chunk_size = min(900, connection.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER))
+            songs = {}
+            for start in range(0, len(ids), chunk_size):
+                chunk = ids[start:start + chunk_size]
+                placeholders = ','.join('?' for _ in chunk)
+                rows = connection.execute(
+                    'SELECT song_id, file_uri, availability_status FROM songs '
+                    f'WHERE song_id IN ({placeholders})', chunk,
+                ).fetchall()
+                songs.update((row[0], PlaybackSong(*row)) for row in rows)
+            return songs
 
         return await run_transaction(self.path, operation)
 

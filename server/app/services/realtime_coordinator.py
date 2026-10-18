@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from uuid import uuid4
@@ -8,6 +9,7 @@ from uuid import uuid4
 from server.app.models.library_sync import LibrarySyncState
 from server.app.models.realtime import Invalidation, StateMarker
 from server.app.repositories.database import (
+    on_transaction_commit,
     on_transaction_rollback,
     on_transaction_visibility_failure,
     on_transaction_visible,
@@ -18,6 +20,7 @@ from server.app.services.events import (
     DomainEvent,
     EventPublisher,
     LibrarySyncChangedEvent,
+    PlaybackChangedEvent,
     invalidation_domains,
 )
 
@@ -41,6 +44,12 @@ class RealtimeSubscription:
         raise RuntimeError("realtime subscription invalidated")
 
 
+@dataclass
+class _PlaybackPublication:
+    event_factory: Callable[[], PlaybackChangedEvent | None]
+    committed: tuple[PlaybackChangedEvent, StateMarker] | None = None
+
+
 class RealtimeCoordinator:
     def __init__(
         self, path: str, event_publisher: EventPublisher | None = None, *,
@@ -54,6 +63,7 @@ class RealtimeCoordinator:
         self._trusted = True
         self._subscriptions: set[RealtimeSubscription] = set()
         self._staged: dict[object, dict[str, tuple[object, object]]] = {}
+        self._playback_publications: dict[object, _PlaybackPublication] = {}
         self._observations: dict[str, object] = {}
         self._event_publisher = event_publisher
         self._library_sync = LibrarySyncState()
@@ -125,10 +135,20 @@ class RealtimeCoordinator:
                     changed = frozenset(
                         domain for domain, (first, last) in staged.items() if first != last
                     )
+                    publication = self._playback_publications.get(owner)
+                    event = publication.event_factory() if publication is not None else None
+                    if event is not None:
+                        # Observation may first stage playback after the control
+                        # already wrote its new local state. Transport owns the
+                        # operation's earlier baseline and complete net delta.
+                        changed |= event.domains
                     if changed:
                         self._register(changed)
+                    if event is not None:
+                        publication.committed = (event, self.marker())
                 finally:
                     self._staged.pop(owner, None)
+                    self._playback_publications.pop(owner, None)
 
             on_transaction_visible(self.path, committed)
             on_transaction_visibility_failure(self.path, self._fail_closed)
@@ -137,6 +157,38 @@ class RealtimeCoordinator:
         for domain in domains:
             first = staged[domain][0] if domain in staged else deepcopy(before)
             staged[domain] = first, deepcopy(after)
+
+    def stage_registered_playback(
+        self, event_factory: Callable[[], PlaybackChangedEvent | None],
+    ) -> None:
+        """Deliver a Playback event whose changes this owner already staged.
+
+        Capture in the owner's visibility registration. Its marker and
+        net event belong to this commit, even if a later commit overtakes the
+        awaited domain publisher. WS obligations are already queued in commit
+        order; delivery must neither register again nor read a newer DB cut.
+        """
+        owner = transaction_identity(self.path)
+        if owner not in self._staged:
+            raise RuntimeError("Playback delivery requires staged changes")
+        if owner in self._playback_publications:
+            raise RuntimeError("Playback delivery already staged for this owner")
+        publication = _PlaybackPublication(event_factory)
+        self._playback_publications[owner] = publication
+        on_transaction_rollback(self.path, lambda: self._playback_publications.pop(owner, None))
+
+        async def deliver():
+            if publication.committed is None:
+                return
+            event, committed_marker = publication.committed
+            current = self.marker()  # Any shared visibility failure fails closed.
+            if (current.epoch != committed_marker.epoch
+                    or current.sequence < committed_marker.sequence):
+                raise RuntimeError("Committed Playback publication marker unavailable")
+            if self._event_publisher is not None:
+                await self._event_publisher.publish(event)
+
+        on_transaction_commit(self.path, deliver)
 
     async def publish(self, event: DomainEvent) -> None:
         if isinstance(event, LibrarySyncChangedEvent):

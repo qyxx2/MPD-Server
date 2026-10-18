@@ -4,7 +4,7 @@ import hashlib
 import uuid
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Protocol, TypeVar
+from typing import Literal, Protocol, TypeVar
 
 from mutagen import MutagenError
 from mutagen.flac import FLAC
@@ -67,8 +67,22 @@ class LibraryService:
     async def get_song(self, song_id: str) -> Song | None:
         return await self._repository.get_song(song_id)
 
-    async def list_songs(self) -> list[Song]:
-        return await self._repository.list_songs()
+    async def list_songs(
+        self,
+        *,
+        sort_by: Literal["modified_at", "title"] | None = None,
+        sort_order: Literal["asc", "desc"] = "asc",
+    ) -> list[Song]:
+        songs = await self._repository.list_songs()
+        if sort_by is None:
+            return songs
+        # Stable ties, with unknown file times last in either direction.
+        songs = sorted(songs, key=lambda song: song.song_id or song.file_uri)
+        if sort_by == "title":
+            return sorted(songs, key=lambda song: song.title.casefold(), reverse=sort_order == "desc")
+        known = [song for song in songs if song.file_mtime_ns is not None]
+        unknown = [song for song in songs if song.file_mtime_ns is None]
+        return sorted(known, key=lambda song: song.file_mtime_ns, reverse=sort_order == "desc") + unknown
 
     async def revision_content(self) -> tuple[object, ...]:
         """Observable resources, excluding internal scan/audit timestamps."""

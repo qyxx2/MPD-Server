@@ -14,12 +14,12 @@
 
 | 来源 | 本 Task 继承的合同 |
 |---|---|
-| [Architecture §4.1–4.3](../specs/2026-09-25-system-and-development-architecture-design.md) | 状态三层、请求代次保护、degraded read-only、mutation/idempotency、静态壳 PWA |
+| [Architecture §4.1–4.3](../../specs/2026-09-25-system-and-development-architecture-design.md) | 状态三层、请求代次保护、degraded read-only、mutation/idempotency、静态壳 PWA |
 | Architecture §12；[Task 6 plan](2026-10-03-mpd-server-task-6-batch-plan.md) | initial snapshot、最高失效水位、跨 epoch 恢复、actual/binding/observation 语义 |
-| [Playback §3–8.9](../specs/2026-09-24-playback-model-queue-semantics-design.md) | Start Track 与 Play Now 区别、Queue occurrence、进度权威、重启后明确接管、Stop |
-| [Library §3、§5–7](../specs/2026-09-24-library-playlist-tag-search-design-2-1.md) | 歌词来源与时间戳、membership 与 playable collection、Favorites、资源 revision |
-| [Output §6–8](../specs/2026-09-24-system-architecture-playback-output-design.md) | observed fact/request 分离、输出切换保留关系、未知值与 About |
-| [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md) | WEB-UI-* 唯一视觉/通知/背景/布局/四项导航合同；保护当前 Player，Task 9 共享壳前置；不重复定义 |
+| [Playback §3–8.9](../../specs/2026-09-24-playback-model-queue-semantics-design.md) | Start Track 与 Play Now 区别、Queue occurrence、进度权威、重启后明确接管、Stop |
+| [Library §3、§5–7](../../specs/2026-09-24-library-playlist-tag-search-design-2-1.md) | 歌词来源与时间戳、membership 与 playable collection、Favorites、资源 revision |
+| [Output §6–8](../../specs/2026-09-24-system-architecture-playback-output-design.md) | observed fact/request 分离、输出切换保留关系、未知值与 About |
+| [全局 UI 合同](../../specs/2026-10-03-web-pwa-visual-design.md) | WEB-UI-* 唯一视觉/通知/背景/布局/四项导航合同；保护当前 Player，Task 9 共享壳前置；不重复定义 |
 | [主 Plan](2026-09-25-mpd-server-v0-1-implementation-plan.md) | Task scope/dependency、Contract Matrix、Relationship Gate |
 
 共同合同需要实现与可执行证明；不能因为未实现而重新作为产品待决策项。

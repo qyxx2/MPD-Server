@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { inject } from 'vue'
+import { layoutModeKey } from './layoutMode'
 import { routerKey } from 'vue-router'
+const layout = inject(layoutModeKey)!
+const label = (item: typeof items[number]) => item.path === '/' && layout.mode.value === 'landscape' ? '歌词' : item.label
 const router = inject(routerKey, null)
 const items = [
   { path: '/', label: '正在播放', icon: 'M8 5l11 7-11 7z' },
@@ -11,7 +14,7 @@ const items = [
 function selected(path: string) { const current = router?.currentRoute.value.path ?? '/'; return path === '/' ? current === '/' : current === path || current.startsWith(`${path}/`) }
 </script>
 <template>
-  <nav class="bottom-navigation" aria-label="主导航"><a v-for="item in items" :key="item.path" :href="item.path" :aria-label="item.label" :aria-current="selected(item.path) ? 'page' : undefined" @click="router && ($event.preventDefault(), router.push(item.path))"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="item.icon" /></svg><span>{{ item.label }}</span></a></nav>
+  <nav class="bottom-navigation" aria-label="主导航"><a v-for="item in items" :key="item.path" :href="item.path" :aria-label="label(item)" :aria-current="selected(item.path) ? 'page' : undefined" @click="router && ($event.preventDefault(), router.push(item.path))"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="item.icon" /></svg><span>{{ label(item) }}</span></a></nav>
 </template>
 <style scoped>
 .bottom-navigation { height: var(--app-bottom-bar-height); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex-shrink: 0; width: 100%; }

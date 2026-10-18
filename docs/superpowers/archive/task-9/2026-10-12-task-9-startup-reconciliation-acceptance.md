@@ -6,7 +6,7 @@
 
 ## 权威输入、Git 与环境
 
-- [Corrective spec](../../specs/2026-10-12-task-9-startup-library-reconciliation-design.md)、[Batch plan](../../plans/2026-10-12-task-9-startup-library-reconciliation-batch-plan.md)、[历史 root-cause / C0–C4 原始证据索引](../../plans/2026-10-12-task-9-startup-root-cause-evidence.md)。前两份历史草案页头仍是 DRAFT/NOT STARTED，已与实际实现不符；本轮按用户明确的 C5 授权和源码证据裁定，不越范围改计划/spec。
+- [Corrective spec](2026-10-12-task-9-startup-library-reconciliation-design.md)、[Batch plan](../plans/2026-10-12-task-9-startup-library-reconciliation-batch-plan.md)、[历史 root-cause / C0–C4 原始证据索引](../plans/2026-10-12-task-9-startup-root-cause-evidence.md)。前两份历史草案页头仍是 DRAFT/NOT STARTED，已与实际实现不符；本轮按用户明确的 C5 授权和源码证据裁定，不越范围改计划/spec。
 - archive 布局静态核对：已有 `docs/superpowers/archive/task-9/*-acceptance.md`；沿用同一路径约定，无替代布局。
 - 起始/结束分支：`fix/task-9-startup-library-reconciliation`。
 - 起始/结束完整 HEAD：`098d6eaea81495d1686a09f9e0ee68768610ed7e`，未生成修复提交。C1–C4 和 C5 当前内容均有尚未提交的 dirty 增量，HEAD 不是修复 SHA。旧 HEAD 的 CI/镜像不能证明当前修复。

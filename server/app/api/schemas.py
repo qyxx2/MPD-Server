@@ -91,6 +91,8 @@ class CollectionRequest(BaseModel):
     song_ids: list[str] = Field(default_factory=list)
     randomize: bool = False
     random_seed: int | None = Field(default=None, ge=0)
+    sort_by: Literal["modified_at", "title"] | None = None
+    sort_order: Literal["asc", "desc"] = "asc"
 
     @model_validator(mode="after")
     def validate_source_contract(self) -> CollectionRequest:
@@ -106,6 +108,10 @@ class CollectionRequest(BaseModel):
             raise ValueError("query is only allowed for SEARCH")
         if self.source_type != "SONGS" and self.song_ids:
             raise ValueError("song_ids are only allowed for SONGS")
+        if self.source_type != "LIBRARY" and (
+            self.sort_by is not None or "sort_order" in self.model_fields_set
+        ):
+            raise ValueError("sorting is only allowed for LIBRARY")
         return self
 
 

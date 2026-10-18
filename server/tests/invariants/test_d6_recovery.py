@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import sqlite3
 from copy import deepcopy
 from dataclasses import replace
@@ -236,6 +237,8 @@ def test_natural_completion_promotes_confirmed_successor(real_client, monkeypatc
 
 @pytest.mark.parametrize("candidate", ["autoplay", "one-song"])
 def test_natural_completion_refills_once(real_client, monkeypatch, candidate):
+    # Fix entropy for recovery assertions; AutoPlay tests cover random selection.
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: ids.sort())
     client, library, player, service = real_client
     start(client)
     run(service.clear())

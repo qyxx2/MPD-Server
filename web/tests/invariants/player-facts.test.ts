@@ -255,13 +255,15 @@ it.each([
   expect(wrapper.get('[data-testid="output-fact"]').text()).toBe(freshness === 'unknown' ? 'DAC尚未确认' : 'DAC状态已过期')
 })
 
-it('Player keeps one brand header and places the DAC summary beside source metadata', async () => {
+it('Player keeps one status-only header and places the DAC summary beside source metadata', async () => {
   const value = structuredClone(fixture.snapshot)
   Object.assign(value.current_song, { codec: 'FLAC' })
   const { wrapper } = page(value); await flushPromises()
   expect(wrapper.find('h1').exists()).toBe(false)
-  expect(wrapper.get('.page-header').text()).toContain('MPD SERVER')
-  expect(wrapper.get('.page-header').text()).toContain('实时连接')
+  expect(wrapper.findAll('.page-header')).toHaveLength(1)
+  expect(wrapper.get('.page-header').text()).not.toContain('MPD SERVER')
+  expect(wrapper.get('.page-header').text()).not.toContain('实时连接')
+  expect(wrapper.findAll('.page-header .playback-status')).toHaveLength(1)
   expect(wrapper.get('.metadata-row [data-testid="output-fact"]').text()).toBe('DAC已启用')
   expect(wrapper.get('.metadata-row [data-testid="source-metadata"]').text()).toContain('FLAC')
   expect(wrapper.find('.output-summary').exists()).toBe(false)

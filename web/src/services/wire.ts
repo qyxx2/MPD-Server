@@ -42,6 +42,7 @@ const actual = object({ entry_id: nullable(integer), uri: optionalNullText, posi
 const observationFields = { observed_at: optionalTime, freshness, error_code: optionalNullText, error_message: optionalNullText }
 const observation = object<Observation>(observationFields)
 const playbackObservation = object<PlaybackObservation>({
+  covered_playback_updated_at: optionalTime,
   ...observationFields,
   actual_state: nullable(enumeration('playing', 'paused', 'stopped')),
   actual_current: nullable(actual), actual_freshness: freshness, bound_queue_item_id: optionalNullText,
@@ -101,7 +102,7 @@ export function parseSnapshot(value: unknown): FullStateSnapshot {
   const observed = record(source.playback_observation)
   // Only explicitly additive legacy fields default. Mandatory domains fail closed.
   const normalized = { ...observed }
-  const defaults = { actual_current: null, actual_freshness: 'unknown', bound_queue_item_id: null, control_target: null, sync_status: 'UNBOUND' }
+  const defaults = { covered_playback_updated_at: null, actual_current: null, actual_freshness: 'unknown', bound_queue_item_id: null, control_target: null, sync_status: 'UNBOUND' }
   for (const [key, fallback] of Object.entries(defaults)) {
     if (!(key in normalized)) normalized[key] = fallback
   }

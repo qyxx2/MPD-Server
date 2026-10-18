@@ -45,6 +45,7 @@ class PlaybackObservation(BaseModel):
     matches_current: bool | None = None
     position_seconds: float | None = Field(default=None, ge=0)
     duration_seconds: float | None = Field(default=None, ge=0)
+    covered_playback_updated_at: datetime | None = None
     observed_at: datetime | None = None
     freshness: Literal["fresh", "stale", "unknown"] = "unknown"
     reconciliation_required: bool = False

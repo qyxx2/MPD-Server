@@ -88,7 +88,7 @@ export function parseLibraryResource(value: unknown, path: string): import('../t
     return collection
   }
   if (/^\/api\/library\/songs\/[^/]+$/.test(path)) return parseSongResource(value, path)
-  if (path === '/api/library/songs' || /^\/api\/library\/(albums|artists|genres|years|tags)\/[^/]+\/songs$/.test(path)) return parseSongList(value)
+  if (path === '/api/library/songs' || path.startsWith('/api/library/songs?') || /^\/api\/library\/(albums|artists|genres|years|tags)\/[^/]+\/songs$/.test(path)) return parseSongList(value)
   const kind = path.slice('/api/library/'.length)
   if (kind === 'albums' || kind === 'artists' || kind === 'genres' || kind === 'years' || kind === 'tags') return parseCategoryList(value, kind)
   throw new WireError('Unsupported Library resource')

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 
 import pytest
 
@@ -160,7 +161,7 @@ def test_playlist_persisted_members_are_resource_members(real_client, read):
     [
         ("reorder", "queue_move"),
         ("delete_pending", "queue_delete"),
-        ("delete_current", "play"),
+        ("delete_current", "queue_play"),
         ("clear", "queue_delete"),
     ],
 )
@@ -234,8 +235,9 @@ def test_queue_revision_conflict_precedes_player_side_effects(real_client, opera
 
 @pytest.mark.parametrize("available", [True, False])
 def test_delete_current_without_pending_uses_autoplay_or_confirmed_stop(
-    real_client, available
+    real_client, available, monkeypatch,
 ):
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: ids.sort())
     client, library, player, service = real_client
     items = start(client)
     current = next(item for item in items if item["position"] == 0)
@@ -780,7 +782,7 @@ def test_next_skip_failure_rolls_back_and_same_key_retries(
     active = service.history_service.active_event
     actual_status = player.status
     if failure == "play":
-        player.fail_next("play")
+        player.fail_next("queue_play")
     elif failure == "disconnected":
         player.disconnect()
     else:
@@ -874,13 +876,20 @@ def test_next_skips_absent_pending_identity(real_client, monkeypatch, caplog):
     client, _, player, service = real_client
     start(client)
     actual_get = service.library_repository.get_song
+    actual_batch = service.library_repository.get_playback_songs
 
     async def absent_b(song_id):
         return None if song_id == "b" else await actual_get(song_id)
 
+    async def absent_b_batch(song_ids):
+        songs = await actual_batch(song_ids)
+        songs.pop("b", None)
+        return songs
+
     # Persisted Queue foreign keys prohibit deleting a referenced Song. Simulate
     # the repository's absent lookup boundary without disabling DB constraints.
     monkeypatch.setattr(service.library_repository, "get_song", absent_b)
+    monkeypatch.setattr(service.library_repository, "get_playback_songs", absent_b_batch)
     response = mutate(client, "POST", "/api/playback/next", key="absent-pending")
     assert response.status_code == 200, response.text
     assert response.json()["song_id"] == "c"

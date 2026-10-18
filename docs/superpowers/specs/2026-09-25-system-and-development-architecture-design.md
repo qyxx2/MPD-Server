@@ -1,5 +1,8 @@
 # 第四章：项目技术栈、部署与开发维护架构规格书
 
+> **v0.2 文档状态（2026-10-14）**：本文保留当前仍适用的架构/领域/UI 行为合同；旧 Task/Batch、NOT STARTED/BLOCKED、未来阶段和待验收描述属于当时的历史进度，**不构成现行路线图或当前测试结论**。如有冲突，以 `v0.2` 实际代码、测试和新核验为准。工作入口：[现行文档索引](../README.md)；旧计划见 [历史归档](../archive/README.md)。
+
+
 - 项目：MPD-Server
 - Repository：qyxx2/MPD-Server
 - GitHub：https://github.com/qyxx2/MPD-Server
@@ -544,6 +547,8 @@ Playback 和 Output 观察分域处理，一域失败不丢弃另一域成功事
 
 `playback_observation` 包含 nullable `actual_state`、nullable `matches_current`（true/false/null=未确认）、nullable `position_seconds`/`duration_seconds`（只属已验证匹配的本地 current）、nullable `observed_at`、`freshness`（fresh/stale/unknown）、`reconciliation_required`、nullable `error_code`/`error_message`。从未采样不推断外部漂移，matches_current=null、reconciliation_required=false；发现确定漂移则 false/reconciliation_required=true；绑定无法确认时 null/reconciliation_required=true。连接读取失败或样本过期时，有最后匹配样本可保留其位置，但必须stale且绑定仍属同一current；已明确state/current漂移或绑定无法确认时，position_seconds/duration_seconds为null，不在该DTO复用旧位置。Output 原 observed/request/error 字段完整保留，并在外层提供 `output_observation {observed_at, freshness, error_code, error_message}` 描述采样状态，不拿旧 request 回执作 fresh observation。
 
+**B6-B 最终确认样本交接（2026-10-15）**：Service 可以在原 mutation owner 内交接全部相关控制之后的真实完整确认样本；提交后与业务快照一起可见，回滚不得泄漏观察或新 control token。完整 occurrence 映射、connection epoch、partition、playlist version、最终 current/state/mode 和 freshness 仍须核对；过旧、UNKNOWN 或身份不合格时保留 B6-A 真实观察。不得复用 B7 锁外维护检查样本授权控制或作为用户 mutation 的最终确认。`observed_at` 保留真实读取开始时间，不改写为提交时间；additive nullable `covered_playback_updated_at` 精确标记匹配样本覆盖的业务 `playback.updated_at`，不是采样时间、History 时间或跨提交缓存授权。旧服务缺字段时按 null 解码。前端仅在现有 fresh、绑定和 control identity 条件成立，且该水位与当前业务状态及本次回执的原始时间字符串精确相等时，允许以水位完成收敛；保留旧服务的采样时间判定，不将水位转为毫秒后比较。同一 owner 后续操作使样本失效时必须继续观察；已覆盖需求不再无条件触发一次额外读取，周期兜底保留。
+
 **保留、失败与证明**：生命周期只改变观察缓存/订阅资源/传播 sequence；保持持久数据、History、Queue、Library/Playlist revisions、MPD 控制事实不变。FakeClock 和受控 PlayerPort 需证明单循环、预算超时、无重叠、独立域降级、周期重试、关停资源释放和读操作无业务副作用；进程重启清空观察可信度并更换 epoch。自动恢复不得接入未通过第一章 §8.8 前置验收的 reconciliation 路径。以上新增代码及测试仍未实现。
 
 ### 12.3.1 原版 MPD 实际身份与页面恢复补充（2026-10-04，RT-ACTUAL-001）
@@ -1055,7 +1060,7 @@ Android 目录首期只保留项目边界，不要求与 Web 同期开发。
 
 ## 22. 2026-10-11 v0.1 最小真实交付范围（MIN-DELIVERY-001）
 
-用户已确认优先级：正确构建、NAS Docker部署、连接真实MPD、现有模拟功能真实有效、及时自动曲库同步、基本状态与排障日志。本文本节覆盖本章§15完整备份恢复的v0.1交付义务及§17一键更新的前置义务；这些功能延期，不标为已完成。Task10–12执行分配归[最终Batch指导](../plans/2026-10-11-v0-1-nas-final-batch-plan.md)。用户本轮仅授权文档，产品实施及Git/远程操作另行授权。
+用户已确认优先级：正确构建、NAS Docker部署、连接真实MPD、现有模拟功能真实有效、及时自动曲库同步、基本状态与排障日志。本文本节覆盖本章§15完整备份恢复的v0.1交付义务及§17一键更新的前置义务；这些功能延期，不标为已完成。Task10–12执行分配归[最终Batch指导](../archive/plans/2026-10-11-v0-1-nas-final-batch-plan.md)。用户本轮仅授权文档，产品实施及Git/远程操作另行授权。
 
 ### 22.1 配置与容器生命周期（MIN-CONFIG-001）
 

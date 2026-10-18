@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FavoriteIcon from '../components/library/FavoriteIcon.vue'
+import { layoutModeKey } from '../components/layout/layoutMode'
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch, type DeepReadonly } from 'vue'
 import { playerKey } from '../components/player/playerFacts'
 import { deriveQueue } from '../components/queue/queuePresentation'
@@ -19,6 +20,7 @@ const notices = inject(noticeKey)!
 const runtime = inject(playerRuntimeKey)
 const tasks = inject(taskActionsKey)
 const session = inject(playerSessionKey)!
+const layout = inject(layoutModeKey, null)
 const actions = runtime && tasks ? createQueueActions(player, runtime, tasks, () => Boolean(session.actions?.locked)) : null
 const queue = computed(() => deriveQueue(player.snapshot, player.writable))
 ui.enter()
@@ -91,6 +93,8 @@ function cancelDrag() {
   if (captured?.handle.hasPointerCapture?.(captured.id)) captured.handle.releasePointerCapture(captured.id)
   actions?.cancel()
 }
+// A reflow invalidates the captured row geometry, but never the shared task owner.
+watch(() => layout?.mode.value, () => { if (pointer) cancelDrag() }, { flush: 'sync' })
 function updateDrag() {
   if (!pointer?.active) return
   ghost.value = { id: pointer.item, x: pointer.x - pointer.offsetX, y: pointer.y - pointer.offsetY, width: pointer.width }

@@ -3,7 +3,7 @@
 **当前执行入口（2026-10-11用户优先级修订）：** [v0.1 NAS最小真实交付 Final Batch Plan](2026-10-11-v0-1-nas-final-batch-plan.md)。已确认目标/范围；2026-10-11仅B00 CLOSED / BASELINE PASSED，指定后端36项及Web36项fresh通过，证据见Final Batch Plan B00。B00C/B01–B09未启动，未改产品或执行NAS/Docker/手机验收。Architecture §22、Library §7.2及Visual §6拥有新合同；本增量优先于下文原Task10–12交付义务。备份恢复、update.sh、restart API、PWA延期，不标完成；用户手动重启Docker容器即可。历史授权/通过记录只属原轮次，不授权本次commit/push/PR/merge。
 
 
-**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
+**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
@@ -718,7 +718,7 @@ Task 3 corrective follow-up is therefore accepted and the repository is READY FO
 
 ## Task 4：Queue、Playback Context、History、AutoPlay、Playback Service
 
-2026-10-04 historical D6 migration (superseded status by 2026-10-09 S12): then-current HEAD 651aade contains the old conservative consumer. The current authority is [Playback Spec §8.9](../specs/2026-09-24-playback-model-queue-semantics-design.md); remaining work is only the [existing D6 corrective plan S0–S12](2026-10-04-task-4-d6-recovery-corrective-plan.md). PB-NATURAL-001/PB-NATURAL-EMPTY-001 are historical consumer rows. New PB-BINDING/CURRENT/QUEUE-ADOPT/HISTORY-UNCERTIFIED/AUTOPLAY-EXEC/RECOVERY-RUNNER and RT-ACTUAL obligations are not implemented or accepted. No automatic commit or backend extension is authorized by this migration. R1 was accepted by the user on 2026-10-04: service/MPD restart restores actual-state display, while business occurrence rebinding requires an explicitly requested playback operation and confirmation. Browser refresh/new browser does not discard a valid service binding. Acceptance of this contract is not implementation or gate acceptance; final remains BLOCKED.
+2026-10-04 historical D6 migration (superseded status by 2026-10-09 S12): then-current HEAD 651aade contains the old conservative consumer. The current authority is [Playback Spec §8.9](../../specs/2026-09-24-playback-model-queue-semantics-design.md); remaining work is only the [existing D6 corrective plan S0–S12](2026-10-04-task-4-d6-recovery-corrective-plan.md). PB-NATURAL-001/PB-NATURAL-EMPTY-001 are historical consumer rows. New PB-BINDING/CURRENT/QUEUE-ADOPT/HISTORY-UNCERTIFIED/AUTOPLAY-EXEC/RECOVERY-RUNNER and RT-ACTUAL obligations are not implemented or accepted. No automatic commit or backend extension is authorized by this migration. R1 was accepted by the user on 2026-10-04: service/MPD restart restores actual-state display, while business occurrence rebinding requires an explicitly requested playback operation and confirmation. Browser refresh/new browser does not discard a valid service binding. Acceptance of this contract is not implementation or gate acceptance; final remains BLOCKED.
 
 Dependencies:
 - Task 1R and Task 2R completed.
@@ -945,7 +945,7 @@ Rules:
 
 ## Task 8：Web/PWA 状态层与播放器
 
-2026-10-10 UI 合同修订：所有 Web 页面的视觉、稳定布局、通知位置和导航映射唯一遵守 [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md)（WEB-UI-*）。保护当前 Player 工作区成果；Task 8 完成当前 W5/W6 验收，不追加全局专辑背景/四项导航，也不因本轮文档更新重开历史通过项。当前差距及未来接入见该合同 §2/§8，本轮没有实现或重新运行验收。
+2026-10-10 UI 合同修订：所有 Web 页面的视觉、稳定布局、通知位置和导航映射唯一遵守 [全局 UI 合同](../../specs/2026-10-03-web-pwa-visual-design.md)（WEB-UI-*）。保护当前 Player 工作区成果；Task 8 完成当前 W5/W6 验收，不追加全局专辑背景/四项导航，也不因本轮文档更新重开历史通过项。当前差距及未来接入见该合同 §2/§8，本轮没有实现或重新运行验收。
 
 2026-10-09 用户验收优先级调整：先交付手机浏览器中的实际页面、显示及触摸交互，提供真实 LAN IP/端口供手机实测；不新增桌面专用布局或独立验收场景控制台。PWA manifest/SW/安装/冷离线壳范围 DEFERRED，不阻塞修订后的 Task 8 手机 Web acceptance 或 Task 9；原始 PWA 范围不据此标为已完成。具体 Gate 归 Task 8 Batch Plan，操作与报告见 [手机 Web 真人验收方法](2026-10-09-mobile-web-manual-acceptance.md)。
 
@@ -1004,9 +1004,9 @@ Files:
 
 ## Task 9：Web Queue、Library、Playlist、Search、Favorites、Settings
 
-2026-10-11 当前审计/实施入口：[Task 9 Contract Audit](2026-10-10-task-9-contract-audit.md)与[Task 9 Web Batch Plan](2026-10-10-task-9-web-batch-plan.md)。B01–B09 **CLOSED / HUMAN PASSED**；B09原A01功能及A02局部布局整改已获用户最终验收，本次只记录文档，不重复测试；B10自动/关系及production/LAN预检已完成，手机综合PENDING、新实机Gate BLOCKED/NOT RUN，Task9整体未完成。普通song PB-SONG-NOW-001及MPD保存后重启生效SYS-MPD-CONNECTION-001冻结并已实现。最新B09范围及证据见[B09 acceptance](../archive/task-9/2026-10-11-task-9-b09-acceptance.md)。下面原Steps保留，由Batch Plan映射执行，不将整Task勾选完成。
+2026-10-11 当前审计/实施入口：[Task 9 Contract Audit](2026-10-10-task-9-contract-audit.md)与[Task 9 Web Batch Plan](2026-10-10-task-9-web-batch-plan.md)。B01–B09 **CLOSED / HUMAN PASSED**；B09原A01功能及A02局部布局整改已获用户最终验收，本次只记录文档，不重复测试；B10自动/关系及production/LAN预检已完成，手机综合PENDING、新实机Gate BLOCKED/NOT RUN，Task9整体未完成。普通song PB-SONG-NOW-001及MPD保存后重启生效SYS-MPD-CONNECTION-001冻结并已实现。最新B09范围及证据见[B09 acceptance](../task-9/2026-10-11-task-9-b09-acceptance.md)。下面原Steps保留，由Batch Plan映射执行，不将整Task勾选完成。
 
-2026-10-10 顺序修订：先按 [全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md) §8 审计并交付持久共享壳/唯一顶部通知、全局背景、四项导航，再扩展页面内容；原 Step 12 前移为此共同前置阶段，禁止重复实施。四项映射和设置入口只引用 WEB-UI-NAV-001，不另定导航合同。本节不预拆 Batch；新证明必须覆盖共享壳→路由→背景/通知/Player 保留关系。纯壳不依赖尚待审计的 song Play Now 原子后端入口；依赖该动作的内容仍需其 prerequisite。
+2026-10-10 顺序修订：先按 [全局 UI 合同](../../specs/2026-10-03-web-pwa-visual-design.md) §8 审计并交付持久共享壳/唯一顶部通知、全局背景、四项导航，再扩展页面内容；原 Step 12 前移为此共同前置阶段，禁止重复实施。四项映射和设置入口只引用 WEB-UI-NAV-001，不另定导航合同。本节不预拆 Batch；新证明必须覆盖共享壳→路由→背景/通知/Player 保留关系。纯壳不依赖尚待审计的 song Play Now 原子后端入口；依赖该动作的内容仍需其 prerequisite。
 
 2026-10-09 增量 prerequisite：普通 song Play Now 新建 occurrence、保留原待播项，明确 Stop 后重启会话并启用 AutoPlay（Playback Spec §3.3 已接受）。原子 song-id 接口、Context/History 生命周期由 Task 9 Contract Audit 完成；不得以现有 Start Track 或前端拼接请求替代。不在 Task 8 中实施，不据此预拆 Task 9 Batches。
 

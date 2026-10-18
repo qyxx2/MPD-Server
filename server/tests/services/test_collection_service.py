@@ -131,6 +131,37 @@ def services():
     return repo, playlists, library, collections
 
 
+@pytest.mark.parametrize(("sort_by", "sort_order", "expected"), [
+    ("title", "asc", ("a", "b", "z", "unknown")),
+    ("title", "desc", ("unknown", "z", "a", "b")),
+    ("modified_at", "asc", ("z", "a", "b", "unknown")),
+    ("modified_at", "desc", ("a", "b", "z", "unknown")),
+])
+def test_library_collection_uses_selected_sort_and_preserves_context(sort_by, sort_order, expected):
+    songs = [
+        Song(song_id=sid, title=title, file_uri=f"music/{sid}.flac",
+             file_mtime_ns=mtime, availability_status=status)
+        for sid, title, mtime, status in [
+            ("b", "Alpha", 20, "AVAILABLE"),
+            ("a", "Alpha", 20, "AVAILABLE"),
+            ("z", "Bravo", 10, "AVAILABLE"),
+            ("unknown", "Zulu", None, "AVAILABLE"),
+            ("missing", "Missing", 15, "MISSING"),
+        ]
+    ]
+    repo = FakeLibraryRepository(songs)
+    collections = CollectionService(LibraryService(repo), FakePlaylistReader())
+    result = run(collections.get_collection(source_type="LIBRARY", sort_by=sort_by, sort_order=sort_order))
+    assert result.song_ids == expected
+    assert result.unavailable_song_ids == ("missing",)
+    context = collections.create_playback_context(result)
+    assert context.ordered_song_ids == expected
+    repo.songs = {sid: song.model_copy(update={"title": sid, "file_mtime_ns": 0})
+                  for sid, song in repo.songs.items()}
+    restored = run(collections.get_collection(playback_context=context))
+    assert restored.song_ids == expected
+
+
 @pytest.mark.parametrize(
     ("source_type", "source_id", "song_ids"),
     [

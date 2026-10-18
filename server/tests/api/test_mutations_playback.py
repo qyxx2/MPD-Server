@@ -344,6 +344,55 @@ def test_collection_play_creates_context_before_playback(client):
     assert context.ordered_song_ids == ("song-1", "song-2")
 
 
+@pytest.mark.parametrize("sort_by", ["title", "modified_at"])
+@pytest.mark.parametrize("sort_order", ["asc", "desc"])
+def test_library_play_forwards_selected_sort(client, sort_by, sort_order):
+    playback = FakePlaybackService()
+    collection = FakeCollectionService()
+    with app_services(playback_service=playback, collection_service=collection):
+        response = client.post(
+            "/api/playback/collections/play",
+            json={"source_type": "LIBRARY", "sort_by": sort_by, "sort_order": sort_order},
+            headers=idempotency_headers("sorted-library"),
+        )
+    assert response.status_code == 200, response.text
+    assert collection.calls[0]["sort_by"] == sort_by
+    assert collection.calls[0]["sort_order"] == sort_order
+    assert playback.calls[0][1].ordered_song_ids == ("song-1", "song-2")
+
+
+@pytest.mark.parametrize("sorting", [
+    {"sort_by": "album"}, {"sort_order": "reverse"},
+])
+def test_library_play_rejects_invalid_sort_before_playback(client, sorting):
+    playback = FakePlaybackService()
+    collection = FakeCollectionService()
+    with app_services(playback_service=playback, collection_service=collection):
+        response = client.post(
+            "/api/playback/collections/play",
+            json={"source_type": "LIBRARY", **sorting},
+            headers=idempotency_headers("invalid-sort"),
+        )
+    assert response.status_code == 422
+    assert collection.calls == []
+    assert playback.calls == []
+
+
+@pytest.mark.parametrize("sorting", [{"sort_by": "title"}, {"sort_order": "desc"}])
+def test_non_library_play_rejects_sort_before_playback(client, sorting):
+    playback = FakePlaybackService()
+    collection = FakeCollectionService()
+    with app_services(playback_service=playback, collection_service=collection):
+        response = client.post(
+            "/api/playback/collections/play",
+            json={"source_type": "FAVORITES", **sorting},
+            headers=idempotency_headers("non-library-sort"),
+        )
+    assert response.status_code == 422
+    assert collection.calls == []
+    assert playback.calls == []
+
+
 def test_queue_mutations_and_save_as_playlist(client):
     playback = FakePlaybackService()
     queue = FakeQueueManager()

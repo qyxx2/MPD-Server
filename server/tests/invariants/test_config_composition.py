@@ -27,7 +27,8 @@ def test_saved_endpoint_and_mode_are_applied_only_at_start(tmp_path, monkeypatch
     monkeypatch.setenv('MPD_PASSWORD', 'current-secret')
     created = []
 
-    def adapter(host, *, port, password, uri_mapper):
+    def adapter(host, *, port, password, uri_mapper, omit_song_tags):
+        assert omit_song_tags is True
         created.append((host, port, password))
         player = MockMPD()
         player.disconnect()

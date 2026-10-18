@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { PlayerFacts } from './playerFacts'
 import { activeCue, parseLyrics } from './lyrics'
-const props = defineProps<{ song: PlayerFacts['song']; position: number | null; resourceScope: string; seekEnabled?: boolean; duration?: number | null }>()
+const props = defineProps<{ song: PlayerFacts['song']; position: number | null; resourceScope: string; seekEnabled?: boolean; duration?: number | null; showArtworkReturn?: boolean }>()
 const emit = defineEmits<{ showArtwork: []; seek: [seconds: number] }>()
 const document = computed(() => parseLyrics(props.song?.lyrics || '', props.song?.lyrics_format || null))
 const active = computed(() => activeCue(document.value, props.position))
@@ -56,9 +56,9 @@ watch(() => JSON.stringify([props.resourceScope, props.song?.song_id, props.song
 watch(() => active.value.join(','), () => { void locate() })
 </script>
 <template>
-  <section class="lyrics-stage" aria-label="歌词">
+  <section :class="['lyrics-stage', { 'lyrics-workspace': showArtworkReturn === false }]" aria-label="歌词">
     <div class="lyrics-header">
-      <button type="button" class="artwork-return" aria-label="显示封面" @click="emit('showArtwork')">
+      <button v-if="showArtworkReturn !== false" type="button" class="artwork-return" aria-label="显示封面" @click="emit('showArtwork')">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4l5 5M9 4v5H4M20 20l-5-5M15 20v-5h5" /></svg>
       </button>
     </div>
@@ -78,6 +78,7 @@ watch(() => active.value.join(','), () => { void locate() })
 .lyrics-content { min-height: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain; position: relative; user-select: text; -webkit-user-select: text; touch-action: pan-y; overflow-wrap: anywhere; }
 .lyric-cue { color: var(--text-secondary); padding: .65rem .25rem; line-height: 1.7; white-space: pre-wrap; }
 .lyric-cue.seekable { cursor: pointer; }
-.lyric-cue[aria-current="true"] { color: var(--accent); font-weight: 650; background: rgba(49, 183, 226, .1); border-radius: .5rem; }
+.lyric-cue[aria-current="true"] { color: var(--accent); font-weight: 650; font-size: 1.15em; }
 .lyrics-plain, .lyric-note { white-space: pre-wrap; line-height: 1.8; color: var(--text-secondary); }
+.lyrics-workspace { padding: .25rem .5rem .25rem 4em; }
 </style>

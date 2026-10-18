@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 
 import pytest
 
@@ -25,7 +26,9 @@ def run(coro):
 
 
 @pytest.fixture
-def components(tmp_path):
+def components(tmp_path, monkeypatch):
+    # Fix entropy for orchestration assertions; AutoPlay tests cover fresh shuffles.
+    monkeypatch.setattr(random.Random, "shuffle", lambda _rng, ids: ids.sort())
     path = str(tmp_path / "playback-service.db")
     run(initialize_database(path))
 
@@ -118,7 +121,7 @@ def test_start_track_failure_does_not_advance_service_state_or_history(
     before = run(components["state"].get_state())
     assert before is not None
 
-    player.fail_next("play", "injected play failure")
+    player.fail_next("queue_play", "injected play failure")
 
     with pytest.raises(PlayerCommandError, match="injected play failure"):
         run(service.start_track("b"))
@@ -144,7 +147,7 @@ def test_play_now_failure_does_not_record_switch_or_advance_state(components):
 
     before = run(components["state"].get_state())
     assert before is not None
-    player.fail_next("play", "injected play failure")
+    player.fail_next("queue_play", "injected play failure")
 
     with pytest.raises(PlayerCommandError, match="injected play failure"):
         run(service.play_now(item_b.queue_item_id))
@@ -281,7 +284,7 @@ def test_next_failure_does_not_advance_service_state(components):
     before = run(components["state"].get_state())
     assert before is not None
 
-    player.fail_next("play", "injected next failure")
+    player.fail_next("queue_play", "injected next failure")
     with pytest.raises(PlayerCommandError, match="injected next failure"):
         run(service.next())
 
@@ -585,7 +588,7 @@ def test_play_context_does_not_fake_state_or_history_when_play_fails(
     assert before_state is not None
     assert before_history is not None
 
-    player.fail_next("play", "injected collection play failure")
+    player.fail_next("queue_play", "injected collection play failure")
     context = make_playback_context("a", "b", "c")
 
     with pytest.raises(PlayerCommandError, match="injected collection play failure"):

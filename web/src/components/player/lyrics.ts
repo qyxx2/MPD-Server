@@ -19,12 +19,14 @@ export function parseLyrics(text: string, format: string | null): LyricsDocument
     if (times.length) {
       for (const time of times) {
         const seconds = Number(time[1]) * 60 + Number(time[2]) + Number(`0.${time[3] || '0'}`)
-        if (Number.isFinite(seconds)) doc.cues.push({ seconds, text: readable })
+        if (Number.isFinite(seconds)) {
+          doc.synchronized = true
+          if (readable) doc.cues.push({ seconds, text: readable })
+        }
       }
     } else if (line.trim() && !/^\[(?:ar|al|ti|au|by|re|ve|length|offset):[^\]]*\]$/i.test(line.trim())) doc.notes.push(line)
   }
   doc.cues.sort((a, b) => a.seconds - b.seconds) // Stable sort preserves source order for ties.
-  doc.synchronized = doc.cues.length > 0
   return doc
 }
 export function activeCue(document: LyricsDocument, seconds: number | null): number[] {

@@ -6,7 +6,7 @@
 
 主计划明确允许先实施共享壳/导航/通知/背景，此阶段不依赖普通 song Play Now；依赖该播放动作的内容必须等待原子入口。依据：[主计划](2026-09-25-mpd-server-v0-1-implementation-plan.md) 第 1002–1017 行。
 
-后端已有 Queue、集合、Playlist/Favorites、Search、Output/MPD About API，Task 9 主要应消费这些服务端权威。真实缺口是普通歌曲 Play Now：现有 `/tracks/{song_id}/play` 会替换 Queue，现有 `/queue/items/{queue_item_id}/play` 只选既有 occurrence，均不能实现已经接受的“新建 occurrence、保留原 pending、Stop 后重新开启会话/AutoPlay”。证据：`server/app/api/playback.py:188`、`:210`；`server/app/services/playback_service.py:434`、`:493`；[Playback Spec](../specs/2026-09-24-playback-model-queue-semantics-design.md) 第 141–145 行。
+后端已有 Queue、集合、Playlist/Favorites、Search、Output/MPD About API，Task 9 主要应消费这些服务端权威。真实缺口是普通歌曲 Play Now：现有 `/tracks/{song_id}/play` 会替换 Queue，现有 `/queue/items/{queue_item_id}/play` 只选既有 occurrence，均不能实现已经接受的“新建 occurrence、保留原 pending、Stop 后重新开启会话/AutoPlay”。证据：`server/app/api/playback.py:188`、`:210`；`server/app/services/playback_service.py:434`、`:493`；[Playback Spec](../../specs/2026-09-24-playback-model-queue-semantics-design.md) 第 141–145 行。
 
 建议 Batch 依赖关系为：共享 UI 基础先行 → 单独的后端 song Play Now prerequisite → 复用统一 SongRow 的各域 UI。后端 prerequisite 应包含服务/仓储/HTTP/幂等/确认及实时联合 delta 证明，不能只增加 endpoint 后交给前端串 `queue → play`。
 
@@ -21,7 +21,7 @@
 | `playback_service.py:118` 使用现有 DB 外层事务；`:172` 捕获完整 current delta；`:343` 认证/丢弃不可信旧 active；`:128` 有显式 current 操作名称枚举 | 新方法需审计这些扩展钩子，尤其 current token/binding/recovery 身份生命周期，不能只复制函数主体 |
 | `main.py:179` 统一 mutation 幂等入口；`test_idempotency.py:19`/`:64` 有业务与 terminal record 同事务证明 | 新入口复用已有 middleware、同意图 key 与稳定 replay；不另造页级重试机制 |
 
-已经接受、无需再问的产品点：每次普通 Play Now 新 occurrence、保留所有 pending ID/相对顺序和同 song 重复项；明确 Stop 后建立新会话并打开 AutoPlay；传输 retry 复用 Idempotency-Key。[Playback Spec](../specs/2026-09-24-playback-model-queue-semantics-design.md) 第 143–145 行。
+已经接受、无需再问的产品点：每次普通 Play Now 新 occurrence、保留所有 pending ID/相对顺序和同 song 重复项；明确 Stop 后建立新会话并打开 AutoPlay；传输 retry 复用 Idempotency-Key。[Playback Spec](../../specs/2026-09-24-playback-model-queue-semantics-design.md) 第 143–145 行。
 
 **仍需 audit 冻结，不能从现有方法猜测：**
 

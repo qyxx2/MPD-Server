@@ -8,7 +8,7 @@
 
 **Tech Stack:** 既有FastAPI、SQLite、Pydantic、pytest/Ruff、Vue、TypeScript、Vitest；原.venv及已有Node依赖。
 
-**Spec:** [corrective design](../specs/2026-10-12-task-9-startup-library-reconciliation-design.md)，长期合同Library §7.2、Architecture §4.1/8.2/12；[root-cause evidence](2026-10-12-task-9-startup-root-cause-evidence.md)。
+**Spec:** [corrective design](../task-9/2026-10-12-task-9-startup-library-reconciliation-design.md)，长期合同Library §7.2、Architecture §4.1/8.2/12；[root-cause evidence](2026-10-12-task-9-startup-root-cause-evidence.md)。
 
 **Status:** DRAFT / USER REVIEW REQUIRED。C0–C5 NOT STARTED；没有十项永久RED或corrective GREEN结果。
 

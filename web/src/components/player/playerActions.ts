@@ -24,6 +24,13 @@ function observationUnknown(store: PlayerStore) {
     o.actual_state === null && o.actual_current === null && o.bound_queue_item_id === null && o.control_target === null &&
     o.sync_status === 'UNBOUND' && !o.reconciliation_required && !o.error_code && !o.error_message
 }
+// Date.parse truncates Python's microseconds. Keep sub-millisecond ordering
+// when using a real sample time as the legacy convergence proof.
+function sampleCoversTime(observedAt: string, updatedAt: string): boolean {
+  const delta = Date.parse(observedAt) - Date.parse(updatedAt)
+  const remainder = (value: string) => (/\.(\d+)/.exec(value)?.[1] ?? '').padEnd(9, '0').slice(3, 9)
+  return delta > 0 || (delta === 0 && remainder(observedAt) >= remainder(updatedAt))
+}
 type Action = 'pause' | 'resume' | 'next' | 'previous' | 'seek' | 'stop'
 type SeekPreview = { seconds: number; duration: number }
 export function createPlayerActions(store: PlayerStore, runtime: PlayerRuntime) {
@@ -32,7 +39,7 @@ export function createPlayerActions(store: PlayerStore, runtime: PlayerRuntime) 
   let draftIdentity: string | null = null
   let version = 0, stopVersion = 0, primaryScope = ''
   let retry: { intent: MutationIntent; action: Action; identity: string | null; version: number; preview: SeekPreview | null } | null = null
-  let waiting: { identity: string; scope: string; updatedAt: number } | null = null
+  let waiting: { identity: string; scope: string; updatedAt: string } | null = null
   function cancelDraft() { ui.draft = null; draftIdentity = null }
   function revoke() { ++version; cancelDraft(); ui.seekPreview = null; waiting = null; retry = null; ui.pending = false; ui.syncing = false; ui.unknown = false; ui.confirmed = false; ui.readFailed = false; ui.error = '' }
   function converge() {
@@ -40,7 +47,9 @@ export function createPlayerActions(store: PlayerStore, runtime: PlayerRuntime) 
     const o = store.snapshot?.playback_observation
     if (observationUnknown(store) && pendingScope(store) === waiting.scope && store.writable) return
     if (controlIdentity(store) !== waiting.identity || !store.writable || facts.value.stale) { waiting = null; ui.syncing = false; ui.seekPreview = null; return }
-    if (facts.value.bound && o?.observed_at && Date.parse(o.observed_at) >= waiting.updatedAt) { waiting = null; ui.syncing = false; ui.seekPreview = null; ui.readFailed = false }
+    if (facts.value.bound && o?.observed_at && (sampleCoversTime(o.observed_at, waiting.updatedAt)
+      || (o.covered_playback_updated_at !== null && o.covered_playback_updated_at === waiting.updatedAt
+        && store.snapshot?.playback?.updated_at === o.covered_playback_updated_at))) { waiting = null; ui.syncing = false; ui.seekPreview = null; ui.readFailed = false }
   }
   const dispose = watch(() => [controlIdentity(store), store.writable, store.snapshot, store.marker.generation, pendingScope(store)] as const, (value, old) => {
     if (value[0] !== old[0] || value[4] !== old[4] || !value[1]) {
@@ -66,7 +75,7 @@ export function createPlayerActions(store: PlayerStore, runtime: PlayerRuntime) 
       if (valid()) {
         retry = null; ui.unknown = false; ui.confirmed = true
         if (action === 'seek' && receipt && identity) {
-          waiting = { identity, scope: primaryScope, updatedAt: Date.parse(receipt.updated_at) }; ui.syncing = true; converge()
+          waiting = { identity, scope: primaryScope, updatedAt: receipt.updated_at }; ui.syncing = true; converge()
         }
       }
       await read()

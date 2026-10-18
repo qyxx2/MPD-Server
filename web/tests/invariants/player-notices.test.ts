@@ -127,3 +127,25 @@ it('player_media_connection_and_operation_sources_use_one_bounded_projection', a
   expect(h.wrapper.get('.lyrics-content').text()).toContain('fallback正文')
   h.wrapper.unmount()
 })
+
+it('lyric information expires without snapshot polling renewal and returns on a real state change', async () => {
+  const h = playerPage()
+  await flushPromises()
+  vi.useFakeTimers()
+  const s = playerState(); s.sequence++
+  Object.assign(s.current_song!, { lyrics: null, lyrics_format: null, lyrics_status: 'missing' })
+  h.store.acceptRefresh(s, 1)
+  await h.wrapper.get('button[aria-label="显示歌词"]').trigger('click')
+  await vi.advanceTimersByTimeAsync(4000)
+  s.sequence++; h.store.acceptRefresh(s, 1); await flushPromises()
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(h.wrapper.find('.status-toggle').exists()).toBe(false)
+  expect(h.wrapper.get('[data-testid="operation-status"]').text()).toContain('无歌词')
+  const failed = playerState(); failed.sequence = s.sequence + 1
+  Object.assign(failed.current_song!, { lyrics: null, lyrics_format: null, lyrics_status: 'read_error' })
+  h.store.acceptRefresh(failed, 1); await flushPromises()
+  await vi.advanceTimersByTimeAsync(6000)
+  expect(h.wrapper.find('.status-warning').exists()).toBe(true)
+  expect(h.wrapper.find('.status-spinner').exists()).toBe(false)
+  h.wrapper.unmount()
+})

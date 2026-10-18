@@ -126,8 +126,13 @@ def test_failed_stop_never_publishes_generation(real_client, monkeypatch, failur
         with pytest.raises(sqlite3.DatabaseError, match='stop terminal|stop commit'):
             mutate(client, 'POST', '/api/playback/stop', key='failed-stop')
     monkeypatch.setattr(database, '_connect', original_connect)
-    assert payload(state)['explicit_stop_generation'] == 0
-    assert subscriber.pending is None
+    after = payload(state)
+    assert after['explicit_stop_generation'] == 0
+    assert after['playback']['state'] == 'PLAYING'
+    assert after['playback_observation']['control_target'] is None
+    # The rolled-back Stop cannot publish success; retiring its old control
+    # token is a safety invalidation of the prior committed observation.
+    assert subscriber.pending.domains == frozenset({'playback'})
 
 
 def test_delete_without_successor_is_not_explicit_stop(real_client):

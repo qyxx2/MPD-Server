@@ -65,9 +65,9 @@ class AcceptancePlayer(MockMPD):
         self._advance_acceptance()
         await super().stop()
 
-    async def queue_play(self, mpd_song_id):
+    async def queue_play(self, mpd_song_id, *, expected_connection_epoch=None):
         self._advance_acceptance()
-        await super().queue_play(mpd_song_id)
+        await super().queue_play(mpd_song_id, expected_connection_epoch=expected_connection_epoch)
 
     async def status(self):
         value = await super().status()

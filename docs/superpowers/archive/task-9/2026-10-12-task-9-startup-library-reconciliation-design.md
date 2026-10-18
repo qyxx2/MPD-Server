@@ -8,7 +8,7 @@
 
 本轮只处理startup Library reconciliation及Web读取预算；不推进其它Task，不合并main，不连接真实MPD/NAS/DAC，不本地运行Docker。所有机械验证用临时SQLite、media fixtures、MockMPD/Fake Player。环境沿用现有.venv和Node依赖，禁止修改依赖或数据库清空。容器交付沿用CI构建新SHA双架构镜像，旧CI成功不是修复验收；push/PR需另有显式授权。
 
-长期语义唯一归修订后的[Library §7.2](2026-09-24-library-playlist-tag-search-design-2-1.md)和[Architecture §4.1、§8.2、§12](2026-09-25-system-and-development-architecture-design.md)。本文锁定corrective的组件/数据流与证明分配，不另定义播放/Queue/History合同。两份长期合同的本次增量同样待用户确认。
+长期语义唯一归修订后的[Library §7.2](../../specs/2026-09-24-library-playlist-tag-search-design-2-1.md)和[Architecture §4.1、§8.2、§12](../../specs/2026-09-25-system-and-development-architecture-design.md)。本文锁定corrective的组件/数据流与证明分配，不另定义播放/Queue/History合同。两份长期合同的本次增量同样待用户确认。
 
 ## 2. 方案选择
 

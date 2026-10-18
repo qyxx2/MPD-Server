@@ -1,6 +1,6 @@
 # v0.1 NAS B06：健康与日志验收
 
-2026-10-12，范围仅[Final Plan B06](../superpowers/plans/2026-10-11-v0-1-nas-final-batch-plan.md)。状态：**IMPLEMENTED / AUTOMATED PASSED / Gate CLOSED**。本批无人工Gate；B03 NAS及时性、B08真实联合验收仍待确认，B07–B09未推进。
+2026-10-12，范围仅[Final Plan B06](../plans/2026-10-11-v0-1-nas-final-batch-plan.md)。状态：**IMPLEMENTED / AUTOMATED PASSED / Gate CLOSED**。本批无人工Gate；B03 NAS及时性、B08真实联合验收仍待确认，B07–B09未推进。
 
 ## 合同与实现
 

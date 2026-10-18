@@ -1,6 +1,6 @@
 # Task4 D6 原版 MPD 合同迁移与执行计划
 
-**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
+**当前验收状态（2026-10-09）：D6 S10/S11/S12、Batch13及Task6 functional final PASSED（既定后端/现有NAS部署功能范围）。逐Contract、完整按序命令与owner修复见[唯一D6 acceptance](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md)文末S12。原本地DB保留UNVERIFIED作为独立审计事件保留，不替代产品合同门禁；历史TO CREATE/NOT RUN/BLOCKED只描述当时轮次。默认runner仍需显式注入，最终配置属Task10；Task8/Task12尚未验收。用户已授权本轮提交、push、PR与合规合并main。**
 
 > **For agentic workers:** 后续实现使用 `superpowers:executing-plans` 顺序执行；本轮仅文档。用户已授权合同修订，未授权本轮代码、测试、依赖、环境、schema/数据库修改、commit/push/PR、Docker/live MPD。本计划只有一份；归档中的旧 consumer 和旧 S0/S1 为历史记录，不是当前执行指令。
 
@@ -17,17 +17,17 @@
 | 简称 | 文档（完整文件名与链接） | 角色 / 使用时机 |
 |---|---|---|
 | P | [2026-10-04-task-4-d6-recovery-corrective-plan.md](2026-10-04-task-4-d6-recovery-corrective-plan.md)（本文） | 唯一 active D6 计划；当前 S0–S12、白名单、依赖和 proof 迁移入口 |
-| E | [2026-10-04-task-4-d6-recovery-acceptance.md](../archive/task-4/2026-10-04-task-4-d6-recovery-acceptance.md) | 唯一 D6 验收记录；执行前后核对最新状态，历史 GREEN 不替代当前验收 |
-| B | [2026-10-04-task-6-batch-13-acceptance.md](../archive/task-6/2026-10-04-task-6-batch-13-acceptance.md) | Batch13 联合门禁记录；S12 必读，D6 未满足时不能关闭 |
-| F | [2026-09-24-playback-model-queue-semantics-design.md](../specs/2026-09-24-playback-model-queue-semantics-design.md) | 唯一领域语义 authority；§8.9 及所引用 Queue/History/AutoPlay 条款 |
-| A | [2026-09-25-system-and-development-architecture-design.md](../specs/2026-09-25-system-and-development-architecture-design.md) | 架构、DTO、只读和提交传播 authority；§12.1–12.3.1/§19.5 |
+| E | [2026-10-04-task-4-d6-recovery-acceptance.md](../task-4/2026-10-04-task-4-d6-recovery-acceptance.md) | 唯一 D6 验收记录；执行前后核对最新状态，历史 GREEN 不替代当前验收 |
+| B | [2026-10-04-task-6-batch-13-acceptance.md](../task-6/2026-10-04-task-6-batch-13-acceptance.md) | Batch13 联合门禁记录；S12 必读，D6 未满足时不能关闭 |
+| F | [2026-09-24-playback-model-queue-semantics-design.md](../../specs/2026-09-24-playback-model-queue-semantics-design.md) | 唯一领域语义 authority；§8.9 及所引用 Queue/History/AutoPlay 条款 |
+| A | [2026-09-25-system-and-development-architecture-design.md](../../specs/2026-09-25-system-and-development-architecture-design.md) | 架构、DTO、只读和提交传播 authority；§12.1–12.3.1/§19.5 |
 | T | [2026-10-03-mpd-server-task-6-batch-plan.md](2026-10-03-mpd-server-task-6-batch-plan.md) | Task6 依赖与 Contract Matrix；§5 回归集合及 Batch13 门禁 |
 | M | [2026-09-25-mpd-server-v0-1-implementation-plan.md](2026-09-25-mpd-server-v0-1-implementation-plan.md) | 总体 Task 依赖、Task4/Task6 边界与联合验收 |
-| C | [mpd-0.23.5-capabilities.md](../../mpd-0.23.5-capabilities.md) | 目标版本实测能力记录；不以命令存在推断原因能力或未实测操作 |
+| C | [mpd-0.23.5-capabilities.md](../../../mpd-0.23.5-capabilities.md) | 目标版本实测能力记录；不以命令存在推断原因能力或未实测操作 |
 
 优先以当前源码/Git 核查实施事实，以 F/A 决定合同；P/T/M 分解实施，E/B 记录证据，C 限定能力证据。发现冲突应停止相关步骤并修正文档，不能用旧测试或旧 GREEN 覆盖当前 Spec。E/B 虽位于 archive，仍承担上述最新验收状态记录职责。
 
-旧文档或历史表中的 `P §8.9` 可能指 Playback Spec，即本表 F；不把旧简称带入当前步骤。人工“方案 A”也不是架构文档 A，须结合上下文识别。旧 consumer、旧 S0/S1 与废止步骤只见 [历史归档](../archive/task-4/2026-10-04-task-4-d6-recovery-plan-history.md)；只有追溯旧 proof、SOURCE 裁定或调查过程时读取，不作为执行清单。
+旧文档或历史表中的 `P §8.9` 可能指 Playback Spec，即本表 F；不把旧简称带入当前步骤。人工“方案 A”也不是架构文档 A，须结合上下文识别。旧 consumer、旧 S0/S1 与废止步骤只见 [历史归档](../task-4/2026-10-04-task-4-d6-recovery-plan-history.md)；只有追溯旧 proof、SOURCE 裁定或调查过程时读取，不作为执行清单。
 
 
 ## 当前状态与路线裁定
@@ -40,7 +40,7 @@
 
 ## S0 审计证据与官方 v0.23.5 复核
 
-当前约束：原版 v0.23.5 无本合同要求的自然完成原因证明；一致快照只能接纳有效绑定内的当前 occurrence。多命令可部分成功，ID 可复用，idle 不提供事件日志。原始 probe 已取得并与 C 核对（105 commands、17 status fields，无 verified_operations）；第二轮原始 probe 未取得，目标运行时未验证。完整来源、摘要与调查过程见 [能力复核归档](../archive/task-4/2026-10-04-task-4-d6-recovery-plan-history.md#合同迁移时的能力复核记录)，实现前按需查证，不重复运行 live probe。
+当前约束：原版 v0.23.5 无本合同要求的自然完成原因证明；一致快照只能接纳有效绑定内的当前 occurrence。多命令可部分成功，ID 可复用，idle 不提供事件日志。原始 probe 已取得并与 C 核对（105 commands、17 status fields，无 verified_operations）；第二轮原始 probe 未取得，目标运行时未验证。完整来源、摘要与调查过程见 [能力复核归档](../task-4/2026-10-04-task-4-d6-recovery-plan-history.md#合同迁移时的能力复核记录)，实现前按需查证，不重复运行 live probe。
 
 | 当前文件/方法 | 真实基线与新工作 |
 |---|---|

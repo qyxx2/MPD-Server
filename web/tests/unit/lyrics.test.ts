@@ -1,5 +1,12 @@
 import { expect, it } from 'vitest'
 import { activeCue, parseLyrics } from '../../src/components/player/lyrics'
+it('ignores blank timed lines and holds the preceding lyric until the next real line', () => {
+  const doc = parseLyrics('[00:01]\n[00:02]第一句\n\n[00:03]   \n[00:04][00:05]\n[00:06]第二句', 'lrc')
+  expect(doc.cues).toEqual([{ seconds: 2, text: '第一句' }, { seconds: 6, text: '第二句' }])
+  expect(activeCue(doc, 1)).toEqual([])
+  expect(activeCue(doc, 5)).toEqual([0])
+  expect(activeCue(doc, 6)).toEqual([1])
+})
 it('parses decimal and colon fractions, expands multiple tags and stably groups simultaneous cues', () => {
   const doc = parseLyrics('[ar:测试]\n[00:02.12][00:01]复唱\n[00:02:120]同刻\n[00:02.1]较早\n[00:03.123]末行', 'lrc')
   expect(doc.cues).toEqual([{ seconds: 1, text: '复唱' }, { seconds: 2.1, text: '较早' }, { seconds: 2.12, text: '复唱' }, { seconds: 2.12, text: '同刻' }, { seconds: 3.123, text: '末行' }])

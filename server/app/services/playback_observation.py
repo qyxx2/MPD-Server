@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from server.app.models.realtime import ActualCurrent, PlaybackObservation
-from server.app.player.ports import PlayerCommandError, PlayerUnavailable
+from server.app.player.models import ExecutionSample
+from server.app.player.ports import PlayerCommandError, PlayerPort, PlayerUnavailable
 from server.app.repositories.database import (
     on_transaction_rollback,
     on_transaction_visible,
@@ -40,6 +41,7 @@ class PlaybackObservations:
         self._confirmed_stop: tuple[object, ...] | None = None
         self._diagnostic_number = 0
         self._accepted_diagnostic = 0
+        self._handoff_identity: tuple[object, ...] | None = None
 
     def _effective_sync_status(self) -> str:
         if (self._sample_sync_status == 'CONFIRMED'
@@ -53,11 +55,11 @@ class PlaybackObservations:
             return
         (
             cache, identity, generation, accepted, sample_status, diagnostic,
-            confirmed_stop, accepted_diagnostic,
+            confirmed_stop, accepted_diagnostic, handoff_identity,
         ) = (
             self.cache, self._confirmed_identity, self.generation, self._accepted_sample,
             self._sample_sync_status, self._sync_diagnostic, self._confirmed_stop,
-            self._accepted_diagnostic,
+            self._accepted_diagnostic, self._handoff_identity,
         )
         self._owners.add(owner)
 
@@ -67,6 +69,7 @@ class PlaybackObservations:
             self._sample_sync_status, self._sync_diagnostic = sample_status, diagnostic
             self._confirmed_stop = confirmed_stop
             self._accepted_diagnostic = accepted_diagnostic
+            self._handoff_identity = handoff_identity
             self._owners.discard(owner)
 
         on_transaction_rollback(self.path, rollback)
@@ -222,9 +225,9 @@ class PlaybackObservations:
         sample_number = self._sample_number
         player = self.service.player
         failure = None
+        observed_at = self.clock()
         try:
             sample = await asyncio.wait_for(player.read_execution_sample(), read_timeout)
-            status, entries = sample.status, sample.entries
         except (PlayerUnavailable, PlayerCommandError, TimeoutError, ValueError) as error:
             failure = error
 
@@ -251,85 +254,136 @@ class PlaybackObservations:
                     'reconciliation_required': True,
                 }, deep=True))
                 return await self.get()
-            state = await self.service.queue_manager.get_playback_state()
-            had_binding = await self.service.get_execution_binding() is not None
-            self.service._recovery.accepts(sample)
-            binding = await self.service.get_execution_binding()
-            matched = (
-                binding is not None and bool(binding.entries) and state is not None
-                and status.state.value == state.state.lower()
-                and status.song_id == binding.entries[0][1] and status.song_uri == binding.entries[0][2]
-                and status.song_position == 0 and bool(entries)
-                and entries[0].position == 0 and entries[0].mpd_song_id == binding.entries[0][1]
-                and entries[0].song_uri == binding.entries[0][2]
-            )
-            controllable = matched and self.service._control_sample_supported(sample)
-            # External mode drift retires the old token even if publication rolls back.
-            if (not controllable or (self.service._control_targets.target is not None
-                                    and self.service._control_targets.consume != sample.consume)):
-                self.service._control_targets.invalidate()
-            control_target = (
-                self.service._control_targets.publish(
-                    self.service._control_identity(), binding.entries[0][0], consume=sample.consume,
-                ) if controllable else None
-            )
-            actual_current = None
-            if any(value is not None for value in (
-                status.song_id, status.song_uri, status.song_position,
-            )):
-                actual_current = ActualCurrent(
-                    entry_id=status.song_id,
-                    uri=status.song_uri,
-                    position=status.song_position,
-                )
-            confirmed_stop = False
-            if self._confirmed_stop is not None:
-                stop_player, stop_epoch, stop_version, stop_entries, stop_status = (
-                    self._confirmed_stop
-                )
-                confirmed_stop = (
-                    state is not None and state.state == 'STOPPED'
-                    and status.state.value == 'stopped'
-                    and stop_player is self.service.player
-                    and stop_epoch == sample.connection_epoch
-                    and stop_version == sample.playlist_version
-                    and tuple(
-                        (entry.mpd_song_id, entry.song_uri, entry.position)
-                        for entry in entries
-                    ) == tuple(
-                        (mpd_song_id, uri, position)
-                        for position, (_, mpd_song_id, uri) in enumerate(stop_entries)
-                    )
-                    and stop_status == (status.song_id, status.song_uri, status.song_position)
-                )
-            if status.state.value != 'stopped' or not confirmed_stop:
-                self._confirmed_stop = None
-            sample_sync_status = (
-                'CONFIRMED' if matched or confirmed_stop
-                else 'UNCONFIRMED_STOP' if had_binding and status.state.value == 'stopped'
-                else 'EXTERNAL_DRIFT' if had_binding
-                else 'UNBOUND'
-            )
-            self._sample_sync_status = sample_sync_status
-            sync_status = self._effective_sync_status()
-            await self._set(PlaybackObservation(
-                control_target=control_target,
-                actual_state=status.state,
-                actual_current=actual_current,
-                actual_freshness='fresh',
-                bound_queue_item_id=(binding.entries[0][0] if matched else None),
-                sync_status=sync_status,
-                matches_current=(True if matched else False if (
-                    had_binding and status.song_id is not None
-                ) else None),
-                position_seconds=status.elapsed_seconds if matched else None,
-                duration_seconds=status.duration_seconds if matched else None,
-                observed_at=self.clock(), freshness='fresh' if matched else 'unknown',
-                reconciliation_required=(
-                    sync_status == 'SYNC_FAILED'
-                    or sample_sync_status != 'CONFIRMED'
-                ),
-            ))
-            return self.cache.model_copy(deep=True)
+            return await self._publish_sample(sample, observed_at)
 
         return await run_transaction(self.path, accept)
+
+    def handoff_is_current(self) -> bool:
+        """Synchronous commit check: consume only a still-fresh covered demand."""
+        observed = self.cache
+        return (
+            self._handoff_identity is not None
+            and self._handoff_identity == (
+                self.generation, self.service.player, self.service._recovery.binding,
+                self.service._control_identity(), observed.observed_at,
+            )
+            and observed.freshness == observed.actual_freshness == 'fresh'
+            and observed.sync_status == 'CONFIRMED'
+            and observed.control_target is not None
+            and self.service._control_targets.target == observed.control_target
+            and observed.observed_at is not None
+            and 0 <= (self.clock() - observed.observed_at).total_seconds() <= self.max_age
+        )
+
+    async def handoff(self, sample: ExecutionSample, observed_at: datetime, player: PlayerPort) -> bool:
+        """Publish only a final, complete confirmation inside its mutation owner."""
+        binding = await self.service.get_execution_binding()
+        state = await self.service.queue_manager.get_playback_state()
+        status = sample.status
+        if (player is not self.service.player
+                or binding is None or not binding.entries or state is None or self.service._recovery.quarantined
+                or not 0 <= (self.clock() - observed_at).total_seconds() <= self.max_age
+                or binding.service_epoch != self.service._recovery.service_epoch
+                or (sample.connection_epoch, sample.partition, sample.playlist_version)
+                != (binding.connection_epoch, binding.partition, binding.playlist_version)
+                or tuple((entry.mpd_song_id, entry.song_uri, entry.position) for entry in sample.entries)
+                != tuple((mpd_id, uri, position) for position, (_, mpd_id, uri) in enumerate(binding.entries))
+                or status.state.value.upper() != state.state
+                or (status.song_id, status.song_uri, status.song_position)
+                != (binding.entries[0][1], binding.entries[0][2], 0)
+                or not self.service._control_sample_supported(sample)):
+            return False
+        self._preserve()
+        self.generation += 1  # Also fences an old read when only the binding changed.
+        self._confirmed_identity = await self._identity()
+        await self._publish_sample(sample, observed_at)
+        self._handoff_identity = (
+            self.generation, self.service.player, self.service._recovery.binding,
+            self.service._control_identity(), observed_at,
+        )
+        return True
+
+    async def _publish_sample(self, sample: ExecutionSample, observed_at: datetime) -> PlaybackObservation:
+        status, entries = sample.status, sample.entries
+        state = await self.service.queue_manager.get_playback_state()
+        had_binding = await self.service.get_execution_binding() is not None
+        self.service._recovery.accepts(sample)
+        binding = await self.service.get_execution_binding()
+        matched = (
+            binding is not None and bool(binding.entries) and state is not None
+            and status.state.value == state.state.lower()
+            and status.song_id == binding.entries[0][1] and status.song_uri == binding.entries[0][2]
+            and status.song_position == 0 and bool(entries)
+            and entries[0].position == 0 and entries[0].mpd_song_id == binding.entries[0][1]
+            and entries[0].song_uri == binding.entries[0][2]
+        )
+        controllable = matched and self.service._control_sample_supported(sample)
+        # External mode drift retires the old token even if publication rolls back.
+        if (not controllable or (self.service._control_targets.target is not None
+                                and self.service._control_targets.consume != sample.consume)):
+            self.service._control_targets.invalidate()
+        control_target = (
+            self.service._control_targets.publish(
+                self.service._control_identity(), binding.entries[0][0], consume=sample.consume,
+            ) if controllable else None
+        )
+        actual_current = None
+        if any(value is not None for value in (
+            status.song_id, status.song_uri, status.song_position,
+        )):
+            actual_current = ActualCurrent(
+                entry_id=status.song_id,
+                uri=status.song_uri,
+                position=status.song_position,
+            )
+        confirmed_stop = False
+        if self._confirmed_stop is not None:
+            stop_player, stop_epoch, stop_version, stop_entries, stop_status = (
+                self._confirmed_stop
+            )
+            confirmed_stop = (
+                state is not None and state.state == 'STOPPED'
+                and status.state.value == 'stopped'
+                and stop_player is self.service.player
+                and stop_epoch == sample.connection_epoch
+                and stop_version == sample.playlist_version
+                and tuple(
+                    (entry.mpd_song_id, entry.song_uri, entry.position)
+                    for entry in entries
+                ) == tuple(
+                    (mpd_song_id, uri, position)
+                    for position, (_, mpd_song_id, uri) in enumerate(stop_entries)
+                )
+                and stop_status == (status.song_id, status.song_uri, status.song_position)
+            )
+        if status.state.value != 'stopped' or not confirmed_stop:
+            self._confirmed_stop = None
+        sample_sync_status = (
+            'CONFIRMED' if matched or confirmed_stop
+            else 'UNCONFIRMED_STOP' if had_binding and status.state.value == 'stopped'
+            else 'EXTERNAL_DRIFT' if had_binding
+            else 'UNBOUND'
+        )
+        self._sample_sync_status = sample_sync_status
+        sync_status = self._effective_sync_status()
+        await self._set(PlaybackObservation(
+            control_target=control_target,
+            actual_state=status.state,
+            actual_current=actual_current,
+            actual_freshness='fresh',
+            bound_queue_item_id=(binding.entries[0][0] if matched else None),
+            sync_status=sync_status,
+            matches_current=(True if matched else False if (
+                had_binding and status.song_id is not None
+            ) else None),
+            position_seconds=status.elapsed_seconds if matched else None,
+            duration_seconds=status.duration_seconds if matched else None,
+            observed_at=observed_at,
+            covered_playback_updated_at=state.updated_at if matched else None,
+            freshness='fresh' if matched else 'unknown',
+            reconciliation_required=(
+                sync_status == 'SYNC_FAILED'
+                or sample_sync_status != 'CONFIRMED'
+            ),
+        ))
+        return self.cache.model_copy(deep=True)

@@ -266,8 +266,12 @@ class MockMPD(PlayerPort):
         if source_index != target_index:
             self._playlist_version += 1
 
-    async def queue_play(self, mpd_song_id: int) -> None:
+    async def queue_play(
+        self, mpd_song_id: int, *, expected_connection_epoch: str | None = None,
+    ) -> None:
         self._check("queue_play")
+        if expected_connection_epoch is not None and expected_connection_epoch != self._connection_epoch:
+            raise PlayerUnavailable("MPD connection changed before playid")
         index = self._queue_index(mpd_song_id, "queue_play")
         uri = self._queue[index][0]
         try:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,6 +10,8 @@ from fastapi.testclient import TestClient
 from server.app.main import app
 from server.app.models.library import ArtworkRef, Song
 from server.app.models.playlist import Playlist
+from server.app.repositories.database import initialize_database
+from server.app.repositories.library_repository import LibraryRepository
 from server.app.services.collection_service import Collection
 from server.app.services.library_service import LibraryService, library_entity_id
 
@@ -464,3 +467,46 @@ def test_catalog_summary_ids_are_stable_entity_ids(services):
     assert artist["artist_id"] == library_entity_id("artists", "Artist One")
     assert genre["genre_id"] == library_entity_id("genres", "Rock")
     assert tag["tag_id"] == library_entity_id("tags", "Live")
+
+
+@pytest.mark.parametrize('field,expected', [
+    ('title', ['c', 'b', 'a']),
+    ('modified_at', ['b', 'a', 'c']),
+])
+@pytest.mark.parametrize('order', ['asc', 'desc'])
+def test_all_song_sort_orders(services, tmp_path, field, expected, order):
+    path = str(tmp_path / 'sort.db')
+
+    async def seed():
+        await initialize_database(path)
+        repo = LibraryRepository(path)
+        for song_id, title, mtime in [('a', 'Zulu', 20), ('b', 'beta', 10), ('c', 'Alpha', 30)]:
+            await repo.upsert_song(Song(song_id=song_id, title=title,
+                                       file_uri=f'/music/{song_id}.flac', file_mtime_ns=mtime))
+        return repo
+
+    repo = asyncio.run(seed())
+    app.state.library_service = LibraryService(repo)
+    response = services[0].get('/api/library/songs', params={'sort_by': field, 'sort_order': order})
+    assert response.status_code == 200, response.text
+    assert [s['song_id'] for s in response.json()['items']] == (expected if order == 'asc' else expected[::-1])
+    assert response.json()['count'] == 3
+
+
+@pytest.mark.parametrize('params', [{'sort_by': 'bad'}, {'sort_order': 'bad'}])
+def test_song_sort_rejects_invalid_parameters(services, params):
+    assert services[0].get('/api/library/songs', params=params).status_code == 422
+
+
+@pytest.mark.parametrize('order', ['asc', 'desc'])
+def test_modified_sort_keeps_unknown_last_and_ties_stable(services, order):
+    library = services[1]
+    library.songs = {
+        'c': song('c').model_copy(update={'file_mtime_ns': None}),
+        'b': song('b').model_copy(update={'file_mtime_ns': 10}),
+        'a': song('a').model_copy(update={'file_mtime_ns': 10}),
+    }
+    app.state.library_service = LibraryService(library)
+    response = services[0].get('/api/library/songs', params={'sort_by': 'modified_at', 'sort_order': order})
+    assert response.status_code == 200
+    assert [s['song_id'] for s in response.json()['items']] == ['a', 'b', 'c']

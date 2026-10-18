@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import sqlite3
 
 import pytest
@@ -155,7 +156,7 @@ def test_failures_restore_joint_state_without_success_notification(real_client, 
     records = IdempotencyRepository(library.path)
     connect = database._connect
     if failure == 'command':
-        async def reject(*args):
+        async def reject(*args, **kwargs):
             raise PlayerCommandError('playid', 'song command rejected')
         monkeypatch.setattr(player, 'queue_play', reject)
     elif failure == 'confirmation':
@@ -374,6 +375,13 @@ def test_confirmed_start_consumes_prior_stop_provenance(real_client, start_kind)
 
 @pytest.mark.parametrize('lifecycle', ['initial', 'stop'])
 def test_new_context_and_autoplay_allocations_survive_terminal_retry(real_client, monkeypatch, lifecycle):
+    # Different entropy on each draw must not change an already executed retry.
+    draws = iter([0, 0, 1, 1])
+    def shuffle(_rng, ids):
+        if ids:
+            offset = next(draws) % len(ids)
+            ids[:] = ids[offset:] + ids[:offset]
+    monkeypatch.setattr(random.SystemRandom, 'shuffle', shuffle)
     client, _, player, service = real_client
     if lifecycle == 'stop':
         start(client)
