@@ -35,4 +35,4 @@ docker-compose -f docs/docker-compose.yml logs --tail=100
 
 源码构建可用 `docker compose --env-file deploy/.env -f deploy/docker-compose.yml build`，但旧群晖 Compose 可优先使用预构建镜像。不要把 `deploy/docker-compose.dev.yml` 的 Mock 卷与生产数据混用，也不要在生产 DB 上运行测试。
 
-[现行文档索引](../docs/superpowers/README.md) · [性能优化指南](../docs/performance/2026-10-14-v0.2-playback-latency-optimization-guide.md)
+[现行文档索引](../docs/superpowers/README.md) · [性能现状与验收限制](../docs/performance/README.md)

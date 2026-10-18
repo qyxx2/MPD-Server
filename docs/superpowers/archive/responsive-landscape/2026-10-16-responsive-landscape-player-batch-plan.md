@@ -1,5 +1,7 @@
 # Web/PWA 横屏布局 Batch Implementation Plan
 
+> 2026-10-18 按用户要求归档：该计划/验收不再作为待执行事项。保留历史 PARTIAL/PENDING 等原始结果，不据此宣称验收通过；后续仅按新需求立项。现行入口见[文档索引](../../README.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 默认在当前会话顺序执行；本计划不要求并行代理。每次只执行用户指定的一批。
 
 **Goal:** 先在实际 iPad 浏览器验证完整双栏框架，再完善 Player、右侧交互、状态提示，最后完成跨设备验收，避免局部完成后推翻整体。
@@ -8,7 +10,7 @@
 
 **Tech Stack:** Vue 3、TypeScript、Vue Router、Vite、Vitest；浏览器及实际 iPad/手机人工验证。
 
-**Spec:** [横屏常驻播放器与右侧工作区](../specs/2026-10-16-responsive-landscape-player-design.md)；继承[全局 UI 合同](../specs/2026-10-03-web-pwa-visual-design.md)。
+**Spec:** [横屏常驻播放器与右侧工作区](../../specs/2026-10-16-responsive-landscape-player-design.md)；继承[全局 UI 合同](../../specs/2026-10-03-web-pwa-visual-design.md)。
 
 日期：2026-10-16。**B0人工记录按既有授权豁免；B1–B4必需实机Gate已获用户通过；2026-10-17 B5自主实施、自动化及限定真实浏览器验收完成，HUMAN/PWA PENDING，最终Gate未通过，停在B5。状态以对应acceptance为准。** 编写时分支 `fix/v0.2-execution-sample-reuse`、HEAD `6091d73`，有既存文档 dirty 修改；下次以用户给出的基线和届时实际工作区重新核验。
 
@@ -156,7 +158,7 @@ B1–B4每批必须运行 `npm run typecheck`、`npm run build`。B0只记录基
 - [x] **B3-H1 必需iPad：** 右侧Queue触摸滚动、长按拖动到边缘并取消（有效提交仅用认可测试队列）；Library标签横滑/搜索输入；Settings输入后旋转并关闭键盘，取消而不保存连接配置。验证无双重滚动、输入/取消可达、Player/Dock不遮挡。
 - [x] **B3-H2 条件手机回归：** 若修改共用菜单/输入/拖动组件，手机纵屏复验对应动作；只改横屏样式且已有浏览器证据证明隔离时可省，验收记录写明理由。
 
-**本次执行说明：** 两项workspace行为初次即GREEN，未为制造失败改写既有合同；Queue旋转取消为实际RED→GREEN修复。其余页面未发现需改CSS的溢出；通知/拖动层以实际CSSOM静态核验，实机并发手势不冒充通过。105项指定回归、351项补充完整回归、typecheck/build通过。详见[B3验收](../acceptance/2026-10-16-responsive-landscape-B3-acceptance.md)。用户对完整实机卡回复“通过”，H1/H2及软键盘HUMAN PASS；B3 Gate PASS，满足B4前置条件，本次不自动启动B4。
+**本次执行说明：** 两项workspace行为初次即GREEN，未为制造失败改写既有合同；Queue旋转取消为实际RED→GREEN修复。其余页面未发现需改CSS的溢出；通知/拖动层以实际CSSOM静态核验，实机并发手势不冒充通过。105项指定回归、351项补充完整回归、typecheck/build通过。详见[B3验收](2026-10-16-responsive-landscape-B3-acceptance.md)。用户对完整实机卡回复“通过”，H1/H2及软键盘HUMAN PASS；B3 Gate PASS，满足B4前置条件，本次不自动启动B4。
 
 **Gate：** 必需触摸/键盘项通过。无需重做播放时钟、DAC事实、背景全部实机测试；相关自动化仍按本批影响执行。
 
@@ -171,7 +173,7 @@ B1–B4每批必须运行 `npm run typecheck`、`npm run build`。B0只记录基
 - [x] 浏览器检查普通信息→消隐、异常+busy、打开详情超5秒、Escape/焦点返回、reduced-motion及屏幕阅读器可访问名称；确定AppBar/Dock位置不动。难以安全触发的异常使用测试夹具，不人为破坏MPD服务。
 - [x] **B4-H1 必需短实机：** iPad和手机各确认状态入口可触摸、普通信息约5秒消隐、详情不被强关、不遮挡操作、AppBar够低。并发/精确时间边界由自动化承担，不要求用户手动构造所有组合；已有测试环境能安全提供异常时检查警告可辨认。
 
-**本次执行状态：** B4实施、83项指定及受影响回归、359项完整前端回归、typecheck/build及有限IAB检查完成；详见[B4验收](../acceptance/2026-10-16-responsive-landscape-B4-acceptance.md)。2026-10-17用户回复“可以验收”，HUMAN/Gate PASS，满足B5前置条件，本次不自动启动B5。PWA归B5；reduced-motion仅CSSOM静态核验，不冒充实机/媒体偏好测试。
+**本次执行状态：** B4实施、83项指定及受影响回归、359项完整前端回归、typecheck/build及有限IAB检查完成；详见[B4验收](2026-10-16-responsive-landscape-B4-acceptance.md)。2026-10-17用户回复“可以验收”，HUMAN/Gate PASS，满足B5前置条件，本次不自动启动B5。PWA归B5；reduced-motion仅CSSOM静态核验，不冒充实机/媒体偏好测试。
 
 **Gate：** 共享AppBar两端实机及自动化通过。无需重测Library全部功能或完整播放链。
 
@@ -186,7 +188,7 @@ B1–B4每批必须运行 `npm run typecheck`、`npm run build`。B0只记录基
 - [x] 检查亮/暗/杂乱封面对比度、无图/错误、pending/unknown、通知展开及快速旋转证据覆盖；危险异常只用夹具/已有安全环境，不要求重做NAS播放性能或设备输出测试。
 - [x] 核验 `git diff --check`、`git diff --stat`、`git status --short`及实际diff。汇总产品实现、自动化、环境、浏览器、HUMAN、PWA状态；给出未通过/未执行清单和最终基线，不自动提交。
 
-**本次执行状态（2026-10-17）：** 仅修复B1分数CSS视口被innerWidth取整后过早进入双栏的问题；新增测试RED→GREEN、所属文件5项、B1指定及受影响回归86项、最终完整前端360项、typecheck/build通过。主窗口矩阵及精确CSS子视口四页检查完成；不改变CSS/已确认整体几何。详见[B5验收及最终实机卡](../acceptance/2026-10-16-responsive-landscape-B5-acceptance.md)。源码指纹`545bb108…a765106`，H1/H2最终Safari/桌面/手机及独立PWA反馈仍待；没有可用PWA环境时保持PWA PENDING，不新增安装/部署/manifest功能。**实施完成，最终验收未完成，停在B5。**
+**本次执行状态（2026-10-17）：** 仅修复B1分数CSS视口被innerWidth取整后过早进入双栏的问题；新增测试RED→GREEN、所属文件5项、B1指定及受影响回归86项、最终完整前端360项、typecheck/build通过。主窗口矩阵及精确CSS子视口四页检查完成；不改变CSS/已确认整体几何。详见[B5验收及最终实机卡](2026-10-16-responsive-landscape-B5-acceptance.md)。源码指纹`545bb108…a765106`，H1/H2最终Safari/桌面/手机及独立PWA反馈仍待；没有可用PWA环境时保持PWA PENDING，不新增安装/部署/manifest功能。**实施完成，最终验收未完成，停在B5。**
 
 **完成标准：** 所有Spec要求可追溯到实现与证据；必需实机项没有悬空。只有代码/自动化完成但HUMAN/PWA待验时，明确交付“实施完成，验收未完成”。
 

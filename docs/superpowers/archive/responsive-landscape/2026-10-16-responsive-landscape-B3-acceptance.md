@@ -1,5 +1,7 @@
 # 横屏布局 B3 — 右侧工作区、触摸与键盘验收
 
+> 2026-10-18 归档：历史方案/阶段验收，原文中的“当前”“待实施”及授权限制均指记录当时。现状与未闭合项见[现行文档索引](../../README.md)。
+
 日期：2026-10-16，Asia/Shanghai。仅执行B3；**Implementation PASS；Automated PASS；Browser PASS（下列有限桌面样本及静态层级核验）；HUMAN PASS；PWA PENDING（B5责任）。B3 Gate PASS，满足进入B4的前置条件；本次未启动B4。**
 
 ## 基线与前置Gate

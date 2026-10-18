@@ -1,5 +1,7 @@
 # 横屏布局 B2 — Player、歌词与高度精修验收
 
+> 2026-10-18 归档：历史方案/阶段验收，原文中的“当前”“待实施”及授权限制均指记录当时。现状与未闭合项见[现行文档索引](../../README.md)。
+
 日期：2026-10-16（Asia/Shanghai）。仅执行 B2。
 
 **最新状态：Implementation PASS；Automated PASS；Browser PASS（下述有限样本）；HUMAN PASS。B2 Gate PASS，满足进入B3的前置条件；本次仅记录验收通过，未启动B3。PWA PENDING（B5责任，不阻塞B3）。**

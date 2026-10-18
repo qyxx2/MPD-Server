@@ -1,5 +1,7 @@
 # 横屏布局 B5 — 最终集成验收
 
+> 2026-10-18 按用户要求归档：该计划/验收不再作为待执行事项。保留历史 PARTIAL/PENDING 等原始结果，不据此宣称验收通过；后续仅按新需求立项。现行入口见[文档索引](../../README.md)。
+
 日期：2026-10-17，Asia/Shanghai；本轮验证约 09:28 起。仅执行 B5。
 
 **Implementation PASS；Automated PASS；Environment PASS（本地前端）；Browser PASS（下述真实 IAB CSS 样本及明确限制）；HUMAN PENDING；PWA PENDING；最终 Gate PENDING。实施及自主验证完成，最终验收未完成，停在 B5。**
