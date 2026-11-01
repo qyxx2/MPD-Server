@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 
 import pytest
 
@@ -155,6 +156,93 @@ def test_reorder_changes_only_up_next_order(components):
 
     assert current_item(queue).song_id == "a"
     assert up_next_song_ids(queue) == ["d", "b", "c"]
+
+
+def test_add_to_queue_inserts_manual_items_before_autoplay_without_position_collisions(components):
+    manager, queue, _, _ = components
+    context = run(manager.start_track("a"))
+    run(queue.add_to_queue("b", source="AUTOPLAY", playback_context_id=context.context_id))
+    run(queue.add_to_queue("c", source="AUTOPLAY", playback_context_id=context.context_id))
+
+    first_manual = run(manager.add_to_queue("x"))
+    second_manual = run(manager.add_to_queue("y"))
+
+    pending = run(queue.list_up_next())
+    assert [
+        (item.song_id, item.source, item.position)
+        for item in pending
+    ] == [
+        ("x", "MANUAL", 1),
+        ("y", "MANUAL", 2),
+        ("b", "AUTOPLAY", 3),
+        ("c", "AUTOPLAY", 4),
+    ]
+    assert len({item.position for item in pending}) == len(pending)
+    assert first_manual.queue_item_id == pending[0].queue_item_id
+    assert second_manual.queue_item_id == pending[1].queue_item_id
+
+
+def test_play_now_prioritizes_legacy_manual_items_before_autoplay(components):
+    manager, queue, _, _ = components
+    context = run(manager.start_track("a"))
+    run(queue.add_to_queue("b", source="AUTOPLAY", playback_context_id=context.context_id))
+    run(queue.add_to_queue("c", source="AUTOPLAY", playback_context_id=context.context_id))
+
+    with sqlite3.connect(queue.path) as connection:
+        connection.executemany(
+            """
+            INSERT INTO queue_items(
+                queue_item_id, song_id, position, source, playback_context_id
+            ) VALUES(?, ?, ?, 'MANUAL', ?)
+            """,
+            [
+                ("legacy-manual-x", "x", 3, context.context_id),
+                ("legacy-manual-y", "y", 4, context.context_id),
+            ],
+        )
+
+    selected = run(queue.play_now("legacy-manual-x"))
+
+    assert selected.position == 0
+    assert selected.song_id == "x"
+    assert [
+        (item.song_id, item.source) for item in run(queue.list_up_next())
+    ] == [
+        ("y", "MANUAL"),
+        ("b", "AUTOPLAY"),
+        ("c", "AUTOPLAY"),
+    ]
+
+
+def test_reorder_repairs_legacy_manual_priority_without_reordering_manual_items(components):
+    manager, queue, _, _ = components
+    context = run(manager.start_track("a"))
+    run(queue.add_to_queue("b", source="AUTOPLAY", playback_context_id=context.context_id))
+    run(queue.add_to_queue("c", source="AUTOPLAY", playback_context_id=context.context_id))
+
+    with sqlite3.connect(queue.path) as connection:
+        connection.executemany(
+            """
+            INSERT INTO queue_items(
+                queue_item_id, song_id, position, source, playback_context_id
+            ) VALUES(?, ?, ?, 'MANUAL', ?)
+            """,
+            [
+                ("legacy-manual-x", "x", 3, context.context_id),
+                ("legacy-manual-y", "y", 4, context.context_id),
+            ],
+        )
+
+    run(queue.reorder("legacy-manual-y", before_queue_item_id=None))
+
+    assert [
+        (item.song_id, item.source) for item in run(queue.list_up_next())
+    ] == [
+        ("x", "MANUAL"),
+        ("y", "MANUAL"),
+        ("b", "AUTOPLAY"),
+        ("c", "AUTOPLAY"),
+    ]
 
 
 def test_delete_up_next_compacts_order_without_touching_current(components):

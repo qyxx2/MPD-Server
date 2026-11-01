@@ -19,7 +19,13 @@ def test_duplicate_occurrence_moves_to_head_and_tail_preserving_membership_and_r
     tail = mutate(client, "PUT", path, {"before_queue_item_id": None}, key="move-tail")
     assert tail.status_code == 200, tail.text
     after = run(manager.get_snapshot())
-    assert next(i for i in after.items if i.queue_item_id == duplicate.queue_item_id).position == len(pending)
+    manual_pending_count = sum(
+        item.position > 0 and item.source == duplicate.source
+        for item in pending
+    )
+    assert next(
+        i for i in after.items if i.queue_item_id == duplicate.queue_item_id
+    ).position == manual_pending_count
     for snapshot in (middle, after):
         assert {(i.queue_item_id, i.song_id, i.source, i.playback_context_id) for i in snapshot.items} == {
             (i.queue_item_id, i.song_id, i.source, i.playback_context_id) for i in before.items

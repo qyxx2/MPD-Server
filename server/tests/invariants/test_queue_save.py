@@ -16,7 +16,7 @@ def test_save_reads_latest_complete_up_next_and_replay_does_not_create_twice(rea
     before_queue = run(manager.get_snapshot())
     before_state = client.get("/api/state").json()
     pending_ids = [item.song_id for item in run(manager.queue_repository.list_up_next())]
-    assert pending_ids == ["c", "a", "b"]
+    assert pending_ids == ["c", "b", "a"]
     assert any(item.source == "AUTOPLAY" for item in run(manager.queue_repository.list_up_next()))
     execution = run(player.status())
     execution_queue = run(player.queue_entries())

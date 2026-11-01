@@ -40,7 +40,15 @@ def test_same_uri_pending_mutation_preserves_occurrence_identity(real_client, op
             entry.mpd_song_id for entry in run(player.queue_entries())
         }
     else:
-        assert after[selected.queue_item_id].position == len(after) - 1
+        selected_source = next(
+            item.source for item in items
+            if item.queue_item_id == selected.queue_item_id
+        )
+        expected_tail = sum(
+            item.position > 0 and item.source == selected_source
+            for item in items
+        )
+        assert after[selected.queue_item_id].position == expected_tail
     assert run(service.queue_manager.get_playback_state()) == state
     assert server_snapshot(service)[2:] == history
     final = server_snapshot(service)
@@ -205,7 +213,19 @@ def test_pending_duplicate_mutation_preserves_retained_occurrence_ids(
             e.mpd_song_id for e in after.values()
         }
     else:
-        assert after[duplicate.queue_item_id].position == 1
+        duplicate_source = next(
+            item.source for item in items
+            if item.queue_item_id == duplicate.queue_item_id
+        )
+        expected_position = (
+            sum(item.position > 0 and item.source == "MANUAL" for item in items) + 1
+            if duplicate_source == "AUTOPLAY"
+            else sum(
+                item.position > 0 and item.source == "MANUAL"
+                for item in items
+            )
+        )
+        assert after[duplicate.queue_item_id].position == expected_position
 
 
 @pytest.mark.parametrize("action", ["queue", "play-next"])

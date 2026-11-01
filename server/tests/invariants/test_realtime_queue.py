@@ -96,13 +96,25 @@ def test_queue_handoff_notification_preserves_current_occurrence_and_history(
     if operation == "delete":
         assert duplicate.queue_item_id not in after
     elif operation == "reorder":
-        assert after[duplicate.queue_item_id].position == len(after) - 1
+        duplicate_source = next(
+            i.source for i in before[0].items
+            if i.queue_item_id == duplicate.queue_item_id
+        )
+        expected_position = sum(
+            i.position > 0 and i.source == duplicate_source
+            for i in before[0].items
+        )
+        assert after[duplicate.queue_item_id].position == expected_position
     elif operation in {"play-next", "queue"}:
         added = set(after) - set(bindings)
         assert len(added) == 1
         item = next(i for i in final[0].items if i.queue_item_id in added)
         assert item.song_id == "a"
-        assert item.position == (1 if operation == "play-next" else len(after) - 1)
+        expected_position = (
+            1 if operation == "play-next" else
+            sum(i.position > 0 and i.source == "MANUAL" for i in before[0].items) + 1
+        )
+        assert item.position == expected_position
     else:
         assert all(i.source == "AUTOPLAY" for i in final[0].items if i.position > 0)
     assert run(library.list_songs()) == songs

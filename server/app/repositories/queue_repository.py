@@ -155,6 +155,44 @@ class QueueRepository:
         ).fetchall()
         return [QueueRepository._item_from_row(row) for row in rows]
 
+    @staticmethod
+    def _prioritize_manual_pending(connection) -> list[str]:
+        """Keep every manual occurrence ahead of AutoPlay without changing either group's order."""
+        rows = connection.execute(
+            """
+            SELECT queue_item_id, source
+            FROM queue_items
+            WHERE position > 0
+            ORDER BY position, queue_item_id
+            """
+        ).fetchall()
+        current_ids = [str(row[0]) for row in rows]
+        ordered_ids = [
+            str(row[0]) for row in rows if str(row[1]) == "MANUAL"
+        ] + [
+            str(row[0]) for row in rows if str(row[1]) != "MANUAL"
+        ]
+        if ordered_ids == current_ids:
+            return ordered_ids
+
+        connection.execute(
+            """
+            UPDATE queue_items
+            SET position = position + 1000000
+            WHERE position > 0
+            """
+        )
+        for position, queue_item_id in enumerate(ordered_ids, start=1):
+            connection.execute(
+                """
+                UPDATE queue_items
+                SET position = ?
+                WHERE queue_item_id = ?
+                """,
+                (position, queue_item_id),
+            )
+        return ordered_ids
+
     async def get_revision(self) -> int:
         async def operation(connection):
             return self._current_revision(connection)
@@ -331,6 +369,7 @@ class QueueRepository:
             if selected_position == 0:
                 return self._item_from_row(row)
 
+            self._prioritize_manual_pending(connection)
             current = connection.execute(
                 """
                 SELECT queue_item_id
@@ -482,6 +521,7 @@ class QueueRepository:
                 """,
                 (queue_item_id, song_id, source, playback_context_id),
             )
+            self._prioritize_manual_pending(connection)
             return QueueItem(
                 queue_item_id=queue_item_id,
                 song_id=song_id,
@@ -502,14 +542,33 @@ class QueueRepository:
     ) -> QueueItem:
         async def operation(connection):
             self._reserve_mutation(connection, expected_revision)
-            row = connection.execute(
-                """
-                SELECT COALESCE(MAX(position), 0)
-                FROM queue_items
-                WHERE position > 0
-                """
-            ).fetchone()
+            self._prioritize_manual_pending(connection)
+            if source == "MANUAL":
+                row = connection.execute(
+                    """
+                    SELECT COALESCE(MAX(position), 0)
+                    FROM queue_items
+                    WHERE position > 0 AND source = 'MANUAL'
+                    """
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    """
+                    SELECT COALESCE(MAX(position), 0)
+                    FROM queue_items
+                    WHERE position > 0
+                    """
+                ).fetchone()
             position = int(row[0] or 0) + 1
+            if source == "MANUAL":
+                connection.execute(
+                    """
+                    UPDATE queue_items
+                    SET position = position + 1
+                    WHERE position >= ?
+                    """,
+                    (position,),
+                )
             queue_item_id = self._new_item_id()
             connection.execute(
                 """
@@ -593,6 +652,7 @@ class QueueRepository:
                     """,
                     (position, item_id),
                 )
+            self._prioritize_manual_pending(connection)
             return self._list_from_connection(connection)
 
         return await run_transaction(self.path, operation)
@@ -606,6 +666,7 @@ class QueueRepository:
     ) -> QueueItem | None:
         async def operation(connection):
             self._reserve_mutation(connection, expected_revision)
+            self._prioritize_manual_pending(connection)
             row = connection.execute(
                 """
                 SELECT queue_item_id, song_id, position, source,
@@ -796,6 +857,7 @@ class QueueRepository:
             if not pending_candidates:
                 return []
 
+            self._prioritize_manual_pending(connection)
             row = connection.execute(
                 """
                 SELECT COALESCE(MAX(position), 0)

@@ -205,12 +205,12 @@ def test_play_next_and_add_to_queue_keep_server_and_mpd_queues_in_sync(
             await runtime["service"].add_to_queue("g")
 
             assert await server_queue_song_ids(runtime["queue"]) == list(
-                "ahbcdefg"
+                "ahgbcdef"
             )
             assert [
                 entry.song_uri for entry in await runtime["fake"].queue_entries()
             ] == [
-                f"music/{song_id}.mp3" for song_id in "ahbcdefg"
+                f"music/{song_id}.mp3" for song_id in "ahgbcdef"
             ]
 
             fake_status = await runtime["adapter"].status()

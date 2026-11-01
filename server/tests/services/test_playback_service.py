@@ -179,12 +179,12 @@ def test_play_next_and_add_to_queue_sync_mpd_without_restarting_current(
     assert [entry.song_uri for entry in mpd_queue] == [
         "music/a.mp3",
         "music/h.mp3",
+        "music/g.mp3",
         "music/b.mp3",
         "music/c.mp3",
         "music/d.mp3",
         "music/e.mp3",
         "music/f.mp3",
-        "music/g.mp3",
     ]
 
 

@@ -126,7 +126,7 @@ AutoPlay 不属于某个专辑或 Playlist
 
 1.  **Play Now（立即播放）**
 2.  **Play Next（下一首播放）**
-3.  **Add to Queue（添加到 Queue 末尾）**
+3.  **Add to Queue（添加到手动待播队列末尾）**
 
 这些操作在各页面保持一致，不允许某些分类页面采用不同的隐式语义。
 
@@ -183,9 +183,9 @@ AutoPlay 不属于某个专辑或 Playlist
 
 #### Add to Queue
 
--   将所选歌曲添加到 Queue 待播内容末尾。
--   不改变当前播放歌曲和当前下一首歌曲。
--   不应覆盖现有 Queue。
+-   将所选歌曲追加到 MANUAL 待播分区末尾；完整执行顺序中所有 MANUAL 待播 occurrence 必须整体排在所有 AUTOPLAY occurrence 之前。
+-   不改变当前播放歌曲。若当前没有 MANUAL 待播项，新加入的歌曲成为下一首；已有 MANUAL 项时，追加项位于它们之后、所有 AUTOPLAY 候选之前。
+-   不覆盖现有 Queue；保持 MANUAL 组内和 AUTOPLAY 组内各自原有的相对顺序。
 
 ## 4. 从歌曲或集合开始播放
 
@@ -251,6 +251,7 @@ Play Now 时，按第 3.3 节的 Queue 内切换语义处理。
 - 用户从current处向下拉动内容才逐步揭示其上方Played，最近项先出现。a,b,c,d播放到c：初始c,d，下拉先露b，再露a；最终顺序a,b,c,d。本地揭示不修改服务端Queue/History。滚动与长按拖动排序须分开，取消不误触播放。
 - 已确认current且fresh匹配绑定、actual playing/paused时，在标题前显示明显播放/暂停图标；其它行无此类图标。unknown/stale/unbound不伪装已确认状态，position0本身不是确认。
 - 没有MANUAL待播、只有current且AutoPlay启用：仅显示最先的一首AUTOPLAY待播候选，即使服务端生成多个。存在MANUAL待播的多曲场景：显示全部MANUAL待播，隐藏全部AUTOPLAY候选；有/无Played均适用。Played不计为待播，候选本身不使单曲场景变成多曲。AutoPlay关闭时不预览候选。
+- MANUAL优先是服务端执行顺序合同，不只是显示折叠：完整Queue的position顺序及同步到MPD的执行顺序必须始终为全部MANUAL待播项在前、全部AUTOPLAY候选在后；两组内部保持各自的相对顺序。Web和Android消费同一服务端快照，不得自行推导另一套下一首。
 - 留在Queue期间自动/普通切歌保留用户滚动位置与已揭示历史，不因current变化强制定位或隐藏；重新进入才定位。accepted Context/epoch改变及明确Stop counter递增仍归零，继承§3.3.2，不用unknown STOPPED/session猜Stop。
 - 标题和艺术家各单行省略；点击不展开多行详情。metadata读取失败/不可用仍保留occurrence及身份，按唯一顶部通知合同反馈。
 
@@ -260,7 +261,7 @@ Play Now 时，按第 3.3 节的 Queue 内切换语义处理。
 - 仅position>0待播项可以长按拖动排序，current与Played不可排序、不可作为待播区之外的放置目标。按现有PUT item及`before_queue_item_id`提交，保留完整服务端Queue及隐藏候选；隐藏项不因拖动被客户端删除或重建。
 - drag只是本地草稿；已知Queue revision/current/成员、epoch/连接generation变化、断线或离页取消；已发intent留在共享owner。提交后按服务端执行时权威状态裁决，不承诺尚未送达浏览器的并发变化被expected-version守护。
 - 所有mutation继承Architecture §4.1–4.2只读门禁、共享key/原key恢复、HTTP确认后权威重读；不speculative改canonical，不把invalidate当ACK。长按取消/拖动结束不触发点击播放。
-- B04剩余动作由独立入口提供，整行点击合同不变。用户2026-10-11修正Queue快捷语义：仅position>0待播项提供“移为下一首/移到队尾”，以queue_item_id经现有PUT item/before_queue_item_id移动原occurrence至完整UpNext首位/末尾（含隐藏候选）；不调用song-id入队、不新增/去重/重建条目。已在目标首尾位置为本地no-op；current/Played不提供移动入口，整行播放和删除保持。此Queue例外不改变普通Song的Play Next/Add入队合同。删除精确使用queue_item_id，可作用current/Played/待播，沿用服务端后继确认、History及无后继处理；不在浏览器猜造current。
+- B04剩余动作由独立入口提供，整行点击合同不变。用户2026-10-11修正Queue快捷语义：仅position>0待播项提供“移为下一首/移到队尾”，以queue_item_id经现有PUT item/before_queue_item_id移动原occurrence；MANUAL项的“移到队尾”表示移动到MANUAL分区末尾，仍排在所有AUTOPLAY项之前；AUTOPLAY项（可见时）在AUTOPLAY分区内移动。不得因拖动/快捷操作破坏MANUAL全局优先级。不调用song-id入队、不新增/去重/重建条目。已在目标首尾位置为本地no-op；current/Played不提供移动入口，整行播放和删除保持。此Queue例外不改变普通Song的Play Next/Add入队合同。删除精确使用queue_item_id，可作用current/Played/待播，沿用服务端后继确认、History及无后继处理；不在浏览器猜造current。
 - 清空入口明确为“清空待播”，经本地确认后DELETE queue；只清Up Next，不清current/Played、不作为Stop。AutoPlay既有补充策略保持，服务端补充的候选可重新出现。
 
 ### 5.3 保存 Queue 为 Playlist
@@ -445,7 +446,7 @@ status、idle、elapsed≈duration、URI 变化、played URI 日志、未见本�
 
 连续播放由 MPD 已同步的后续执行项承担，不能等虚构 NATURAL_COMPLETION 才 Next/play。区分四步：纯候选生成 → 业务 Queue 事务提交 → MPD 执行同步及实际确认 → MPD 当前项变化后的独立接纳。实现中 Queue 写入可在 outer transaction 内暂存，只有执行确认后提交可见；候选或 addid ACK 本身不是同步成功。
 
-保留现有策略：LOW_WATERMARK=5、REFILL_COUNT=5；先 PlaybackContext 中可用且未入队的歌曲，再全库 AVAILABLE；同批 song 去重、已有 Queue（含 Played）排除，候选不足时只允许既有单曲/current fallback，不扩大循环策略。手动 occurrence 不按 song/URI 去重；不删/重排 MANUAL 以迁就 AutoPlay，用户指定位置优先。当前确认后按**实际 current 后剩余可执行 pending**判断低水位，不能把已越过的 MPD 前缀当库存。A→C 中 B 只有经 §8.9.3 重新同步到 C 后才计入剩余量。
+保留现有策略：LOW_WATERMARK=5、REFILL_COUNT=5；先 PlaybackContext 中可用且未入队的歌曲，再全库 AVAILABLE；同批 song 去重、已有 Queue（含 Played）排除，候选不足时只允许既有单曲/current fallback，不扩大循环策略。手动 occurrence 不按 song/URI 去重；所有 MANUAL 待播项始终排在 AUTOPLAY 项之前，保持 MANUAL 组内的用户排序；AutoPlay 只能追加到 MANUAL 分区之后，不得越过、删除或重排 MANUAL occurrence。当前确认后按**实际 current 后剩余可执行 pending**判断低水位，不能把已越过的 MPD 前缀当库存。A→C 中 B 只有经 §8.9.3 重新同步到 C 后才计入剩余量。
 
 正常保证前提：在线且绑定有效、顺序执行模式 random=false/repeat=false/single=0/consume=false、候选可播放、服务调度/同步在已排入歌曲耗尽前完成、无外部漂移或输出/解码故障。读取并核验这些模式；不偷偷覆盖外部模式。用户要随机集合时仍在业务侧固定随机 Queue。其他模式表示需要处理并暂停接管，已有模式控制 API 合同不改。命令存在不证明这些组合已在目标运行时验收。
 

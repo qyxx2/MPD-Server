@@ -263,8 +263,8 @@ def test_autoplay_play_next_and_add_to_queue_match_server_and_mpd_queue(
             expected = [
                 song_ids[0],
                 song_ids[6],
-                *song_ids[1:6],
                 song_ids[7],
+                *song_ids[1:6],
             ]
 
             assert await server_queue_song_ids(runtime["queue"]) == expected
@@ -281,10 +281,10 @@ def test_autoplay_play_next_and_add_to_queue_match_server_and_mpd_queue(
             sources = await server_queue_sources(runtime["queue"])
             assert sources[0] == (song_ids[0], "MANUAL")
             assert sources[1] == (song_ids[6], "MANUAL")
-            assert sources[-1] == (song_ids[7], "MANUAL")
+            assert sources[2] == (song_ids[7], "MANUAL")
             assert all(
                 source == "AUTOPLAY"
-                for _, source in sources[2:-1]
+                for _, source in sources[3:]
             )
 
             snapshot = await runtime["fake"].snapshot()
