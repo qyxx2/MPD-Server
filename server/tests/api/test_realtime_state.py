@@ -26,10 +26,12 @@ def state_client(real_client, monkeypatch):
         output_snapshot=output.get_cached_state,
         output_observation=output.get_observation,
     )
-    monkeypatch.setattr(app.state, "state_service", state)
-    monkeypatch.setattr(app.state, "playback_service", playback)
-    monkeypatch.setattr(app.state, "output_manager", output)
-    return client, state, playback, player, library, coordinator, clock, output
+    with monkeypatch.context() as patch:
+        patch.setattr(app.state, "state_service", state)
+        patch.setattr(app.state, "playback_service", playback)
+        patch.setattr(app.state, "output_manager", output)
+        patch.setattr(app.state, "realtime_coordinator", coordinator)
+        yield client, state, playback, player, library, coordinator, clock, output
 
 
 @pytest.mark.parametrize("sampled", [False, True])

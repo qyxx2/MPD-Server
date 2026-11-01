@@ -75,9 +75,12 @@ def test_fresh_browser_reconnect_and_restart_show_truthful_full_state(
         player.reconnect()
         run(playback.observe())
 
-    monkeypatch.setattr(app.state, "playback_service", playback)
-    monkeypatch.setattr(app.state, "state_service", state)
-    monkeypatch.setattr(app.state, "realtime_coordinator", coordinator)
+    if recovery == "service-restart":
+        # These replacement services are test-local; the fixture's scoped patch
+        # restores the application state before the TestClient lifespan closes.
+        app.state.playback_service = playback
+        app.state.state_service = state
+        app.state.realtime_coordinator = coordinator
 
     if recovery == "ws-reconnect":
         with client.websocket_connect("/api/realtime") as first_socket:
