@@ -12,9 +12,7 @@ __all__ = ["real_client", "state_client"]
 
 
 @pytest.fixture
-def ws_state_client(state_client, monkeypatch):
-    # The legacy fixture replaces the aggregate and producers together.
-    monkeypatch.setattr(app.state, "realtime_coordinator", state_client[5])
+def ws_state_client(state_client):
     return state_client
 
 

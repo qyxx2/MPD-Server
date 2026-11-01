@@ -1,6 +1,5 @@
 import asyncio
 
-from server.app.main import app
 from server.app.repositories.database import on_transaction_visible, run_transaction
 from server.tests.api.test_realtime_state import state_client
 from server.tests.invariants.assertions import server_snapshot
@@ -9,9 +8,8 @@ from server.tests.support.playback import real_client, run
 __all__ = ['real_client', 'state_client']
 
 
-def test_get_and_initial_ws_export_identical_control_target(state_client, monkeypatch):
-    client, _, playback, _, _, coordinator, _, _ = state_client
-    monkeypatch.setattr(app.state, 'realtime_coordinator', coordinator)
+def test_get_and_initial_ws_export_identical_control_target(state_client):
+    client, _, playback, _, _, _, _, _ = state_client
     target = run(playback.observe()).control_target
     assert target is not None
     get = client.get('/api/state').json()

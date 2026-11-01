@@ -14,7 +14,7 @@ __all__ = ["real_client"]
 
 
 @pytest.fixture
-def state_client(real_client, monkeypatch):
+def state_client(real_client):
     client = real_client[0]
     playback, player, library, coordinator, clock, output = setup_output(real_client)
     state = StateService(
@@ -26,12 +26,14 @@ def state_client(real_client, monkeypatch):
         output_snapshot=output.get_cached_state,
         output_observation=output.get_observation,
     )
-    with monkeypatch.context() as patch:
-        patch.setattr(app.state, "state_service", state)
-        patch.setattr(app.state, "playback_service", playback)
-        patch.setattr(app.state, "output_manager", output)
-        patch.setattr(app.state, "realtime_coordinator", coordinator)
-        yield client, state, playback, player, library, coordinator, clock, output
+    # These services are scoped to the real_client TestClient lifespan. Assign
+    # them directly so modern Starlette cannot undo app.state patches after
+    # it has cleared the application state during lifespan shutdown.
+    app.state.state_service = state
+    app.state.playback_service = playback
+    app.state.output_manager = output
+    app.state.realtime_coordinator = coordinator
+    yield client, state, playback, player, library, coordinator, clock, output
 
 
 @pytest.mark.parametrize("sampled", [False, True])

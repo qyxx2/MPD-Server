@@ -39,7 +39,7 @@ def test_additive_observation_fields_default_for_old_public_constructors():
     ["refresh", "new-browser", "ws-reconnect", "service-restart", "mpd-restart"],
 )
 def test_fresh_browser_reconnect_and_restart_show_truthful_full_state(
-    state_client, monkeypatch, recovery,
+    state_client, recovery,
 ):
     """Every fresh consumer gets the same actual/business split from one full model."""
     client, state, playback, player, library, coordinator, _, output = state_client

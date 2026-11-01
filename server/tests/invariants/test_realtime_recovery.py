@@ -70,11 +70,11 @@ def test_reconnect_replaces_all_domains_and_epoch(
 ):
     """A cached first frame, partial replacement or replayed mutation loses committed domains."""
     client, state, playback, player, library, coordinator, _, output = state_client
-    monkeypatch.setattr(app.state, "realtime_coordinator", coordinator)
+    app.state.realtime_coordinator = coordinator
     playlists = PlaylistService(
         app.state.playlist_service._repository, coordinator=coordinator, event_publisher=coordinator,
     )
-    monkeypatch.setattr(app.state, "playlist_service", playlists)
+    app.state.playlist_service = playlists
     scanner = LibraryScanner(library, coordinator=coordinator, event_publisher=coordinator)
     probe = ProtocolProbe()
     with client.websocket_connect("/api/realtime") as socket:
