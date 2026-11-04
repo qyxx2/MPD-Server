@@ -174,15 +174,15 @@
 - No container /dev/snd device mapping is required for the adopted MPD-backed path.
 - Real NAS validation must distinguish MPD logical percent from direct ALSA raw channel value.
 
-- [ ] **Step 1: Run deployment contract tests** with the feature flag disabled and confirm no host sound device mapping is added.
-- [ ] **Step 2: Deploy only after the NAS MPD mixer configuration is checked** and enable the flag in the deployment's local environment (never commit secrets or NAS-local .env).
-- [ ] **Step 3: Verify GET state** against MPD status and current output selection.
-- [ ] **Step 4: Set a reversible test level through PUT**; record prior level, requested level, MPD readback, and ALSA PCM Playback Volume raw readback; restore the exact prior level and verify restoration.
-- [ ] **Step 5: Test out-of-band ALSA mixer change** and immediately query MPD status / GET API. Record whether MPD reflects it; if not, explicitly mark external-change broadcasting unsupported and do not pass that acceptance criterion.
-- [ ] **Step 6: Verify WebSocket invalidation** on a real value change and absence of repeated invalidations while the value is stable.
-- [ ] **Step 7: Verify MPD disconnect / output disappearance / reappearance** produces stale or unknown state and recovers after fresh sampling.
-- [ ] **Step 8: Record exact environment, commands, before/after raw hardware readings, errors and limitations** in the acceptance report.
-- [ ] **Step 9: Run final targeted server and deployment regression tests** using repository commands; report NAS checks separately from local automated tests.
+- [x] **Step 1: Run deployment contract tests** with the feature flag disabled and confirm no host sound device mapping is added. — 5 passed; default remains false and no `/dev/snd` / `devices:` mapping exists.
+- [x] **Step 2: Deploy only after the NAS MPD mixer configuration is checked** and enable the flag in the deployment's local environment (never commit secrets or NAS-local .env). — reused the previously verified NAS `mixer_type="hardware"` configuration and enabled the flag in the local Compose file; no NAS `.env` was created.
+- [x] **Step 3: Verify GET state** against MPD status and current output selection. — API and MPD both reported 80; the unique enabled target was USB DAC / ALSA output 0.
+- [ ] **Step 4: Set a reversible test level through PUT**; record prior level, requested level, MPD readback, and ALSA PCM Playback Volume raw readback; restore the exact prior level and verify restoration. — API/MPD 80→77→80 and playback preservation passed; new B4 ALSA raw pre/post values were not obtained on the service-only NAS test surface (historical B0 raw evidence is not a substitute).
+- [ ] **Step 5: Test out-of-band ALSA mixer change** and immediately query MPD status / GET API. Record whether MPD reflects it; if not, explicitly mark external-change broadcasting unsupported and do not pass that acceptance criterion. — not performed; external Mixer change observation remains unverified and is not claimed supported.
+- [x] **Step 6: Verify WebSocket invalidation** on a real value change and absence of repeated invalidations while the value is stable. — sequences 7 and 8 delivered `hardware_volume`; each stable 3-second window had no repeated invalidate; reconnect snapshot was fresh.
+- [ ] **Step 7: Verify MPD disconnect / output disappearance / reappearance** produces stale or unknown state and recovers after fresh sampling. — output 0 disable/enable produced stale→fresh recovery (sequences 9 and 10); MPD network disconnect was not induced.
+- [ ] **Step 8: Record exact environment, commands, before/after raw hardware readings, errors and limitations** in the acceptance report. — report created and records environment, commands, service readbacks and limitations; fresh B4 ALSA raw readings were not available, so this evidence item remains incomplete.
+- [x] **Step 9: Run final targeted server and deployment regression tests** using repository commands; report NAS checks separately from local automated tests. — full server suite 2073 passed; deploy contracts 5 passed; Ruff clean; CI validate and image jobs successful.
 
 ---
 
