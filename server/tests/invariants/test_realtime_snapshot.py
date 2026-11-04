@@ -137,6 +137,7 @@ def test_snapshot_empty_and_unknown_observations_are_complete(real_client, monke
     assert set(first.model_dump()) == {
         'epoch', 'sequence', 'captured_at', 'revisions', 'playback', 'current_song',
         'queue', 'history', 'output', 'playback_observation', 'output_observation',
+        'hardware_volume', 'hardware_volume_observation',
         'explicit_stop_generation', 'library_sync',
     }
     assert first.explicit_stop_generation is None  # This isolated aggregator has no playback owner.
@@ -155,6 +156,21 @@ def test_snapshot_empty_and_unknown_observations_are_complete(real_client, monke
     }
     assert first.output_observation.model_dump() == {
         'observed_at': None, 'freshness': 'unknown', 'error_code': None, 'error_message': None,
+    }
+    assert first.hardware_volume.model_dump() == {
+        'state': {
+            'status': 'UNSUPPORTED', 'volume_percent': None, 'output_name': None,
+            'output_plugin': None, 'output_enabled': None, 'control_source': None,
+            'error_code': 'HARDWARE_VOLUME_NOT_CONFIGURED',
+            'error_message': 'Hardware volume manager is not configured',
+            'updated_at': first.hardware_volume.state.updated_at, 'stale': False,
+        },
+        'last_request': None,
+    }
+    assert first.hardware_volume_observation.model_dump() == {
+        'observed_at': None, 'freshness': 'unknown',
+        'error_code': 'HARDWARE_VOLUME_NOT_CONFIGURED',
+        'error_message': 'Hardware volume manager is not configured',
     }
     assert first.revisions == {'library': 0, 'playlist': 0}
     assert coordinator.marker() == marker

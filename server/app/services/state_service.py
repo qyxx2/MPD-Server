@@ -3,6 +3,12 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 
+from server.app.models.hardware_volume import (
+    HardwareVolumeObservation,
+    HardwareVolumeSnapshot,
+    HardwareVolumeState,
+    HardwareVolumeStatus,
+)
 from server.app.models.output import OutputSnapshot
 from server.app.models.realtime import (
     FullStateSnapshot,
@@ -34,6 +40,8 @@ class StateService:
         output_snapshot: Callable[[], OutputSnapshot],
         playback_service: PlaybackService | None = None,
         output_observation: Callable[[], Awaitable[OutputObservation]] | None = None,
+        hardware_volume_snapshot: Callable[[], HardwareVolumeSnapshot] | None = None,
+        hardware_volume_observation: Callable[[], Awaitable[HardwareVolumeObservation]] | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._queue = queue_manager
@@ -43,6 +51,30 @@ class StateService:
         self._output_snapshot = output_snapshot
         self._playback = playback_service
         self._output_observation = output_observation
+        # Test and partial-composition callers without a hardware manager get
+        # an explicit unsupported/unknown value, never an invented zero.
+        unavailable_message = "Hardware volume manager is not configured"
+        self._default_hardware_volume = HardwareVolumeSnapshot(
+            state=HardwareVolumeState(
+                status=HardwareVolumeStatus.UNSUPPORTED,
+                error_code="HARDWARE_VOLUME_NOT_CONFIGURED",
+                error_message=unavailable_message,
+                updated_at=datetime.now(timezone.utc),
+            ),
+        )
+        self._hardware_volume_snapshot = hardware_volume_snapshot or (
+            lambda: self._default_hardware_volume.model_copy(deep=True)
+        )
+        async def default_hardware_volume_observation() -> HardwareVolumeObservation:
+            return HardwareVolumeObservation(
+                freshness="unknown",
+                error_code="HARDWARE_VOLUME_NOT_CONFIGURED",
+                error_message=unavailable_message,
+            )
+
+        self._hardware_volume_observation = (
+            hardware_volume_observation or default_hardware_volume_observation
+        )
 
     async def get_full_snapshot(self) -> FullStateSnapshot:
         # Joining a caller's owner can export pending data with a committed marker.
@@ -66,6 +98,8 @@ class StateService:
             output_observation = (await self._output_observation()
                                   if self._output_observation else OutputObservation())
             output = self._output_snapshot()
+            hardware_volume_observation = await self._hardware_volume_observation()
+            hardware_volume = self._hardware_volume_snapshot()
             observation = (await self._playback.get_observation()
                            if self._playback is not None else PlaybackObservation())
             marker = self._coordinator.marker()
@@ -78,6 +112,8 @@ class StateService:
                 playback=playback, current_song=song, queue=queue, history=history, output=output,
                 playback_observation=observation,
                 output_observation=output_observation,
+                hardware_volume=hardware_volume,
+                hardware_volume_observation=hardware_volume_observation,
                 library_sync=self._coordinator.get_library_sync(),
             ).model_copy(deep=True)
 

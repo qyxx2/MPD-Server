@@ -111,19 +111,19 @@
 - StateObserver receives the manager and samples it once per loop; one observer remains process-owned.
 - Realtime invalidation domain is exactly hardware_volume; no new payload-bearing WebSocket frame and no hardware-volume revision counter.
 
-- [ ] **Step 1: Add failing FullStateSnapshot and wire-schema tests** requiring hardware_volume and hardware_volume_observation in REST /api/state and WebSocket initial snapshots.
-- [ ] **Step 2: Add failing StateObserver tests** for one sample per cycle, bounded budget, independent failure handling, stale expiry and close lifecycle.
-- [ ] **Step 3: Add failing RealtimeCoordinator tests** proving a net hardware-volume change emits domains=["hardware_volume"], unchanged polls emit nothing, and a stale/fresh transition invalidates once.
-- [ ] **Step 4: Run the targeted realtime tests** and confirm the new cases fail.
-- [ ] **Step 5: Extend FullStateSnapshot, StateService, realtime response schemas and startup injection**. Keep existing snake_case /api/state serialization and protocol_version 1.
-- [ ] **Step 6: Extend StateObserver** to sample hardware volume without allowing volume failures to prevent playback/output samples.
-- [ ] **Step 7: Stage accepted hardware-volume observations via RealtimeCoordinator.stage_observation** so invalidation is committed, coalescible and uses the existing epoch/sequence boundary.
-- [ ] **Step 8: Update all existing FullStateSnapshot fixtures** with explicit unknown/default hardware-volume state rather than silently omitting the field.
-- [ ] **Step 9: Run targeted realtime tests**:
+- [x] **Step 1: Add failing FullStateSnapshot and wire-schema tests** requiring hardware_volume and hardware_volume_observation in REST /api/state and WebSocket initial snapshots.
+- [x] **Step 2: Add failing StateObserver tests** for one sample per cycle, bounded budget, independent failure handling, stale expiry and close lifecycle.
+- [x] **Step 3: Add failing RealtimeCoordinator tests** proving a net hardware-volume change emits domains=["hardware_volume"], unchanged polls emit nothing, and a stale/fresh transition invalidates once.
+- [x] **Step 4: Run the targeted realtime tests** and confirm the new cases fail.
+- [x] **Step 5: Extend FullStateSnapshot, StateService, realtime response schemas and startup injection**. Keep existing snake_case /api/state serialization and protocol_version 1.
+- [x] **Step 6: Extend StateObserver** to sample hardware volume without allowing volume failures to prevent playback/output samples.
+- [x] **Step 7: Stage accepted hardware-volume observations via RealtimeCoordinator.stage_observation** so invalidation is committed, coalescible and uses the existing epoch/sequence boundary.
+- [x] **Step 8: Update all existing FullStateSnapshot fixtures** with explicit unknown/default hardware-volume state rather than silently omitting the field.
+- [x] **Step 9: Run targeted realtime tests**:
   - .venv/bin/python -m pytest -q server/tests/api/test_realtime_state.py server/tests/api/test_realtime.py server/tests/invariants/test_realtime_hardware_volume.py
-- [ ] **Step 10: Run relevant snapshot / observer regression tests**:
+- [x] **Step 10: Run relevant snapshot / observer regression tests**:
   - .venv/bin/python -m pytest -q server/tests/invariants/test_realtime_snapshot.py server/tests/invariants/test_realtime_observer_lifecycle.py server/tests/invariants/test_realtime_delivery.py
-- [ ] **Step 11: Inspect wire fixtures** and confirm no unrelated domain/revision semantics changed.
+- [x] **Step 11: Inspect wire fixtures** and confirm no unrelated domain/revision semantics changed.
 
 ### Task 4: REST State and Control API
 

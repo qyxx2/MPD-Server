@@ -158,6 +158,27 @@
           "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
           "error_message": "Output reading capability is unavailable"
         },
+        "hardware_volume": {
+          "state": {
+            "status": "UNSUPPORTED",
+            "volume_percent": null,
+            "output_name": null,
+            "output_plugin": null,
+            "output_enabled": null,
+            "control_source": null,
+            "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+            "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED",
+            "updated_at": "2026-10-11T00:00:00Z",
+            "stale": false
+          },
+          "last_request": null
+        },
+        "hardware_volume_observation": {
+          "observed_at": null,
+          "freshness": "unknown",
+          "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+          "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED"
+        },
         "library_sync": {
           "status": "IDLE",
           "generation": 0,
@@ -631,6 +652,27 @@
           "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
           "error_message": "Output reading capability is unavailable"
         },
+        "hardware_volume": {
+          "state": {
+            "status": "UNSUPPORTED",
+            "volume_percent": null,
+            "output_name": null,
+            "output_plugin": null,
+            "output_enabled": null,
+            "control_source": null,
+            "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+            "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED",
+            "updated_at": "2026-10-11T00:00:00Z",
+            "stale": false
+          },
+          "last_request": null
+        },
+        "hardware_volume_observation": {
+          "observed_at": null,
+          "freshness": "unknown",
+          "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+          "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED"
+        },
         "library_sync": {
           "status": "IDLE",
           "generation": 0,
@@ -1102,6 +1144,27 @@
           "freshness": "unknown",
           "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
           "error_message": "Output reading capability is unavailable"
+        },
+        "hardware_volume": {
+          "state": {
+            "status": "UNSUPPORTED",
+            "volume_percent": null,
+            "output_name": null,
+            "output_plugin": null,
+            "output_enabled": null,
+            "control_source": null,
+            "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+            "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED",
+            "updated_at": "2026-10-11T00:00:00Z",
+            "stale": false
+          },
+          "last_request": null
+        },
+        "hardware_volume_observation": {
+          "observed_at": null,
+          "freshness": "unknown",
+          "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+          "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED"
         },
         "library_sync": {
           "status": "IDLE",
@@ -1615,6 +1678,27 @@
           "freshness": "unknown",
           "error_code": "OUTPUT_CAPABILITY_UNVERIFIED",
           "error_message": "Output reading capability is unavailable"
+        },
+        "hardware_volume": {
+          "state": {
+            "status": "UNSUPPORTED",
+            "volume_percent": null,
+            "output_name": null,
+            "output_plugin": null,
+            "output_enabled": null,
+            "control_source": null,
+            "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+            "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED",
+            "updated_at": "2026-10-11T00:00:00Z",
+            "stale": false
+          },
+          "last_request": null
+        },
+        "hardware_volume_observation": {
+          "observed_at": null,
+          "freshness": "unknown",
+          "error_code": "HARDWARE_VOLUME_NOT_CONFIGURED",
+          "error_message": "Hardware volume is disabled by MPD_HARDWARE_VOLUME_ENABLED"
         },
         "library_sync": {
           "status": "IDLE",

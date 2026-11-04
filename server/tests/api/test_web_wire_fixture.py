@@ -20,6 +20,15 @@ from server.app.api.schemas import (
     SongResponse,
 )
 from server.app.api.system_schemas import OutputSnapshotResponse
+from server.app.models.hardware_volume import (
+    HardwareVolumeControlSource,
+    HardwareVolumeObservation,
+    HardwareVolumeRequestState,
+    HardwareVolumeRequestStatus,
+    HardwareVolumeSnapshot,
+    HardwareVolumeState,
+    HardwareVolumeStatus,
+)
 from server.app.models.history import HistoryEvent
 from server.app.models.library import Song
 from server.app.models.library_sync import LibrarySyncState
@@ -74,13 +83,34 @@ def build_fixture():
             sync_status="CONFIRMED", matches_current=True, position_seconds=37, duration_seconds=None,
             observed_at=NOW, freshness="fresh"),
         output_observation=OutputObservation(observed_at=NOW, freshness="fresh"),
+        hardware_volume=HardwareVolumeSnapshot(
+            state=HardwareVolumeState(
+                status=HardwareVolumeStatus.AVAILABLE, volume_percent=63,
+                output_name="USB DAC", output_plugin="alsa", output_enabled=True,
+                control_source=HardwareVolumeControlSource.MPD_HARDWARE_MIXER,
+                updated_at=NOW, stale=False,
+            ),
+            last_request=HardwareVolumeRequestState(
+                requested_percent=63, status=HardwareVolumeRequestStatus.SUCCEEDED,
+                updated_at=NOW,
+            ),
+        ),
+        hardware_volume_observation=HardwareVolumeObservation(
+            observed_at=NOW, freshness="fresh",
+        ),
     )
     snapshot = FullStateSnapshotResponse.model_validate(state.model_dump()).model_dump(mode="json", by_alias=True)
     empty = state.model_copy(update={"playback": None, "current_song": None,
                                     "queue": QueueSnapshot(revision=0, items=()),
                                     "history": HistoryAvailability(has_entries=False),
                                     "playback_observation": PlaybackObservation(),
-                                    "output_observation": OutputObservation()})
+                                    "output_observation": OutputObservation(),
+                                    "hardware_volume": HardwareVolumeSnapshot(
+                                        state=HardwareVolumeState(
+                                            status=HardwareVolumeStatus.UNAVAILABLE, updated_at=NOW,
+                                        ),
+                                    ),
+                                    "hardware_volume_observation": HardwareVolumeObservation()})
     return {
         "provenance": {"source": "Pydantic domain/public model_dump(mode=json, by_alias=True)",
                        "control_target": "actual DTO present; P3 full Gate must be freshly verified in W4"},
@@ -161,3 +191,17 @@ def test_existing_container_entry_point_supplies_backend_proxy_target():
     assert url.scheme == "http" and url.hostname == "server" and url.port == 8000
     assert url.hostname in compose["services"]
     assert "8000:8000" in compose["services"][url.hostname]["ports"]
+
+
+def test_wire_fixture_documents_hardware_volume_snapshot_without_new_revision_domain():
+    actual = json.loads(FIXTURE.read_text())
+    snapshot = actual["snapshot"]
+    assert "hardware_volume" in snapshot
+    assert "hardware_volume_observation" in snapshot
+    assert snapshot["hardware_volume"]["state"]["volume_percent"] == 63
+    assert snapshot["hardware_volume"]["state"]["control_source"] == "MPD_HARDWARE_MIXER"
+    assert snapshot["hardware_volume"]["last_request"]["requested_percent"] == 63
+    assert snapshot["hardware_volume_observation"]["freshness"] == "fresh"
+    assert "hardware_volume" not in snapshot["revisions"]
+    assert actual["snapshot_frame"]["protocol_version"] == 1
+    assert actual["snapshot_frame"]["state"] == snapshot

@@ -179,11 +179,19 @@ def test_composition_root_starts_one_sampler_without_clients_and_awaits_shutdown
             assert application.state.playback_service._coordinator is coordinator
             assert (application.state.playback_service._request_observation
                     == application.state.state_observer.request_observation)
+            assert application.state.state_observer._hardware_volume is application.state.hardware_volume_manager
+            assert (application.state.state_service._hardware_volume_snapshot
+                    == application.state.hardware_volume_manager.get_cached_state)
+            assert (application.state.state_service._hardware_volume_observation
+                    == application.state.hardware_volume_manager.get_observation)
             task = application.state.state_observer_task
             assert not task.done()
             snapshot = await application.state.state_service.get_full_snapshot()
             assert snapshot.output.states[0].status == 'ACTIVE'
             assert snapshot.output_observation.freshness == 'fresh'
+            assert snapshot.hardware_volume.state.status == 'UNSUPPORTED'
+            assert snapshot.hardware_volume.state.volume_percent is None
+            assert snapshot.hardware_volume_observation.freshness == 'unknown'
             assert snapshot.playback is None and not snapshot.history.has_entries
         assert task.done()
         assert application.state.playback_service._request_observation is None

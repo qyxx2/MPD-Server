@@ -155,6 +155,33 @@
       "error_code": null,
       "error_message": null
     },
+    "hardware_volume": {
+      "state": {
+        "status": "AVAILABLE",
+        "volume_percent": 63,
+        "output_name": "USB DAC",
+        "output_plugin": "alsa",
+        "output_enabled": true,
+        "control_source": "MPD_HARDWARE_MIXER",
+        "error_code": null,
+        "error_message": null,
+        "updated_at": "2026-10-09T08:00:00Z",
+        "stale": false
+      },
+      "last_request": {
+        "requested_percent": 63,
+        "status": "SUCCEEDED",
+        "error_code": null,
+        "error_message": null,
+        "updated_at": "2026-10-09T08:00:00Z"
+      }
+    },
+    "hardware_volume_observation": {
+      "observed_at": "2026-10-09T08:00:00Z",
+      "freshness": "fresh",
+      "error_code": null,
+      "error_message": null
+    },
     "library_sync": {
       "status": "IDLE",
       "generation": 0,
@@ -351,6 +378,27 @@
       "error_code": null,
       "error_message": null
     },
+    "hardware_volume": {
+      "state": {
+        "status": "UNAVAILABLE",
+        "volume_percent": null,
+        "output_name": null,
+        "output_plugin": null,
+        "output_enabled": null,
+        "control_source": null,
+        "error_code": null,
+        "error_message": null,
+        "updated_at": "2026-10-09T08:00:00Z",
+        "stale": false
+      },
+      "last_request": null
+    },
+    "hardware_volume_observation": {
+      "observed_at": null,
+      "freshness": "unknown",
+      "error_code": null,
+      "error_message": null
+    },
     "library_sync": {
       "status": "IDLE",
       "generation": 0,
@@ -516,6 +564,33 @@
         "error_message": null
       },
       "output_observation": {
+        "observed_at": "2026-10-09T08:00:00Z",
+        "freshness": "fresh",
+        "error_code": null,
+        "error_message": null
+      },
+      "hardware_volume": {
+        "state": {
+          "status": "AVAILABLE",
+          "volume_percent": 63,
+          "output_name": "USB DAC",
+          "output_plugin": "alsa",
+          "output_enabled": true,
+          "control_source": "MPD_HARDWARE_MIXER",
+          "error_code": null,
+          "error_message": null,
+          "updated_at": "2026-10-09T08:00:00Z",
+          "stale": false
+        },
+        "last_request": {
+          "requested_percent": 63,
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_message": null,
+          "updated_at": "2026-10-09T08:00:00Z"
+        }
+      },
+      "hardware_volume_observation": {
         "observed_at": "2026-10-09T08:00:00Z",
         "freshness": "fresh",
         "error_code": null,
