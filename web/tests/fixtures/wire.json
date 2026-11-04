@@ -623,6 +623,33 @@
       "playlist": 5
     }
   },
+  "rest_hardware_volume": {
+    "state": {
+      "status": "AVAILABLE",
+      "volumePercent": 63,
+      "outputName": "USB DAC",
+      "outputPlugin": "alsa",
+      "outputEnabled": true,
+      "controlSource": "MPD_HARDWARE_MIXER",
+      "errorCode": null,
+      "errorMessage": null,
+      "updatedAt": "2026-10-09T08:00:00Z",
+      "stale": false
+    },
+    "observation": {
+      "observedAt": "2026-10-09T08:00:00Z",
+      "freshness": "fresh",
+      "errorCode": null,
+      "errorMessage": null
+    },
+    "lastRequest": {
+      "requestedPercent": 63,
+      "status": "SUCCEEDED",
+      "errorCode": null,
+      "errorMessage": null,
+      "updatedAt": "2026-10-09T08:00:00Z"
+    }
+  },
   "rest_output": {
     "states": [
       {

@@ -19,7 +19,10 @@ from server.app.api.schemas import (
     SongListResponse,
     SongResponse,
 )
-from server.app.api.system_schemas import OutputSnapshotResponse
+from server.app.api.system_schemas import (
+    HardwareVolumeSnapshotResponse,
+    OutputSnapshotResponse,
+)
 from server.app.models.hardware_volume import (
     HardwareVolumeControlSource,
     HardwareVolumeObservation,
@@ -124,6 +127,14 @@ def build_fixture():
                            "epoch": state.epoch, "sequence": state.sequence, "state": snapshot},
         "invalidate_frame": Invalidation(epoch=state.epoch, sequence=13, domains=frozenset({"playback"}),
                                          revisions=state.revisions).model_dump(mode="json", by_alias=True),
+        "rest_hardware_volume": HardwareVolumeSnapshotResponse.model_validate({
+            "state": state.hardware_volume.state.model_dump(),
+            "observation": state.hardware_volume_observation.model_dump(),
+            "last_request": (
+                state.hardware_volume.last_request.model_dump()
+                if state.hardware_volume.last_request is not None else None
+            ),
+        }).model_dump(mode="json", by_alias=True),
         "rest_output": OutputSnapshotResponse.model_validate(output.model_dump()).model_dump(mode="json", by_alias=True),
         "playback_receipt": PlaybackStateResponse.model_validate(playback.model_dump()).model_dump(mode="json", by_alias=True),
         "error": ErrorResponse(error=ErrorBody(code="PLAYBACK_TARGET_CONFLICT", message="Changed", details={"target": "old"})).model_dump(mode="json", by_alias=True),
@@ -136,6 +147,10 @@ def test_web_fixture_matches_actual_public_dto_serialization():
     assert actual == build_fixture(), "Regenerate fixture after reviewing the DTO contract change"
     # Independent checks guard alias/nullability assumptions, including the
     # deliberately mixed outer snake_case / inner camelCase REST Output DTO.
+    assert "lastRequest" in actual["rest_hardware_volume"]
+    assert "last_request" not in actual["rest_hardware_volume"]
+    assert actual["rest_hardware_volume"]["state"]["volumePercent"] == 63
+    assert actual["rest_hardware_volume"]["observation"]["freshness"] == "fresh"
     assert "last_request" in actual["rest_output"]
     assert "lastRequest" not in actual["rest_output"]
     assert actual["rest_output"]["states"][0]["sampleRate"] == 96000

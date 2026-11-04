@@ -1,15 +1,68 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from pydantic.alias_generators import to_camel
 
+from server.app.models.hardware_volume import (
+    HardwareVolumeControlSource,
+    HardwareVolumeRequestStatus,
+    HardwareVolumeStatus,
+)
 from server.app.models.output import OutputMode
 
 
 class OutputSetRequest(BaseModel):
     mode: OutputMode
     enabled: StrictBool
+
+
+class HardwareVolumeSetRequest(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    volume_percent: int = Field(strict=True, ge=0, le=100)
+
+
+class HardwareVolumeStateResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    status: HardwareVolumeStatus
+    volume_percent: int | None = Field(default=None, strict=True, ge=0, le=100)
+    output_name: str | None
+    output_plugin: str | None
+    output_enabled: bool | None
+    control_source: HardwareVolumeControlSource | None
+    error_code: str | None
+    error_message: str | None
+    updated_at: datetime
+    stale: bool
+
+
+class HardwareVolumeRequestResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    requested_percent: int = Field(strict=True, ge=0, le=100)
+    status: HardwareVolumeRequestStatus
+    error_code: str | None
+    error_message: str | None
+    updated_at: datetime
+
+
+class HardwareVolumeObservationResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    observed_at: datetime | None
+    freshness: Literal["fresh", "stale", "unknown"]
+    error_code: str | None
+    error_message: str | None
+
+
+class HardwareVolumeSnapshotResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    state: HardwareVolumeStateResponse
+    observation: HardwareVolumeObservationResponse
+    last_request: HardwareVolumeRequestResponse | None
 
 
 class OutputStateResponse(BaseModel):
