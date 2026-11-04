@@ -61,3 +61,38 @@ def test_missing_music_root_is_deferred_and_invalid_environment_fails(tmp_path):
                   {'SCAN_INTERVAL_SECONDS': 'NaN'}, {'HTTP_PORT': 'invalid'}):
         with pytest.raises(ValueError):
             load({'DATABASE_PATH': str(tmp_path / 'music.db'), 'MUSIC_ROOT': str(tmp_path), **extra})
+
+
+def test_hardware_volume_flag_defaults_disabled_and_environment_overrides_json(tmp_path):
+    load = importlib.import_module('server.app.config').load_config
+    config_path = tmp_path / 'config.json'
+    base_env = {'DATABASE_PATH': str(tmp_path / 'music.db'), 'MUSIC_ROOT': str(tmp_path)}
+
+    assert load(base_env).mpd_hardware_volume_enabled is False
+
+    config_path.write_text(json.dumps({'mpd_hardware_volume_enabled': True}))
+    assert load(base_env, config_path).mpd_hardware_volume_enabled is True
+    assert load({**base_env, 'MPD_HARDWARE_VOLUME_ENABLED': 'false'}, config_path).mpd_hardware_volume_enabled is False
+    assert load({**base_env, 'MPD_HARDWARE_VOLUME_ENABLED': 'TRUE'}, config_path).mpd_hardware_volume_enabled is True
+
+
+@pytest.mark.parametrize('value', ['enabled', '2', '', 'yes'])
+def test_hardware_volume_environment_flag_rejects_non_boolean_values(tmp_path, value):
+    load = importlib.import_module('server.app.config').load_config
+    env = {
+        'DATABASE_PATH': str(tmp_path / 'music.db'),
+        'MUSIC_ROOT': str(tmp_path),
+        'MPD_HARDWARE_VOLUME_ENABLED': value,
+    }
+    with pytest.raises(ValueError, match='Invalid application configuration'):
+        load(env)
+
+
+@pytest.mark.parametrize('value', [1, 'true', None])
+def test_hardware_volume_json_flag_requires_a_json_boolean(tmp_path, value):
+    load = importlib.import_module('server.app.config').load_config
+    path = tmp_path / 'config.json'
+    path.write_text(json.dumps({'mpd_hardware_volume_enabled': value}))
+    env = {'DATABASE_PATH': str(tmp_path / 'music.db'), 'MUSIC_ROOT': str(tmp_path)}
+    with pytest.raises(ValueError, match='Invalid application configuration'):
+        load(env, path)
