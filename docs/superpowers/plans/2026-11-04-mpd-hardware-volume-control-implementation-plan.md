@@ -79,16 +79,16 @@
 - HardwareVolumeManager constructor receives PlayerPort, MPDCapabilities, explicit enabled flag, existing ALSA output selector, OutputOperationRunner, optional RealtimeCoordinator, observation clock and max age (6 seconds).
 - Public methods: get_cached_state() -> HardwareVolumeSnapshot; get_state(read_timeout=None) -> HardwareVolumeSnapshot; set_volume(volume_percent: int) -> HardwareVolumeSnapshot; get_observation() -> HardwareVolumeObservation.
 
-- [ ] **Step 1: Write failing model tests** for enum values, nullable unknown volume, strict range constraints, stale state and last-request status.
-- [ ] **Step 2: Write failing manager tests** for disabled gate (no set_volume call), missing capability, no/ambiguous/disabled ALSA output, missing MPD volume, fresh read, stale expiry and MPD failures.
-- [ ] **Step 3: Write failing mutation tests** for 0/100 boundaries, set_volume call, exact status readback, mismatch failure, and failure never reporting success.
-- [ ] **Step 4: Write playback-preservation tests**: status excluding volume remains unchanged, elapsed may naturally advance while playing, queue entries remain identical, and no history/queue mutation occurs.
-- [ ] **Step 5: Run the new focused tests** and verify the expected red failures.
-- [ ] **Step 6: Implement domain models and HardwareVolumeManager**. Reuse PlayerPort.status(), PlayerPort.set_volume(), existing capability checks, current selector semantics and OutputOperationRunner. Keep current MPD output ID request-local only.
-- [ ] **Step 7: Implement accepted-sample ordering, stale tracking and observation staging**. Exclude timestamps from change comparison so unchanged one-second polls do not create changes.
-- [ ] **Step 8: Run focused manager/model tests**:
-  - .venv/bin/python -m pytest -q server/tests/services/test_hardware_volume_manager.py server/tests/invariants/test_hardware_volume_manager.py
-- [ ] **Step 9: Inspect service diff** for playback side effects, request/observation ownership, stale-value semantics and error-code stability.
+- [x] **Step 1: Write failing model tests** for enum values, nullable unknown volume, strict range constraints, stale state and last-request status.
+- [x] **Step 2: Write failing manager tests** for disabled gate (no set_volume call), missing capability, no/ambiguous/disabled ALSA output, missing MPD volume, fresh read, stale expiry and MPD failures.
+- [x] **Step 3: Write failing mutation tests** for 0/100 boundaries, set_volume call, exact status readback, mismatch failure, and failure never reporting success.
+- [x] **Step 4: Write playback-preservation tests**: status excluding volume remains unchanged, elapsed may naturally advance while playing, queue entries remain identical, and no history/queue mutation occurs.
+- [x] **Step 5: Run the new focused tests** and verify the expected red failures.
+- [x] **Step 6: Implement domain models and HardwareVolumeManager**. Reuse PlayerPort.status(), PlayerPort.set_volume(), existing capability checks, current selector semantics and OutputOperationRunner. Keep current MPD output ID request-local only.
+- [x] **Step 7: Implement accepted-sample ordering, stale tracking and observation staging**. Exclude timestamps from change comparison so unchanged one-second polls do not create changes.
+- [x] **Step 8: Run focused manager/model tests**:
+  - .venv/bin/python -m pytest -q server/tests/services/test_hardware_volume_manager.py server/tests/invariants/test_hardware_volume_playback_preservation.py
+- [x] **Step 9: Inspect service diff** for playback side effects, request/observation ownership, stale-value semantics and error-code stability.
 
 ### Task 3: Full State and Realtime Invalidation
 
