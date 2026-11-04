@@ -53,7 +53,7 @@ def volume_api(real_client, monkeypatch):
         return original_check(command)
 
     with monkeypatch.context() as patch:
-        patch.setattr(app.state, "hardware_volume_manager", manager)
+        patch.setitem(app.state._state, "hardware_volume_manager", manager)
         patch.setattr(player, "_check", record)
         yield client, player, manager, calls, service
 
@@ -127,7 +127,7 @@ def test_get_preserves_last_confirmed_volume_as_stale_after_player_disconnect(vo
 def test_get_maps_missing_manager_to_503_error_envelope(volume_api, monkeypatch):
     client, _, _, _, _ = volume_api
     with monkeypatch.context() as patch:
-        patch.setattr(app.state, "hardware_volume_manager", None)
+        patch.delitem(app.state._state, "hardware_volume_manager")
         response = client.get("/api/system/hardware-volume")
 
     assert response.status_code == 503
@@ -139,7 +139,7 @@ def test_get_reports_disabled_capability_without_touching_mpd(volume_api, monkey
     disabled = _manager(service, player, enabled=False)
     calls.clear()
     with monkeypatch.context() as patch:
-        patch.setattr(app.state, "hardware_volume_manager", disabled)
+        patch.setitem(app.state._state, "hardware_volume_manager", disabled)
         response = client.get("/api/system/hardware-volume")
 
     assert response.status_code == 200
@@ -279,7 +279,7 @@ def test_put_maps_disabled_hardware_volume_capability_to_400_without_mpd_side_ef
     disabled = _manager(service, player, enabled=False)
     calls.clear()
     with monkeypatch.context() as patch:
-        patch.setattr(app.state, "hardware_volume_manager", disabled)
+        patch.setitem(app.state._state, "hardware_volume_manager", disabled)
         response = volume_put(client, 64)
 
     assert response.status_code == 400
