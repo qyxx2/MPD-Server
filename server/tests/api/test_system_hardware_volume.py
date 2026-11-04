@@ -44,7 +44,6 @@ def volume_api(real_client, monkeypatch):
     player._outputs = [OutputInfo(id=37, name="USB DAC", plugin="alsa", enabled=True)]
     player._volume = 47
     manager = _manager(service, player)
-    monkeypatch.setattr(app.state, "hardware_volume_manager", manager)
 
     calls = []
     original_check = player._check
@@ -53,8 +52,10 @@ def volume_api(real_client, monkeypatch):
         calls.append(command)
         return original_check(command)
 
-    monkeypatch.setattr(player, "_check", record)
-    yield client, player, manager, calls, service
+    with monkeypatch.context() as patch:
+        patch.setattr(app.state, "hardware_volume_manager", manager)
+        patch.setattr(player, "_check", record)
+        yield client, player, manager, calls, service
 
 
 def volume_put(client, volume_percent, *, key="hardware-volume-key"):
@@ -125,9 +126,9 @@ def test_get_preserves_last_confirmed_volume_as_stale_after_player_disconnect(vo
 
 def test_get_maps_missing_manager_to_503_error_envelope(volume_api, monkeypatch):
     client, _, _, _, _ = volume_api
-    monkeypatch.setattr(app.state, "hardware_volume_manager", None)
-
-    response = client.get("/api/system/hardware-volume")
+    with monkeypatch.context() as patch:
+        patch.setattr(app.state, "hardware_volume_manager", None)
+        response = client.get("/api/system/hardware-volume")
 
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "HARDWARE_VOLUME_UNAVAILABLE"
@@ -136,10 +137,10 @@ def test_get_maps_missing_manager_to_503_error_envelope(volume_api, monkeypatch)
 def test_get_reports_disabled_capability_without_touching_mpd(volume_api, monkeypatch):
     client, player, _, calls, service = volume_api
     disabled = _manager(service, player, enabled=False)
-    monkeypatch.setattr(app.state, "hardware_volume_manager", disabled)
     calls.clear()
-
-    response = client.get("/api/system/hardware-volume")
+    with monkeypatch.context() as patch:
+        patch.setattr(app.state, "hardware_volume_manager", disabled)
+        response = client.get("/api/system/hardware-volume")
 
     assert response.status_code == 200
     payload = response.json()
@@ -275,12 +276,11 @@ def test_put_maps_disabled_hardware_volume_capability_to_400_without_mpd_side_ef
     volume_api, monkeypatch,
 ):
     client, player, _, calls, service = volume_api
-    monkeypatch.setattr(
-        app.state, "hardware_volume_manager", _manager(service, player, enabled=False),
-    )
+    disabled = _manager(service, player, enabled=False)
     calls.clear()
-
-    response = volume_put(client, 64)
+    with monkeypatch.context() as patch:
+        patch.setattr(app.state, "hardware_volume_manager", disabled)
+        response = volume_put(client, 64)
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "HARDWARE_VOLUME_NOT_CONFIGURED"

@@ -8,9 +8,17 @@
 
 复制 `deploy/.env.example` 至 `deploy/.env`（若文件已存在，只补必要项，不覆盖）。填入真实 NAS 的 `MPD_HOST/MPD_PORT`、`MUSIC_DIR`、`MPD_SERVER_DATA_DIR`、`MPD_SERVER_CONFIG_DIR`、`MPD_SERVER_BACKUP_DIR`、`MPD_SERVER_PORT`、`MPD_SERVER_IMAGE`；保留持久 `/data`、`/config` 和数据库。`/music` 必须只读挂载并与 MPD 的相对 URI 对应。MPD 密码不提交 Git；在容器内 `127.0.0.1` 不等于 NAS 主机。
 
-## MPD 硬件音量控制前置条件
+## MPD 硬件音量控制
 
-`MPD_HARDWARE_VOLUME_ENABLED` 默认是 `false`。本开关仅供后续硬件音量 API 实现启用前使用；当前阶段不要提前设置为 `true`。正式启用前，必须在 NAS 本机检查实际生效的 MPD `audio_output` 配置，确认选中的 ALSA 输出使用硬件 Mixer，而非软件音量：
+服务端已提供 MPD 硬件 Mixer 音量查询与控制接口：
+
+- `GET /api/system/hardware-volume`：返回 MPD 确认的音量、目标输出、状态新鲜度及最近一次控制请求。
+- `PUT /api/system/hardware-volume`：请求体为 `{"volumePercent": 0..100}`，必须携带 `Idempotency-Key`；只有 MPD 写后状态读回与请求值完全一致才返回成功。
+- `/api/state` 与 WebSocket 初始快照包含硬件音量状态；WebSocket 只广播 `hardware_volume` invalidate，客户端收到后重新读取完整状态。
+
+`MPD_HARDWARE_VOLUME_ENABLED` 默认是 `false`。只有在 NAS 本机确认当前唯一选中的 ALSA 输出使用 `mixer_type "hardware"`，且 MPD 当前启用的输出组合符合实例级 `setvol` 控制范围后，才在部署环境中明确设置 `MPD_HARDWARE_VOLUME_ENABLED=true`。不要把 `deploy/.env.example` 的默认值改成开启。
+
+目标 DS920 已核实的 MPD 配置映射为：
 
 ```conf
 audio_output {
@@ -24,9 +32,9 @@ audio_output {
 }
 ```
 
-以上是目标 DS920 当前已实测的配置映射（USB DAC / ALSA / PCM）。MPD TCP 的 `config` 命令在该 NAS 上仅允许本地客户端，因此 Music Server 无法通过远程 MPD 协议自行验证 `mixer_type`；必须以 NAS 本机实际配置为准。实机已验证 MPD `setvol` 后 `status.volume` 读回变化，并且 ALSA `PCM Playback Volume` 左右声道原始值同步变化。
+MPD TCP 的 `config` 命令在该 NAS 上仅允许本地客户端，因此服务端不能通过远程 MPD 协议自行验证 `mixer_type`；启用前必须以 NAS 本机实际配置为准。MPD `status.volume` 是 0–100 的逻辑百分比，不是 ALSA 原始声道值或 dB。当前 `setvol` 属于 MPD 实例级控制，不支持按输出 ID 分别调音。该 MPD-backed 路径不要求给容器映射 `/dev/snd`。
 
-确认新版本服务端已包含硬件音量控制实现、选中的输出及 Mixer 配置正确后，才可在本机 `deploy/.env` 中设置 `MPD_HARDWARE_VOLUME_ENABLED=true` 并重建/重启服务。该控制映射到 MPD 实例级 `setvol`，不是按输出 ID 隔离的多输出音量控制；启用前须确认 MPD 的启用输出组合符合这一作用范围。此功能不要求给容器映射 `/dev/snd`。
+生产部署应使用目标分支 CI 成功后生成的 `ghcr.io/qyxx2/mpd-server:sha-<完整commit SHA>` 镜像，并核对镜像 revision 与目标 commit 一致。随后在 NAS 本地部署环境中设置开关并重建服务。不要提交 NAS 本地 `.env`、密码或其它部署凭据。服务端 API 没有在本批次新增身份认证，禁止将未受保护的服务端口直接暴露到公网。
 
 ### Compose v2（支持该版本的机器）
 
