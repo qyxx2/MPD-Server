@@ -301,3 +301,54 @@ def test_disabled_hardware_volume_request_commits_unsupported_request_invalidati
             service._coordinator.unsubscribe(subscription)
 
     asyncio.run(scenario())
+
+
+def test_hardware_volume_write_accepts_unchanged_elapsed_from_coarse_mpd_status(
+    real_client, monkeypatch,
+):
+    client, _, player, service = real_client
+    start(client)
+
+    async def scenario():
+        await service.seek(17)
+        player._outputs = [OutputInfo(id=37, name="USB DAC", plugin="alsa", enabled=True)]
+        capabilities = replace(
+            MPDCapabilities.from_commands({
+                "status", "currentsong", "setvol", "outputs", "playlistinfo",
+            }),
+            verified_operations=frozenset({"queue_entries"}),
+        )
+        original_status = player.status
+        status_reads = 0
+        first_elapsed = None
+
+        async def status_with_coarse_elapsed():
+            nonlocal status_reads, first_elapsed
+            value = await original_status()
+            status_reads += 1
+            if status_reads == 1:
+                first_elapsed = value.elapsed_seconds
+            else:
+                value.elapsed_seconds = first_elapsed
+            return value
+
+        monkeypatch.setattr(player, "status", status_with_coarse_elapsed)
+        times = iter([100.0, 100.1, 100.2, 100.3])
+        manager = HardwareVolumeManager(
+            player=VerifiedPlayerPort(player, capabilities),
+            capabilities=capabilities,
+            enabled=True,
+            operation_runner=service.run_output_operation,
+            monotonic_clock=lambda: next(times),
+        )
+
+        result = await manager.set_volume(55)
+
+        assert result.state.volume_percent == 55
+        assert status_reads == 2
+        after_status = await original_status()
+        assert after_status.state.value == "playing"
+        assert after_status.volume == 55
+
+    asyncio.run(scenario())
+
