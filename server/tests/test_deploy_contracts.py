@@ -95,3 +95,14 @@ def test_ci_image_publication_requires_validation_and_uses_commit_identity():
     assert '-c "$RUNNER_TEMP/ci-lint-constraints.txt"' in workflow
     for action in re.findall(r'uses: ([^\s]+)', workflow):
         assert re.fullmatch(r'[\w-]+/[\w-]+@[a-f0-9]{40}', action), action
+
+
+def test_hardware_volume_deployment_is_opt_in_without_host_sound_device_mapping():
+    prod = (ROOT / 'deploy/docker-compose.yml').read_text()
+    environment = _section(_section(prod, 'server', 2), 'environment', 4)
+    env_example = (ROOT / 'deploy/.env.example').read_text()
+
+    assert 'MPD_HARDWARE_VOLUME_ENABLED: ${MPD_HARDWARE_VOLUME_ENABLED:-false}' in environment
+    assert 'MPD_HARDWARE_VOLUME_ENABLED=false' in env_example
+    assert '/dev/snd' not in prod
+    assert re.search(r'^\s+devices:\s*$', prod, re.MULTILINE) is None

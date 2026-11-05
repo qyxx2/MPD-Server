@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from server.app.services.collection_service import CollectionService
+from server.app.services.hardware_volume_manager import HardwareVolumeManager
 from server.app.services.history_service import HistoryService
 from server.app.services.library_scanner import LibraryScanner
 from server.app.services.library_service import LibraryService
@@ -95,6 +96,17 @@ async def get_output_manager(request: Request) -> OutputManager:
     manager = getattr(request.app.state, "output_manager", None)
     if manager is None:
         raise RuntimeError("output manager is not configured")
+    return manager
+
+
+async def get_hardware_volume_manager(request: Request) -> HardwareVolumeManager:
+    manager = getattr(request.app.state, "hardware_volume_manager", None)
+    if manager is None:
+        raise HTTPException(status_code=503, detail={
+            "code": "HARDWARE_VOLUME_UNAVAILABLE",
+            "message": "Hardware volume manager is not configured",
+            "details": None,
+        })
     return manager
 
 

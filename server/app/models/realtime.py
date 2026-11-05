@@ -5,6 +5,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from server.app.models.hardware_volume import (
+    HardwareVolumeObservation,
+    HardwareVolumeSnapshot,
+)
 from server.app.models.history import HistoryEvent
 from server.app.models.library import Song
 from server.app.models.library_sync import LibrarySyncState
@@ -73,6 +77,8 @@ class FullStateSnapshot(BaseModel):
     output: OutputSnapshot
     playback_observation: PlaybackObservation = Field(default_factory=PlaybackObservation)
     output_observation: OutputObservation = Field(default_factory=OutputObservation)
+    hardware_volume: HardwareVolumeSnapshot
+    hardware_volume_observation: HardwareVolumeObservation
     library_sync: LibrarySyncState = Field(default_factory=LibrarySyncState)
 
 

@@ -280,3 +280,26 @@ def test_root_snapshot_reports_real_producer_versions(real_client, media_fixture
     assert body["playback"] == before[1].model_dump(mode="json")
     assert server_snapshot(playback) == before
     assert app.state.realtime_coordinator.marker() == marker
+
+
+def test_state_api_exposes_explicit_hardware_volume_snapshot_and_observation(state_client):
+    """The additive state contract exposes disabled hardware volume without inventing a reading."""
+    client = state_client[0]
+    response = client.get("/api/state")
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["hardware_volume"]["state"]["status"] == "UNSUPPORTED"
+    assert body["hardware_volume"]["state"]["volume_percent"] is None
+    assert body["hardware_volume"]["state"]["stale"] is False
+    assert body["hardware_volume"]["state"]["error_code"] == "HARDWARE_VOLUME_NOT_CONFIGURED"
+    assert body["hardware_volume"]["last_request"] is None
+    assert body["hardware_volume_observation"]["freshness"] == "unknown"
+    assert body["hardware_volume_observation"]["observed_at"] is None
+    assert body["hardware_volume_observation"]["error_code"] == "HARDWARE_VOLUME_NOT_CONFIGURED"
+    assert "raw_left" not in body["hardware_volume"]["state"]
+    assert "decibels" not in body["hardware_volume"]["state"]
+
+    properties = app.openapi()["components"]["schemas"]["FullStateSnapshotResponse"]["properties"]
+    assert "hardware_volume" in properties
+    assert "hardware_volume_observation" in properties

@@ -3,6 +3,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from server.app.models.hardware_volume import (
+    HardwareVolumeControlSource,
+    HardwareVolumeRequestStatus,
+    HardwareVolumeStatus,
+)
 from server.app.models.library_sync import LibrarySyncState
 from server.app.models.playback_control import PlaybackControlTarget
 
@@ -68,6 +73,39 @@ class OutputObservationResponse(BaseModel):
     error_message: str | None
 
 
+class HardwareVolumeStateResponse(BaseModel):
+    status: HardwareVolumeStatus
+    volume_percent: int | None = Field(default=None, ge=0, le=100)
+    output_name: str | None
+    output_plugin: str | None
+    output_enabled: bool | None
+    control_source: HardwareVolumeControlSource | None
+    error_code: str | None
+    error_message: str | None
+    updated_at: datetime
+    stale: bool
+
+
+class HardwareVolumeRequestResponse(BaseModel):
+    requested_percent: int = Field(ge=0, le=100)
+    status: HardwareVolumeRequestStatus
+    error_code: str | None
+    error_message: str | None
+    updated_at: datetime
+
+
+class HardwareVolumeSnapshotResponse(BaseModel):
+    state: HardwareVolumeStateResponse
+    last_request: HardwareVolumeRequestResponse | None
+
+
+class HardwareVolumeObservationResponse(BaseModel):
+    observed_at: datetime | None
+    freshness: Literal["fresh", "stale", "unknown"]
+    error_code: str | None
+    error_message: str | None
+
+
 class StateOutputResponse(BaseModel):
     mode: Literal["NAS_DAC", "CLIENT_STREAM"]
     status: Literal["UNAVAILABLE", "INACTIVE", "ACTIVE"]
@@ -110,4 +148,6 @@ class FullStateSnapshotResponse(BaseModel):
     output: StateOutputSnapshotResponse
     playback_observation: PlaybackObservationResponse
     output_observation: OutputObservationResponse
+    hardware_volume: HardwareVolumeSnapshotResponse
+    hardware_volume_observation: HardwareVolumeObservationResponse
     library_sync: LibrarySyncState = Field(default_factory=LibrarySyncState)

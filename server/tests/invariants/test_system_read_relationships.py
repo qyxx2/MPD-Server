@@ -229,4 +229,5 @@ def test_system_composition_uses_injected_capabilities_without_probe(tmp_path, m
                 if path.startswith("/api/system/")} == {
             "/api/system/output": {"get", "put"}, "/api/system/mpd": {"get"},
             "/api/system/mpd/connection": {"get", "put"},
+            "/api/system/hardware-volume": {"get", "put"},
         }

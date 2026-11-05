@@ -29,6 +29,7 @@ class AppConfig(BaseModel):
     workers: Literal[1] = 1
     output_name: str | None = None
     output_plugin: Literal['alsa'] = 'alsa'
+    mpd_hardware_volume_enabled: bool = False
 
     @field_validator('music_root', mode='before')
     @classmethod
@@ -68,8 +69,10 @@ _ENV_FIELDS = {
     'SCAN_INTERVAL_SECONDS': 'scan_interval_seconds', 'DEBOUNCE_SECONDS': 'debounce_seconds',
     'HTTP_HOST': 'http_host', 'HTTP_PORT': 'http_port', 'WORKERS': 'workers',
     'OUTPUT_NAME': 'output_name', 'OUTPUT_PLUGIN': 'output_plugin',
+    'MPD_HARDWARE_VOLUME_ENABLED': 'mpd_hardware_volume_enabled',
 }
 _INTEGER_FIELDS = {'mpd_port', 'http_port', 'workers'}
+_BOOLEAN_FIELDS = {'mpd_hardware_volume_enabled'}
 
 
 def load_config(env: Mapping[str, str], config_path: Path | None = None) -> AppConfig:
@@ -94,6 +97,15 @@ def load_config(env: Mapping[str, str], config_path: Path | None = None) -> AppC
         if any(name in data and type(data[name]) is not int for name in _INTEGER_FIELDS):
             raise ValueError('Invalid integer configuration')
         values = {**data, **{field: env[name] for name, field in _ENV_FIELDS.items() if name in env}}
+        for name in _BOOLEAN_FIELDS:
+            if name in data and type(data[name]) is not bool:
+                raise ValueError('Invalid boolean configuration')
+            environment_key = next(key for key, field in _ENV_FIELDS.items() if field == name)
+            if environment_key in env:
+                raw = env[environment_key].strip().lower()
+                if raw not in {'true', 'false'}:
+                    raise ValueError('Invalid boolean configuration')
+                values[name] = raw == 'true'
         values.setdefault('mpd_mode', 'real' if values.get('app_env') == 'production' else 'mock')
         database = Path(values.get('database_path', 'music-server.db'))
         values.setdefault('mpd_connection_path', database.parent / 'mpd-connection.json')

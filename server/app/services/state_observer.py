@@ -5,6 +5,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from time import monotonic
 
+from server.app.services.hardware_volume_manager import HardwareVolumeManager
 from server.app.services.output_manager import OutputManager
 from server.app.services.playback_service import PlaybackService
 
@@ -16,12 +17,14 @@ class StateObserver:
 
     def __init__(
         self, *, playback: PlaybackService, output: OutputManager,
+        hardware_volume: HardwareVolumeManager | None = None,
         interval: float = 1, read_budget: float = 5,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         monotonic_clock: Callable[[], float] = monotonic,
     ) -> None:
         self._playback = playback
         self._output = output
+        self._hardware_volume = hardware_volume
         self._interval = interval
         self._budget = read_budget
         self._sleep = sleep
@@ -61,13 +64,19 @@ class StateObserver:
             while True:
                 generation = self._request_generation
                 started = self._clock()
-                for sample in (self._playback.observe, self._output.get_state):
+                samples = [self._playback.observe, self._output.get_state]
+                if self._hardware_volume is not None:
+                    samples.append(self._hardware_volume.get_state)
+                for sample in samples:
                     try:
                         await sample(read_timeout=max(0, self._budget - (self._clock() - started)))
                     except Exception:
                         logger.exception('State observation failed')
                 # Expiry also runs in the Service's shared capture boundary.
-                for cached in (self._playback.get_observation, self._output.get_observation):
+                cached_readers = [self._playback.get_observation, self._output.get_observation]
+                if self._hardware_volume is not None:
+                    cached_readers.append(self._hardware_volume.get_observation)
+                for cached in cached_readers:
                     try:
                         await cached()
                     except Exception:

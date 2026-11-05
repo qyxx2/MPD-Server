@@ -83,9 +83,14 @@ def test_startup_wires_shared_system_services_fail_closed(tmp_path, monkeypatch)
         assert app.state.output_manager.operation_runner == app.state.playback_service.run_output_operation
         output = client.get("/api/system/output")
         info = client.get("/api/system/mpd")
-        assert output.status_code == info.status_code == 200
+        volume = client.get("/api/system/hardware-volume")
+        assert output.status_code == info.status_code == volume.status_code == 200
         assert output.json()["states"][0]["status"] == "UNAVAILABLE"
         assert output.json()["states"][0]["errorCode"] == "OUTPUT_CAPABILITY_UNVERIFIED"
+        assert volume.json()["state"]["status"] == "UNSUPPORTED"
+        assert volume.json()["state"]["volumePercent"] is None
+        assert volume.json()["state"]["errorCode"] == "HARDWARE_VOLUME_NOT_CONFIGURED"
+        assert volume.json()["observation"]["freshness"] == "unknown"
         assert info.json()["connected"] is None
         assert info.json()["version"] is None
         assert {error["code"] for error in info.json()["errors"].values()} == {"CAPABILITY_UNVERIFIED"}

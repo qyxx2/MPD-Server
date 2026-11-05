@@ -314,3 +314,15 @@ def test_failed_reconnect_keeps_old_view_until_fresh_full_retry(ws_state_client,
     assert coordinator.marker() == marker and server_snapshot(playback) == before
     assert run(app.state.idempotency_service._repository.get_by_key("failed-reconnect-pause")) == terminal
     assert not coordinator._subscriptions
+
+
+def test_websocket_initial_snapshot_contains_hardware_volume_and_uses_v1_invalidation(ws_state_client):
+    client = ws_state_client[0]
+    with client.websocket_connect("/api/realtime") as socket:
+        frame = socket.receive_json()
+        assert frame["type"] == "snapshot"
+        assert frame["protocol_version"] == 1
+        assert "hardware_volume" in frame["state"]
+        assert "hardware_volume_observation" in frame["state"]
+        assert frame["state"]["hardware_volume"]["state"]["volume_percent"] is None
+        assert frame["state"]["hardware_volume_observation"]["freshness"] == "unknown"

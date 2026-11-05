@@ -39,6 +39,7 @@ from server.app.repositories.playlist_repository import PlaylistRepository
 from server.app.repositories.queue_repository import QueueRepository
 from server.app.services.autoplay import AutoPlay
 from server.app.services.collection_service import CollectionService
+from server.app.services.hardware_volume_manager import HardwareVolumeManager
 from server.app.services.health_service import HealthService
 from server.app.services.history_service import HistoryService
 from server.app.services.idempotency_service import IdempotencyService
@@ -176,6 +177,14 @@ async def lifespan(app: FastAPI):
             event_publisher=getattr(app.state, 'event_publisher', None) or coordinator,
             coordinator=coordinator,
         )
+        app.state.hardware_volume_manager = HardwareVolumeManager(
+            player=player,
+            capabilities=capabilities,
+            enabled=config.mpd_hardware_volume_enabled,
+            selector=selector,
+            operation_runner=playback_service.run_output_operation,
+            coordinator=coordinator,
+        )
         app.state.mpd_info_service = MPDInfoService(player=player, capabilities=capabilities)
         app.state.health_service = HealthService(database_path, player, coordinator.get_library_sync)
 
@@ -194,10 +203,16 @@ async def lifespan(app: FastAPI):
             library_service=library_service, playback_service=playback_service,
             output_snapshot=app.state.output_manager.get_cached_state,
             output_observation=app.state.output_manager.get_observation,
+            hardware_volume_snapshot=app.state.hardware_volume_manager.get_cached_state,
+            hardware_volume_observation=app.state.hardware_volume_manager.get_observation,
         )
         # Complete existing local Queue initialization before read-only tasks run.
         await queue_repository.get_snapshot()
-        observer = StateObserver(playback=playback_service, output=app.state.output_manager)
+        observer = StateObserver(
+            playback=playback_service,
+            output=app.state.output_manager,
+            hardware_volume=app.state.hardware_volume_manager,
+        )
         playback_service.set_observation_request(observer.request_observation)
         app.state.state_observer = observer
         task = asyncio.create_task(observer.run(), name='state-observer')
