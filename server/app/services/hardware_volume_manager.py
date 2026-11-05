@@ -367,12 +367,13 @@ class HardwareVolumeManager:
             and after.elapsed_seconds is not None
         ):
             delta = after.elapsed_seconds - before.elapsed_seconds
-            minimum = max(0.0, after_start - before_end - 0.001)
+            # MPD may return the same elapsed sample for two nearby status reads.
+            # Require monotonic progress, not a minimum tick during this short operation.
             maximum = after_end - before_start + 0.001
-            if not minimum <= delta <= maximum:
+            if not 0.0 <= delta <= maximum:
                 raise HardwareVolumeError(
                     "HARDWARE_VOLUME_RECONCILIATION_FAILED",
-                    "Playback position did not advance naturally",
+                    "Playback position changed outside the volume operation window",
                 )
 
 
