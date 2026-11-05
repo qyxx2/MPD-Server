@@ -262,7 +262,6 @@ class HardwareVolumeManager:
             before = (await self.player.status()).model_copy(deep=True)
         except Exception as exc:
             raise self._as_read_error(exc) from exc
-        before_end = self._monotonic()
         try:
             entries = tuple(
                 entry.model_copy(deep=True) for entry in await self.player.queue_entries()
@@ -307,7 +306,6 @@ class HardwareVolumeManager:
                 f"MPD rejected hardware volume write: {exc}",
             ) from exc
 
-        after_start = self._monotonic()
         try:
             after = await self.player.status()
             after_end = self._monotonic()

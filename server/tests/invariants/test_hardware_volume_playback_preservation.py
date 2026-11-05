@@ -72,7 +72,7 @@ def test_hardware_volume_write_allows_natural_elapsed_progress(real_client, monk
                 value.elapsed_seconds = (value.elapsed_seconds or 0) + 1.0
             return value
         monkeypatch.setattr(player, "status", status_with_natural_progress)
-        times = iter([100.0, 100.1, 101.1, 101.2])
+        times = iter([100.0, 101.2])
         manager = HardwareVolumeManager(
             player=VerifiedPlayerPort(player, capabilities),
             capabilities=capabilities,
@@ -333,7 +333,7 @@ def test_hardware_volume_write_accepts_unchanged_elapsed_from_coarse_mpd_status(
             return value
 
         monkeypatch.setattr(player, "status", status_with_coarse_elapsed)
-        times = iter([100.0, 100.1, 100.2, 100.3])
+        times = iter([100.0, 100.3])
         manager = HardwareVolumeManager(
             player=VerifiedPlayerPort(player, capabilities),
             capabilities=capabilities,
