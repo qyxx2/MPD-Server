@@ -1,41 +1,86 @@
 # MPD-Server
 
-面向局域网和 NAS 的自托管音乐服务器。通过手机或桌面浏览器访问 Web 界面，由服务端连接 [Music Player Daemon (MPD)](https://www.musicpd.org/) 控制播放；音乐音频由 MPD 输出，而不是由浏览器解码播放。
+MPD-Server 是一套面向 NAS 和局域网环境的自托管音乐服务器。它以 [Music Player Daemon（MPD）](https://github.com/MusicPlayerDaemon/MPD) 作为实际播放引擎，并提供浏览器端音乐管理与播放控制界面。用户可以通过手机或桌面浏览器访问服务；音频解码和输出由 MPD 完成，而不是由浏览器播放。
 
-**版本状态：v0.1 为首个基本可用版本；当前开发内容为 v0.2 增量维护。** 原主 Task 路线图及未来 Task 10–12 已退役；以现有代码为基线，按实际需求进行小范围迭代。
+## 项目功能
 
-## 功能
+- **音乐播放**：查看当前播放状态、曲目信息和进度，执行播放、暂停、切歌及进度控制，并展示歌词和音频输出信息。
+- **播放队列与历史**：管理待播队列、调整曲目顺序、查看播放历史，并支持自动播放。
+- **音乐资料库**：浏览歌曲、专辑和艺术家，搜索曲目；服务端扫描音乐目录并同步曲库信息。
+- **歌单与收藏**：创建和管理播放列表，收藏常听歌曲。
+- **实时同步**：通过 HTTP API 和 WebSocket 同步播放状态、队列及资料库变更。
+- **音量与输出状态**：查看 MPD 输出信息；在 MPD 输出设备和 Mixer 配置满足条件时，可启用硬件音量控制。该功能默认关闭。
 
-- **播放器**：显示实际播放/暂停、当前曲目及进度；提供基本播放控制和歌词/音频信息展示。
-- **队列**：浏览当前队列、下一首插入、排序与基本管理；Queue、Played 与执行身份以现有规格和实现为准，长队列性能问题另有专项指导。
-- **资料库与搜索**：默认浏览全部歌曲，支持标题或文件修改时间正/倒序，“播放全部”沿用所选顺序；另有专辑/艺术家等分类与搜索。后端只读访问音乐文件，支持自动曲库同步和状态通知。
-- **播放列表与收藏**：建立和管理播放列表、歌曲收藏。
-- **设置与连接**：保存 MPD 连接目标，通过重启服务应用保存的地址；查看连接、输出及基本健康状态。
-- **Web**：移动端优先的响应式界面，宽屏横向布局提供常驻播放器与右侧工作区；共享活动入口展示异常、忙碌和普通通知。HTTP API 与 WebSocket 实时同步；当前不包含完整离线 PWA 安装体验。
+Web 界面采用 Vue 3 和 Vite 构建，后端使用 Python、FastAPI 和 WebSocket，业务数据与曲库索引存储在 SQLite 中。
 
-技术架构：`Vue 3 / Vite → FastAPI / WebSocket → Service / PlayerPort → MPD`，元数据及业务记录使用 SQLite。
+## 系统结构
 
-## v0.2 实现与验收状态
+```text
+浏览器 / Android 遥控端
+          │
+          ▼
+      MPD-Server
+  FastAPI · WebSocket · SQLite
+          │
+          ▼
+         MPD
+          │
+          ▼
+     DAC / 音频设备
 
-当前分支已包含 Played occurrence 映射修复、Song 批量读取、提交后通知及完整样本复用、Observer 唤醒、后台锁外采样、最终确认交接和受控 MPD ID 播放。MPD 共享连接还启用了可回退的歌曲标签过滤；完整队列、身份和异常安全校验仍保留。
+音乐文件目录 ──► MPD
+       └──────► MPD-Server（只读扫描）
+```
 
-- [播放性能现状](docs/performance/README.md)：优化已有实现与阶段实测；B8 的短队列端到端无明显退化门槛仍未通过，原整体性能验收为 PARTIAL，已随计划归档，不能宣称延迟已解决。
-- [横屏历史验收](docs/superpowers/archive/responsive-landscape/2026-10-16-responsive-landscape-B5-acceptance.md)：B1–B4 已有用户确认，B5 原记录保留最终 HUMAN/PWA PENDING；计划与验收现已归档，不再作为待办。后续透明样式及播放全部排序变更，以当前源码和测试为准。
-- 全部实施计划、阶段验收与旧路线图已按用户要求移入[历史归档](docs/superpowers/archive/README.md)；现行目录保留规格书、重要入口和部署说明，后续只按新需求立项。历史未通过或未执行项不因归档改记为通过。
+MPD-Server 负责曲库索引、队列及播放相关业务和客户端通信；MPD 负责读取音乐文件、解码和音频输出。部署时，MPD 与 MPD-Server 必须能够访问对应的音乐目录，并确保服务端音乐路径与 MPD 曲库 URI 相互对应。
 
-## 快速部署（NAS）
+## Android 遥控客户端
 
-推荐直接使用 GitHub Actions 已验证、在 GHCR 发布的 **linux/amd64 + linux/arm64** 镜像，无需在 NAS 编译源码。镜像标签为 `ghcr.io/qyxx2/mpd-server:sha-<完整提交 SHA>`；请从 [Actions](https://github.com/qyxx2/MPD-Server/actions/workflows/container.yml) 中选取**成功**的 image 作业所对应 SHA（不要只依据运行序号或较新但失败的提交），并核对镜像拉取权限。
+[MPD-Server Remote for Android](https://github.com/qyxx2/MPD-Server_remote_for_Android) 是本项目的原生 Android 遥控端，使用 Kotlin 和 Jetpack Compose 构建，不依赖 WebView。
 
-仓库提供 [旧版 Docker Compose 可用示例](docs/docker-compose.yml)，以及完整的 [部署与环境变量说明](deploy/README.md)、[生产 Compose](deploy/docker-compose.yml) 和 [环境模板](deploy/.env.example)。在 NAS 上：
+客户端连接 MPD-Server 后，可进行播放控制、查看专辑封面和歌词、管理队列、浏览曲库、搜索歌曲，以及管理歌单和收藏；同时支持 Android 媒体会话、系统通知控制，并可观察和控制符合条件的 MPD 硬件音量。
 
-1. 创建持久化的 `data`、`config` 目录，并让容器内 `/data`、`/config` 分别映射至上述目录。
-2. 将实际音乐根目录只读挂载为 `/music:ro`，确保 MPD URI 与容器中的相对音乐路径对应。
-3. 设置 MPD 地址/端口（容器里 `127.0.0.1` 不是 NAS 主机）、数据库和配置路径；已有配置和数据库不要覆盖。
-4. 使用确认成功的多架构镜像部署，开放 Web 端口，访问 `http://NAS-IP:18000`（采用示例映射时）。
-5. 核对 `/api/health`、Web 页面、`/api/state`、WebSocket、实际曲库与 MPD 播放。服务端健康不等于 MPD 已连接或 DAC 已出声。
+Android 客户端主要负责交互与状态展示。播放状态、队列、曲库和歌单等业务数据由 MPD-Server 统一管理。
 
-旧版 Compose 1.28.5 可使用：
+## 部署方式
+
+推荐在 NAS 或 Linux 主机上使用 Docker Compose 部署预构建镜像。GitHub Actions 会构建并发布适用于 `linux/amd64` 和 `linux/arm64` 的 GHCR 镜像。
+
+### 1. 准备配置
+
+克隆仓库后复制环境变量模板：
+
+```sh
+cp deploy/.env.example deploy/.env
+```
+
+编辑 `deploy/.env`，至少配置以下项目：
+
+| 配置项 | 说明 |
+| --- | --- |
+| `MPD_SERVER_IMAGE` | GHCR 镜像及提交 SHA 标签 |
+| `MPD_HOST`、`MPD_PORT` | MPD 服务的可访问地址和端口 |
+| `MUSIC_DIR` | NAS 主机上的音乐目录 |
+| `MPD_SERVER_DATA_DIR` | 数据库及持久化数据目录 |
+| `MPD_SERVER_CONFIG_DIR` | 服务配置目录 |
+| `MPD_SERVER_BACKUP_DIR` | 数据库备份目录 |
+| `MPD_SERVER_PORT` | NAS 对外提供 Web 服务的端口 |
+
+镜像使用 `ghcr.io/qyxx2/mpd-server:sha-<完整提交 SHA>`。请从 [容器构建工作流](https://github.com/qyxx2/MPD-Server/actions/workflows/container.yml) 中选择 `validate` 和 `image` 均成功的提交，并使用其完整 SHA。不要仅凭镜像标签存在就认定该提交已通过构建验证。
+
+### 2. 启动服务
+
+在支持 Docker Compose v2 的环境中执行：
+
+```sh
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml config
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml pull
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-build
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml ps
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml logs --tail=100 server
+```
+
+群晖等仍使用 Docker Compose 1.28.5 的环境，可使用仓库中的 [旧版 Compose 示例](docs/docker-compose.yml)。该文件是需要按实际环境修改的示例，使用前请更新镜像 SHA、MPD 地址、音乐目录、持久化目录和端口映射，再执行：
 
 ```sh
 docker-compose -f docs/docker-compose.yml pull
@@ -44,57 +89,18 @@ docker-compose -f docs/docker-compose.yml ps
 docker-compose -f docs/docker-compose.yml logs --tail=100
 ```
 
-**部署前必须编辑示例中的镜像 SHA、NAS IP、MPD 地址、音乐路径和输出设备名。** 仓库中的 `docs/docker-compose.yml` 是用于指定环境的参考示例，不应直接照搬其中的私有局域网地址或硬件名称。保存 MPD 地址并不会立即切换活跃连接，需要手动重启容器。
+### 3. 部署检查
 
+- 将 NAS 数据目录分别持久化挂载到容器的 `/data`、`/config` 和 `/backups`。
+- 音乐目录挂载到容器的 `/music`，并保持只读（`/music:ro`）。
+- 确保 MPD 与容器都能访问同一音乐目录；`MPD_HOST` 必须是容器实际可访问的地址。容器内的 `127.0.0.1` 指向容器自身，并不代表 NAS 主机。
+- 启动后访问 `http://NAS-IP:MPD_SERVER_PORT`，并检查 `/api/health`、`/api/state`、曲库读取和实际 MPD 播放输出。
 
-### 生成 `mpd-capabilities.json`
+当前服务主要面向可信任的局域网环境，尚未提供适合直接公网开放的完整身份认证与安全边界。请勿将服务端口直接暴露到互联网。
 
-在能直接连接目标 MPD 的仓库环境中运行；`SONG_URI` 使用 MPD 曲库中真实存在的一首歌的**相对 URI**：
+完整的环境变量、硬件音量配置及部署说明见 [部署文档](deploy/README.md)，配置项模板见 [deploy/.env.example](deploy/.env.example)。
 
-```sh
-export MPD_HOST=192.168.3.94 MPD_PORT=6600 SONG_URI='Artist/Album/song.flac'
-mkdir -p deploy/config
+## 相关项目
 
-.venv/bin/python -m server.app.player.capabilities \
-  --host "$MPD_HOST" --port "$MPD_PORT" \
-  --probe-transport --probe-song-uri "$SONG_URI" \
-  > /tmp/mpd-capabilities-result.json
-
-.venv/bin/python -c 'import json,os; r=json.load(open("/tmp/mpd-capabilities-result.json")); json.dump({"endpoint":{"host":os.environ["MPD_HOST"],"port":int(os.environ["MPD_PORT"])},"mpd_version":r["version"],"result":r},open("deploy/config/mpd-capabilities.json","w"),ensure_ascii=False,indent=2)'
-```
-
-生成后将该文件挂载到容器的 `/config/mpd-capabilities.json`，并设置 `MPD_CAPABILITIES_PATH=/config/mpd-capabilities.json`。能力探测会临时执行 Queue / Output 等真实 MPD 操作并尝试恢复原状态，应在允许短暂改变播放状态时运行；不要把其他 MPD 地址生成的旧文件直接复用到当前目标。
-
-## 开发及验证
-
-```sh
-# 使用已有虚拟环境；临时数据目录避免触及已有数据库和配置。
-task_test_dir=$(mktemp -d)
-mkdir -p "$task_test_dir/config" "$task_test_dir/music"
-DATABASE_PATH="$task_test_dir/test.db" CONFIG_DIR="$task_test_dir/config" \
-  MUSIC_ROOT="$task_test_dir/music" APP_ENV=production MPD_MODE=real \
-  MPD_HOST=127.0.0.1 MPD_PORT=9 .venv/bin/python -m pytest -q server/tests
-.venv/bin/python -m ruff check server/app server/tests
-npm --prefix web run test -- --run --maxWorkers=1 --minWorkers=1
-npm --prefix web run typecheck
-npm --prefix web run build
-```
-
-CI/镜像基线：Python 3.13 / FastAPI、Node 22 / Vue 3；本地使用已有工具环境。生产镜像定义在 `deploy/Dockerfile`。运行自动测试时为 `DATABASE_PATH` 使用隔离临时目录，避免触及生产数据库。CI 在推送到 main/功能分支及版本 tag 时验证后端、前端、类型检查和生产构建，并在非 PR 事件发布 GHCR 多架构镜像。
-
-## v0.1 边界与安全
-
-- 局域网自用为主要场景；目前未提供对公网暴露所需的完整身份认证和安全边界，**不要直接暴露到公网**。
-- 音乐根目录按只读方式挂载，业务数据和持久化配置另存。
-- MPD 是实际播放状态的来源，应用编排队列和业务状态；连接断开、控制目标丢失等异常会限制部分操作。
-- 离线 PWA、客户端串流、原 Task 10–12 等不再作为自动推进的既定路线图；只有新需求明确授权才单独评估。
-- Task 9 的历史自动及人工 Gate 与未关闭项见 [Task 9 final acceptance](docs/superpowers/archive/task-9/2026-10-11-task-9-final-acceptance.md)。后续修复证据在 `docs/superpowers/archive/task-9/`；不要将自动测试结果误写为实机验收通过。
-
-## 文档与源码
-
-- `server/`：后端 API、业务服务、MPD Adapter、SQLite；`web/`：Web UI；`deploy/`：部署与配置。
-- [现行文档索引](docs/superpowers/README.md)：保留必要架构、领域规格、视觉合同与环境证据。
-- [v0.2 播放性能现状](docs/performance/README.md)：已实现机制、阶段实测、B8 未闭合门槛和历史依据。
-- [历史归档](docs/superpowers/archive/README.md)：旧 Task 主 Plan、验收、历史研究与退役路线图，保留用于追溯，不再是开发待办。
-
-今后的迭代从实际检出的代码、测试、部署镜像及明确需求重新立项，不自动执行旧 Task 或未关闭 Gate。
+- **上游播放引擎：** [Music Player Daemon（MPD）](https://github.com/MusicPlayerDaemon/MPD)
+- **下游 Android 遥控端：** [MPD-Server Remote for Android](https://github.com/qyxx2/MPD-Server_remote_for_Android)
